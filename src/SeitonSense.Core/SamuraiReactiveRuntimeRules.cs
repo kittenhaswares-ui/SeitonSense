@@ -143,6 +143,40 @@ public enum SamuraiZantetsukenPhase : byte
     Spent = 2,
 }
 
+/// <summary>
+/// Pre-selection collection state for automatic Zantetsuken. The first exact
+/// own-source Kuzushi observation starts one fixed window; no target is frozen
+/// until that window is ready.
+/// </summary>
+public readonly record struct SamuraiZantetsukenCollectionState(
+    SupportedPvPContext Context,
+    TargetPressureActorIdentity LocalPlayer,
+    long FirstExactOwnSourceKuzushiAtMilliseconds)
+{
+    public static SamuraiZantetsukenCollectionState Initial => new(
+        SupportedPvPContext.None,
+        default,
+        -1);
+
+    public bool IsCollecting =>
+        Context is (SupportedPvPContext.CrystallineConflict or
+            SupportedPvPContext.WolvesDen) &&
+        LocalPlayer.IsValid &&
+        FirstExactOwnSourceKuzushiAtMilliseconds >= 0;
+}
+
+public readonly record struct SamuraiZantetsukenCollectionObservation(
+    bool Enabled,
+    bool HardReset,
+    SupportedPvPContext Context,
+    TargetPressureActorIdentity LocalPlayer,
+    bool ExactOwnSourceKuzushiPresent,
+    long NowMilliseconds);
+
+public readonly record struct SamuraiZantetsukenCollectionDecision(
+    SamuraiZantetsukenCollectionState NextState,
+    bool CanSelectAndFreezeTarget);
+
 public enum SamuraiZantetsukenDecisionKind : byte
 {
     None = 0,
@@ -197,6 +231,7 @@ public static class SamuraiZantetsukenRules
     public const uint ActionId = 29_537;
     public const uint KuzushiStatusId = 3_202;
     public const float MaximumRangeYalms = 20f;
+    public const long CollectionDelayMilliseconds = 1_500;
 
     /// <summary>
     /// Live Kuzushi ownership evidence. A status slot which is already expired
@@ -213,6 +248,94 @@ public static class SamuraiZantetsukenRules
         sourceEntityId == localSamuraiEntityId &&
         float.IsFinite(remainingSeconds) &&
         remainingSeconds > 0f;
+
+    /// <summary>
+    /// Waits a fixed 1.5 seconds after the first current exact own-source
+    /// Kuzushi evidence before allowing target ranking. A temporary evidence
+    /// gap cannot restart the window; missing current evidence at maturity,
+    /// feature reset, identity/context drift, or invalid time resets it. Target
+    /// selection and freezing happen only after this gate opens, so later
+    /// Kuzushi applications can join the current cluster.
+    /// </summary>
+    public static SamuraiZantetsukenCollectionDecision ObserveCollection(
+        SamuraiZantetsukenCollectionState state,
+        SamuraiZantetsukenCollectionObservation observation)
+    {
+        if (!observation.Enabled ||
+            observation.HardReset ||
+            observation.Context is not
+                (SupportedPvPContext.CrystallineConflict or
+                    SupportedPvPContext.WolvesDen) ||
+            !observation.LocalPlayer.IsValid ||
+            observation.NowMilliseconds < 0 ||
+            (state != SamuraiZantetsukenCollectionState.Initial &&
+             (!state.IsCollecting ||
+              state.Context != observation.Context ||
+              state.LocalPlayer != observation.LocalPlayer ||
+              state.FirstExactOwnSourceKuzushiAtMilliseconds >
+                  observation.NowMilliseconds)))
+        {
+            return ResetCollection();
+        }
+
+        if (state == SamuraiZantetsukenCollectionState.Initial)
+        {
+            if (!observation.ExactOwnSourceKuzushiPresent)
+                return ResetCollection();
+
+            return new SamuraiZantetsukenCollectionDecision(
+                new SamuraiZantetsukenCollectionState(
+                    observation.Context,
+                    observation.LocalPlayer,
+                    observation.NowMilliseconds),
+                false);
+        }
+
+        if (!HasCollectionDelayElapsed(state, observation.NowMilliseconds))
+        {
+            // A transient status-list gap must not move the first-evidence
+            // timestamp or shorten/restart the original collection window.
+            return new SamuraiZantetsukenCollectionDecision(state, false);
+        }
+
+        if (!CanSelectAndFreezeTarget(state, observation))
+            return ResetCollection();
+
+        return new SamuraiZantetsukenCollectionDecision(
+            state,
+            true);
+    }
+
+    /// <summary>
+    /// Pure monotonic-time gate shared by collection and the final dispatch
+    /// boundary. Equality at exactly 1,500 ms is intentionally eligible.
+    /// </summary>
+    public static bool HasCollectionDelayElapsed(
+        SamuraiZantetsukenCollectionState state,
+        long nowMilliseconds) =>
+        state.IsCollecting &&
+        nowMilliseconds >=
+            state.FirstExactOwnSourceKuzushiAtMilliseconds &&
+        nowMilliseconds - state.FirstExactOwnSourceKuzushiAtMilliseconds >=
+            CollectionDelayMilliseconds;
+
+    /// <summary>
+    /// Final collection gate. Callers must still rank a current candidate and
+    /// apply the frozen target's existing Kuzushi, protection, and reachability
+    /// checks before the native action boundary.
+    /// </summary>
+    public static bool CanSelectAndFreezeTarget(
+        SamuraiZantetsukenCollectionState state,
+        SamuraiZantetsukenCollectionObservation observation) =>
+        observation.Enabled &&
+        !observation.HardReset &&
+        observation.Context is (SupportedPvPContext.CrystallineConflict or
+            SupportedPvPContext.WolvesDen) &&
+        observation.LocalPlayer.IsValid &&
+        state.Context == observation.Context &&
+        state.LocalPlayer == observation.LocalPlayer &&
+        observation.ExactOwnSourceKuzushiPresent &&
+        HasCollectionDelayElapsed(state, observation.NowMilliseconds);
 
     public static SamuraiZantetsukenState Arm(
         SamuraiReactiveCounterCcTarget target,
@@ -266,4 +389,7 @@ public static class SamuraiZantetsukenRules
         SamuraiZantetsukenState.Initial,
         SamuraiZantetsukenDecisionKind.Cancelled,
         0);
+
+    private static SamuraiZantetsukenCollectionDecision ResetCollection() =>
+        new(SamuraiZantetsukenCollectionState.Initial, false);
 }

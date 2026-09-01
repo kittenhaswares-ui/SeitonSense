@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.43.0.7
+
+- Auto-Zantetsuken now waits **1.5 seconds from the first exact own-source
+  Kuzushi** instead of firing immediately.
+- The collection window stores no enemy target. New Kuzushi carriers can appear
+  during the wait; only at the deadline does Seiton rebuild the live candidate
+  snapshot, rank the current 5-yalm cluster, and freeze the winner.
+- Higher-priority helpers, Guard, Bind, casts, animation lock, and a temporarily
+  unavailable dispatch frame do not restart or postpone collection. No
+  scheduler input is claimed while the timer is still collecting.
+- If no current own-source Kuzushi remains when the window matures, collection
+  resets so the next fresh proc receives the complete 1.5-second delay. A
+  pre-native invalid target may still be replaced by another carrier from the
+  same matured Kuzushi wave without another delay.
+- The final native boundary still requires the exact frozen actor, current own
+  Kuzushi, no Cover or reviewed invulnerability, no Bind, LB readiness, range,
+  line of sight, and the elapsed collection window. The 615-test Core registry
+  and source safety contract pin the behavior; live confirmation remains
+  separate.
+
 ## 0.43.0.6
 
 - Fixed **Smart Action casts in Crystalline Conflict always falling back to the

@@ -3,6 +3,16 @@
 Seiton Sense is a local PvP awareness HUD with pressure tracking, nameplate
 cues, warnings, job helpers, Smart Action, and target highlights.
 
+Version 0.43.0.7 makes Auto-Zantetsuken wait 1.5 seconds after the first exact
+Kuzushi applied by your Samurai. No target is locked during that collection
+window, so additional marked enemies can join the opportunity. At the deadline
+Seiton reruns the live 5-yalm cluster ranking and only then freezes the winner.
+Priority, Bind, cast, and animation-lock waits do not restart the timer. If no
+current own Kuzushi remains when the window matures, a later fresh proc receives
+a new full delay. Final identity, Kuzushi, protection, readiness, range, and
+line-of-sight checks remain unchanged. Live confirmation remains separate from
+the automated checks.
+
 Version 0.43.0.6 fixes Smart Action casts in Crystalline Conflict always using
 the visible tab target. An exact harmful PvP cast now goes through the same
 reachable `S1`-`S5` ranking as an instant Smart Action attack. Seiton freezes
@@ -1394,18 +1404,26 @@ replaying. Only an explicit client rejection may retry that same frozen intent
 under the common bound.
 
 For fully automatic Auto-Zantetsuken in exact CC, LB readiness alone never
-authorizes a request. An eligible living, targetable, natively reachable
-canonical primary endpoint must carry exactly one current Kuzushi row whose
-source is the local Samurai. The helper then chooses, among those eligible
-primaries, the endpoint whose target-centered 5-yalm circle intersects the most
-useful vulnerable enemy hitboxes; nearby cluster members do not need Kuzushi.
+authorizes a request. The first living canonical enemy with exactly one current
+Kuzushi row from the local Samurai starts a fixed 1,500-ms collection window.
+No enemy is selected or frozen during that wait, and the helper claims no
+scheduler input merely for collecting. Additional own-Kuzushi targets can join
+without restarting the original timer. At the exact deadline, the helper builds
+a fresh live candidate snapshot. An eligible living, targetable, natively
+reachable canonical primary endpoint must still carry exactly one current
+own-source Kuzushi row. The helper then chooses the endpoint whose target-
+centered 5-yalm circle intersects the most useful vulnerable enemy hitboxes;
+nearby cluster members do not need Kuzushi.
 Covered, Hallowed Ground, and Undead Redemption exclude an endpoint and an enemy
 from useful cluster membership; Guard and Chiten do not. Shields are not an
 execution gate. Equal clusters still prefer an unshielded own-Kuzushi primary,
 then lower HP ratio, then stable S-slot.
 
 The primary endpoint freezes for an intent. Casts and other temporary native
-blocks wait without automatic cast cancellation. Exact own-source Kuzushi,
+blocks wait without automatic cast cancellation and do not restart the
+collection time. If every current own-source Kuzushi is gone when the window
+matures, collection resets and the next fresh proc receives a full 1,500 ms.
+Exact own-source Kuzushi,
 identity, life, blocking protection, Bind, readiness, range, and line of sight
 are checked again at the latest native boundary. If Kuzushi disappears or the
 endpoint otherwise becomes invalid before any native request, the intent is
@@ -2518,7 +2536,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 613-test Core registry and source checks pin
+For the current source, the exact 615-test Core registry and source checks pin
 configuration schema 50, the shared monotonic response clock and framework
 epoch, true not-ready-to-ready wakeups, strict unchanged-queue critical recovery,
 the immutable release-independent tap-to-land buffer, active-Sprint repeat

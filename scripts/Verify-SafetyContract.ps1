@@ -852,7 +852,7 @@ if ($normalizedNearAssistForIntegratedInput -notmatch 'TryConsumeCastedMacroRedi
 }
 
 # Pin all retained buffer/repeat/compatibility suites and the exact current
-# 613-test registry.
+# 615-test registry.
 $integratedCoreTestProgram = Read-RequiredSource (Join-Path $coreSelfTestRoot 'Program.cs') 'Integrated Core self-test registry'
 $smartActionBufferSelfTests = Read-RequiredSource $smartActionBufferSelfTestsPath 'Smart action-buffer self-tests'
 $logicalHotbarRepeatSelfTests = Read-RequiredSource $logicalHotbarRepeatSelfTestsPath 'Logical hotbar repeat self-tests'
@@ -876,11 +876,11 @@ Assert-Literals $smartActionBufferCompatibilitySelfTests @(
     'reActionOwnsExactAction: false)',
     'reActionOwnsExactAction: true)'
 ) 'Generic-buffer compatibility self-tests'
-if ($staticIntegratedTestCount -ne 572 -or
+if ($staticIntegratedTestCount -ne 574 -or
     $logicalRepeatTestCount -ne 31 -or
     $physicalLatchTestCount -ne 6 -or
     $repeatPolicyTestCount -ne 4 -or
-    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 613 -or
+    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 615 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches($smartActionBufferSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferCompatibilitySelfTests\.\w+').Count -ne 6 -or
@@ -890,7 +890,7 @@ if ($staticIntegratedTestCount -ne 572 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatPolicySelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartSprintSelfTests\.\w+').Count -ne 6 -or
     [regex]::Matches((Read-RequiredSource $smartSprintSelfTestsPath 'Smart Sprint self-tests'), '\bpublic static void\s+\w+\s*\(').Count -ne 6) {
-    throw 'Schema 50 must retain seven smart-buffer tests, six compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, six Smart Sprint tests, and the exact 613-test combined Core registry.'
+    throw 'Schema 50 must retain seven smart-buffer tests, six compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, six Smart Sprint tests, and the exact 615-test combined Core registry.'
 }
 
 # Pin the two schema-42 visual overlays and the fail-closed local map-result
@@ -4974,6 +4974,8 @@ $samuraiReactiveProbe = Read-RequiredSource $samuraiReactiveCounterCcProbePath '
 $samuraiReactiveRuntimeRules = Read-RequiredSource $samuraiReactiveRuntimeRulesPath 'SAM reactive Core runtime rules'
 $samuraiZantetsukenTargetSelectionRules = Read-RequiredSource $samuraiZantetsukenTargetSelectionRulesPath 'SAM Zantetsuken 5y cluster target rules'
 $normalizedSamuraiReactiveProbe = $samuraiReactiveProbe -replace '\s+', ' '
+$normalizedSamuraiReactiveRuntimeRules = $samuraiReactiveRuntimeRules -replace '\s+', ' '
+$samuraiZantetsukenJobsUi = Read-RequiredSource (Join-Path $pluginUiRoot 'Settings\SettingsWindow.Jobs.cs') 'SAM Zantetsuken settings'
 $miracleGuardProgram = Read-RequiredSource (Join-Path $coreSelfTestRoot 'Program.cs') 'Core self-test registry'
 $miracleCleanseTestMethods = @(
     'ExactPurifySignalAcceptsActionLevelOrKnownRecovery',
@@ -5026,6 +5028,8 @@ $samuraiReactiveTestMethods = @(
     'ProtectionEndConsentUsesTheCurrentHeldKey',
     'WolvesDenUsesExactCurrentTargetAndTargetedActions',
     'ZantetsukenAutomaticGateBlocksOnlyExactHardProtection',
+    'ZantetsukenCollectsForFifteenHundredMillisecondsBeforeSelection',
+    'ZantetsukenCollectionResetsAndFailsClosedOnInvalidTime',
     'ZantetsukenRanksLargestVulnerableFiveYalmCluster',
     'ZantetsukenClusterRankingFailsClosedAndRequiresReachability'
 )
@@ -5041,10 +5045,10 @@ if ([regex]::Matches($miracleCleanseFollowupSelfTests, '\binternal static void\s
 }
 if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 4 -or
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
-    [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 9 -or
-    [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 9 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 572) {
-    throw 'All four shared protection-end tests, all nine SAM reactive tests, and the exact 572-test static Core registry before the appended repeat-policy suites must remain pinned.'
+    [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 11 -or
+    [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 11 -or
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 574) {
+    throw 'All four shared protection-end tests, all eleven SAM reactive tests, and the exact 574-test static Core registry before the appended repeat-policy suites must remain pinned.'
 }
 Assert-Literals $samuraiReactiveRuntimeRules @(
     'public static bool IsExactCurrentOwnSourceKuzushi(',
@@ -5061,6 +5065,49 @@ Assert-Literals $samuraiReactiveSelfTests @(
     '"another Samurai''s Kuzushi is not ours"',
     '"invalid local identity fails closed"'
 ) 'Auto-Zantetsuken current own-source Kuzushi regressions'
+Assert-Literals $samuraiReactiveRuntimeRules @(
+    'public readonly record struct SamuraiZantetsukenCollectionState(',
+    'SupportedPvPContext Context,',
+    'TargetPressureActorIdentity LocalPlayer,',
+    'long FirstExactOwnSourceKuzushiAtMilliseconds)',
+    'public const long CollectionDelayMilliseconds = 1_500;',
+    'public static SamuraiZantetsukenCollectionDecision ObserveCollection(',
+    'public static bool HasCollectionDelayElapsed(',
+    'public static bool CanSelectAndFreezeTarget(',
+    'state.Context == observation.Context &&',
+    'state.LocalPlayer == observation.LocalPlayer &&',
+    'observation.ExactOwnSourceKuzushiPresent &&',
+    'HasCollectionDelayElapsed(state, observation.NowMilliseconds);'
+) 'Auto-Zantetsuken identity/context-bound 1500ms preselection collection contract'
+if ($normalizedSamuraiReactiveRuntimeRules -notmatch 'if \(!observation\.Enabled \|\| observation\.HardReset \|\| observation\.Context is not \(SupportedPvPContext\.CrystallineConflict or SupportedPvPContext\.WolvesDen\) \|\| !observation\.LocalPlayer\.IsValid \|\| observation\.NowMilliseconds < 0 \|\| \(state != SamuraiZantetsukenCollectionState\.Initial && \(!state\.IsCollecting \|\| state\.Context != observation\.Context \|\| state\.LocalPlayer != observation\.LocalPlayer \|\| state\.FirstExactOwnSourceKuzushiAtMilliseconds > observation\.NowMilliseconds\)\)\).*?return ResetCollection\(\);' -or
+    $normalizedSamuraiReactiveRuntimeRules -notmatch 'if \(state == SamuraiZantetsukenCollectionState\.Initial\).*?if \(!observation\.ExactOwnSourceKuzushiPresent\) return ResetCollection\(\);.*?new SamuraiZantetsukenCollectionState\( observation\.Context, observation\.LocalPlayer, observation\.NowMilliseconds\), false' -or
+    $normalizedSamuraiReactiveRuntimeRules -notmatch 'if \(!HasCollectionDelayElapsed\(state, observation\.NowMilliseconds\)\).*?return new SamuraiZantetsukenCollectionDecision\(state, false\);.*?if \(!CanSelectAndFreezeTarget\(state, observation\)\) return ResetCollection\(\);.*?new SamuraiZantetsukenCollectionDecision\( state, true\)' -or
+    $normalizedSamuraiReactiveRuntimeRules -notmatch 'nowMilliseconds - state\.FirstExactOwnSourceKuzushiAtMilliseconds >= CollectionDelayMilliseconds') {
+    throw 'Auto-Zantetsuken collection must start only from the first exact own Kuzushi, preserve its identity/context/timestamp before maturity, open at exactly 1500 ms, and reset on invalid time, identity, context, or missing mature evidence.'
+}
+Assert-Literals $samuraiReactiveSelfTests @(
+    'public static void ZantetsukenCollectsForFifteenHundredMillisecondsBeforeSelection()',
+    '"LB readiness alone does not start collection"',
+    '"later Kuzushi evidence does not restart the window"',
+    '"1499 milliseconds remains too early"',
+    '"1500 millisecond boundary opens target ranking"',
+    '"a later Kuzushi carrier can replace the expired first carrier and win the larger current 5y cluster"',
+    'public static void ZantetsukenCollectionResetsAndFailsClosedOnInvalidTime()',
+    '"pre-deadline status flicker preserves the first evidence timestamp"',
+    '"mature window without current Kuzushi resets"',
+    '"PvP context drift resets collection"',
+    '"local actor drift resets collection"',
+    '"backwards clock resets collection"',
+    '"new evidence after reset starts a fresh full delay"',
+    '"pure final gate rejects one millisecond before maturity"',
+    '"pure final gate requires current exact own Kuzushi"'
+) 'Auto-Zantetsuken 1499/1500ms, later-carrier, reset, and final-gate regressions'
+Assert-Literals $samuraiZantetsukenJobsUi @(
+    'Your first exact Kuzushi starts a 1.5-second ',
+    'collection window without locking a target. Seiton then checks the current marked enemies and uses ',
+    'Purify and the SAM Soten → Mineuchi counter come first without restarting collection. After the 1.5 ',
+    'seconds, Seiton freezes one target while waiting for casts or animation lock and checks Kuzushi again '
+) 'Auto-Zantetsuken 1.5-second collection and post-delay freeze settings copy'
 if ($normalizedSamuraiReactiveProbe -notmatch 'private static int CountOwnSourceKuzushi\(.*?if \(localEntityId is 0 or 0xE0000000 or uint\.MaxValue\) return -1;.*?status\.StatusId != SamuraiZantetsukenRules\.KuzushiStatusId \|\| status\.SourceId != localEntityId.*?continue;.*?SamuraiZantetsukenRules\.IsExactCurrentOwnSourceKuzushi\( status\.StatusId, status\.SourceId, status\.RemainingTime, localEntityId\).*?return -1;.*?count\+\+; if \(count > 1\) return -1;.*?return count;') {
     throw 'Auto-Zantetsuken must count exactly one finite positive current Kuzushi row from the local Samurai; expired, malformed, duplicate, or ambiguous own-source evidence fails closed.'
 }
@@ -5151,7 +5198,8 @@ Assert-Literals $samuraiReactiveProbe @(
     'Frozen Zantetsuken intent released because own Kuzushi left its primary target',
     'private bool HasExactOwnSourceKuzushiOnFrozenTarget(',
     'CountOwnSourceKuzushi(current, localPlayer.EntityId) == 1',
-    '!HasExactOwnSourceKuzushiOnFrozenTarget(localPlayer, frozen)'
+    'var exactOwnKuzushiPresent = target is not null &&',
+    'exactOwnKuzushiPresent,'
 ) 'Automatic Zantetsuken frozen-primary and final native Kuzushi revalidation'
 $zantetsukenNoTargetWait = [regex]::Match(
     $normalizedSamuraiReactiveProbe,
@@ -5191,13 +5239,57 @@ if (-not $automaticZantetsukenBody.Success -or
     $automaticZantetsukenBody.Groups['Body'].Value -match 'allowHeldGameplayKey|TryResolveEligibleGameplayKey|IsTextInputActive') {
     throw 'Automatic SAM Zantetsuken must not require held-key, fresh-key, or text-input consent.'
 }
+$automaticZantetsukenBodyText = $automaticZantetsukenBody.Groups['Body'].Value
+$collectionGateIndex = $automaticZantetsukenBodyText.IndexOf(
+    'if (!collectionDecision.CanSelectAndFreezeTarget)',
+    [System.StringComparison]::Ordinal)
+$targetSelectionIndex = $automaticZantetsukenBodyText.IndexOf(
+    'TrySelectExactZantetsukenTarget(',
+    [System.StringComparison]::Ordinal)
+$targetArmIndex = $automaticZantetsukenBodyText.IndexOf(
+    'SamuraiZantetsukenRules.Arm(',
+    [System.StringComparison]::Ordinal)
+if ($collectionGateIndex -lt 0 -or
+    $targetSelectionIndex -le $collectionGateIndex -or
+    $targetArmIndex -le $targetSelectionIndex -or
+    [regex]::Matches($automaticZantetsukenBodyText, '\bTrySelectExactZantetsukenTarget\s*\(').Count -ne 1 -or
+    [regex]::Matches($automaticZantetsukenBodyText, '\bSamuraiZantetsukenRules\.Arm\s*\(').Count -ne 1) {
+    throw 'Auto-Zantetsuken must neither select nor arm an enemy before the 1500ms collection gate opens; the first fresh live ranking and sole freeze happen only after maturity.'
+}
+if ($normalizedSamuraiReactiveProbe -notmatch 'private bool HasAnyExactOwnSourceKuzushiForCollection\( IPlayerCharacter localPlayer, SupportedPvPContext context\).*?if \(!metadata\.KuzushiVerified\) return false;.*?context == SupportedPvPContext\.WolvesDen.*?TryResolveWolvesDenCurrentTarget\(localPlayer, out var frozen\).*?ResolveFrozenTarget\(localPlayer, frozen\).*?IsLiveTarget\(current\).*?CountOwnSourceKuzushi\(current, localPlayer\.EntityId\) == 1;.*?context != SupportedPvPContext\.CrystallineConflict.*?return false;.*?executeTracker\.Enemies.*?EnemySlotRules\.IsValidSlot\(enemy\.Slot\).*?OrderBy\(static enemy => enemy\.Slot\).*?EnemySlotResolver\.Resolve\(objectTable, enemy\.Slot\).*?player!\.GameObjectId != enemy\.GameObjectId.*?player\.EntityId != enemy\.EntityId.*?player\.ClassJob\.RowId != enemy\.JobId.*?!HasCoherentObjectTableIdentity\(player\).*?return false;.*?IsLiveTarget\(player\).*?CountOwnSourceKuzushi\(player, localPlayer\.EntityId\) == 1.*?exactOwnKuzushiObserved = true;.*?return exactOwnKuzushiObserved;') {
+    throw 'Auto-Zantetsuken collection evidence must scan exact current own-source Kuzushi in the current Den target or all canonical CC slots, failing closed on metadata or identity ambiguity without selecting a target.'
+}
+$zantetsukenActionNotReady = [regex]::Match(
+    $automaticZantetsukenBodyText,
+    'if \(!actionReady\) \{(?<Body>.*?)\}')
+if (-not $zantetsukenActionNotReady.Success -or
+    $zantetsukenActionNotReady.Groups['Body'].Value -notmatch '\bResetZantetsuken\(\);' -or
+    $normalizedSamuraiReactiveProbe -notmatch 'private void ResetZantetsuken\(\) \{ ResetZantetsukenIntent\(\); zantetsukenCollectionState = SamuraiZantetsukenCollectionState\.Initial; zantetsukenReadyEpochTerminal = false; \}') {
+    throw 'An action-not-ready Auto-Zantetsuken frame must fully clear the frozen intent, collection timer, and terminal LB-ready epoch.'
+}
+$zantetsukenPriorityWait = [regex]::Match(
+    $automaticZantetsukenBodyText,
+    'if \(decision\.Kind != SamuraiZantetsukenDecisionKind\.Attempt \|\| !dispatchAllowed\) \{(?<Body>.*?)\}')
+$zantetsukenCastWait = [regex]::Match(
+    $automaticZantetsukenBodyText,
+    'if \(!HasGlobalNativeBoundaryReadiness\(localPlayer!\)\) \{(?<Body>.*?)\}')
+if (-not $zantetsukenPriorityWait.Success -or
+    -not $zantetsukenCastWait.Success -or
+    $zantetsukenPriorityWait.Groups['Body'].Value -match 'ResetZantetsuken|SamuraiZantetsukenCollectionState\.Initial' -or
+    $zantetsukenCastWait.Groups['Body'].Value -match 'ResetZantetsuken|SamuraiZantetsukenCollectionState\.Initial' -or
+    $normalizedSamuraiReactiveRuntimeRules -notmatch 'return !observation\.BoundPresent && observation\.ZantetsukenReady \? new SamuraiZantetsukenDecision\( state, SamuraiZantetsukenDecisionKind\.Attempt, ActionId\) : new SamuraiZantetsukenDecision\( state, SamuraiZantetsukenDecisionKind\.Waiting, 0\);') {
+    throw 'Higher-priority dispatch, Bind, cast, queue, and animation waits must preserve the matured collection/frozen intent instead of restarting its 1500ms timer.'
+}
 $zantetsukenNativeBoundary = [regex]::Match(
     $normalizedSamuraiReactiveProbe,
     'private unsafe AttemptResult TryUseZantetsukenOnce\((?<Body>.*?)private static unsafe bool IsActionSpecificReady')
 if (-not $zantetsukenNativeBoundary.Success -or
-    $zantetsukenNativeBoundary.Groups['Body'].Value -notmatch '!HasExactOwnSourceKuzushiOnFrozenTarget\(localPlayer, frozen\)' -or
+    $zantetsukenNativeBoundary.Groups['Body'].Value -notmatch 'SamuraiZantetsukenCollectionState collectionState' -or
+    $zantetsukenNativeBoundary.Groups['Body'].Value -notmatch 'var target = ResolveFrozenTarget\(localPlayer, frozen\);.*?var exactOwnKuzushiPresent = target is not null && HasExactOwnSourceKuzushiOnFrozenTarget\(localPlayer, frozen\);.*?SamuraiZantetsukenRules\.CanSelectAndFreezeTarget\( collectionState, new SamuraiZantetsukenCollectionObservation\( Enabled: true, HardReset: false, frozen\.Context, new TargetPressureActorIdentity\( localPlayer\.GameObjectId, localPlayer\.EntityId\), exactOwnKuzushiPresent, Environment\.TickCount64\)\)' -or
+    $zantetsukenNativeBoundary.Groups['Body'].Value -notmatch 'target is null \|\| !IsLiveTarget\(target\) \|\| !collectionReady \|\| CountExecuteBlockingProtections\(target\) != 0 \|\| HasStatus\(localPlayer, EnemyCombatConstants\.PvPBindStatusId\) \|\| !IsActionSpecificReady\(SamuraiZantetsukenRules\.ActionId\) \|\| !HasGlobalNativeBoundaryReadiness\(localPlayer\) \|\| !HasNativeRangeAndLineOfSight\( localPlayer, target, SamuraiZantetsukenRules\.ActionId\)' -or
+    $zantetsukenNativeBoundary.Groups['Body'].Value -notmatch 'attempted = true; var accepted = actionManager->UseAction\(' -or
     $zantetsukenNativeBoundary.Groups['Body'].Value -notmatch 'catch \(Exception exception\).*?SAM Zantetsuken boundary failed.*?TerminalFailure: true') {
-    throw 'Auto-Zantetsuken must revalidate exact own-source Kuzushi at the final native boundary, while unknown boundary failures terminally retire the current LB-ready epoch.'
+    throw 'Auto-Zantetsuken must revalidate the matured identity/context collection, frozen actor, current own Kuzushi, protection, Bind, readiness, range, and line of sight before its sole native call; unknown failures retire the LB-ready epoch.'
 }
 Assert-Literals $miracleCleanseFollowupSelfTests @(
     'first validated packet is terminally remembered',
@@ -11771,18 +11863,18 @@ $whatsNewWindow = Read-RequiredSource $whatsNewWindowPath 'What''s New window'
 $releaseNotesContentRules = Read-RequiredSource $releaseNotesContentRulesPath 'Release-note content rules'
 $releaseNotesContentSelfTests = Read-RequiredSource $releaseNotesContentSelfTestsPath 'Release-note content self-tests'
 Assert-Literals $projectFile @(
-    '<Version>0.43.0.6</Version>',
-    '<AssemblyVersion>0.43.0.6</AssemblyVersion>',
-    '<FileVersion>0.43.0.6</FileVersion>'
-) 'v0.43.0.6 project version'
+    '<Version>0.43.0.7</Version>',
+    '<AssemblyVersion>0.43.0.7</AssemblyVersion>',
+    '<FileVersion>0.43.0.7</FileVersion>'
+) 'v0.43.0.7 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.43.0.6";',
-    'Fixed Smart Action casts in CC always staying on your visible tab target.',
-    'Harmful PvP casts now use the same reachable S1-S5 ranking as instant Smart Action attacks.',
-    'The chosen actor is frozen for that cast and protection is checked again immediately before the game call.',
-    'Near Assist and Near Help keep their visible-target cast protection; instant actions are unchanged.',
-    'FFXIV may face the chosen actor once when casting. Later target changes cannot rerank that cast through Seiton.'
-) 'v0.43.0.6 version-acknowledged player-facing What''s New content'
+    'private const string CurrentReleaseVersion = "0.43.0.7";',
+    'Auto-Zantetsuken now waits 1.5 seconds after your first exact own Kuzushi instead of firing immediately.',
+    'It does not lock a target during that wait, so later Kuzushi targets can join the current opportunity.',
+    'At the deadline Seiton reruns the live 5y cluster ranking and only then freezes the best endpoint.',
+    'Priority, Bind, casts, and animation waits do not restart the timer; losing every Kuzushi does.',
+    'The final target, Kuzushi, protection, range, and LB checks remain required before the one game call.'
+) 'v0.43.0.7 version-acknowledged player-facing What''s New content'
 Assert-Literals $releaseNotesContentRules @(
     'public const int MaximumBulletCount = 5;',
     'if (bullets is null) return [];',
@@ -11835,23 +11927,25 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.43.0.6 plugin manifest metadata'
+) 'v0.43.0.7 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.43.0.6"',
-    'Fixed Smart Action casts in Crystalline Conflict always falling back to the visible tab target before S1-S5 ranking.',
-    'Exact harmful PvP casts now continue through the same reachable Smart Target selection, target freeze, protection recheck, and sole native call as instant Smart Action attacks.',
-    'Near Assist and Near Help keep their authored-target cast protection, and instant actions are unchanged.',
-    'FFXIV may perform its ordinary initial auto-face toward the frozen cast target; later manual target changes cannot rerank or retarget that cast through Seiton.',
+    '"AssemblyVersion": "0.43.0.7"',
+    'Auto-Zantetsuken now waits 1.5 seconds from the first exact own-source Kuzushi before choosing a target.',
+    'No enemy is frozen during that collection window, so later Kuzushi carriers can join the live 5y cluster ranking.',
+    'At the deadline Seiton ranks the current cluster and freezes only the winner.',
+    'Priority, Bind, cast, animation-lock, and dispatch waits do not restart the timer;',
+    'if every Kuzushi is gone at maturity, the next fresh proc receives a new full delay.',
+    'Exact target, Kuzushi, protection, range, readiness, and collection-time checks remain required at the final native boundary.',
     'Automated checks are separate from live in-game confirmation.',
     '"IsHide": false',
     '"IsTestingExclusive": false',
     '"DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"',
     '"DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"',
     '"DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"'
-) 'v0.43.0.6 custom-repository metadata'
+) 'v0.43.0.7 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -11993,6 +12087,7 @@ Assert-Literals $normalizedPrivacy @(
     'This exception is not used by the plugin-owned predictive post-Guard counter-CC path.',
     'Automatic Zantetsuken additionally reads its armed state, adjusted-action readiness epoch, exact canonical enemy life/targetability, HP, positions and hitboxes for the target-centered 5-yalm cluster',
     'the selected primary''s required exact own-source Kuzushi attribution, shield amount for ranking but not as an execution gate',
+    'Before selection it keeps only the exact local actor, PvP context, and first own-Kuzushi observation time for a fixed 1,500-ms collection window; no enemy target is stored or changed during that wait.',
     'The same Kuzushi requirement applies to the exact Wolves'' Den duel target or reviewed striking dummy;',
     '## Experimental Ninja Auto-Seiton helper',
     'While ON, no held or freshly pressed gameplay key is read or required;',
@@ -12001,6 +12096,12 @@ Assert-Literals $normalizedPrivacy @(
     'Automatic Zantetsuken and Auto-Seiton never use this permission.'
 ) 'v0.42.0.8 retained required-Kuzushi Zantetsuken, Auto-Seiton/Namikiri, and safety/privacy disclosure'
 Assert-Literals $normalizedReadme @(
+    'Version 0.43.0.7 makes Auto-Zantetsuken wait 1.5 seconds after the first exact Kuzushi applied by your Samurai.',
+    'No target is locked during that collection window, so additional marked enemies can join the opportunity.',
+    'At the deadline Seiton reruns the live 5-yalm cluster ranking and only then freezes the winner.',
+    'Priority, Bind, cast, and animation-lock waits do not restart the timer.',
+    'If no current own Kuzushi remains when the window matures, a later fresh proc receives a new full delay.',
+    'Final identity, Kuzushi, protection, readiness, range, and line-of-sight checks remain unchanged.',
     'Version 0.43.0.6 fixes Smart Action casts in Crystalline Conflict always using the visible tab target.',
     'An exact harmful PvP cast now goes through the same reachable `S1`-`S5` ranking as an instant Smart Action attack.',
     'Seiton freezes that one actor and rechecks range and protection immediately before the native game call; it never changes the visible target or reranks the cast.',
@@ -12066,10 +12167,17 @@ Assert-Literals $normalizedReadme @(
     'Eligible actors rank by descending hitbox-edge distance and stable native S-slot',
     'HP, pressure, Guard-cooldown, and MP order.',
     'For fully automatic Auto-Zantetsuken in exact CC, LB readiness alone never authorizes a request.',
-    'canonical primary endpoint must carry exactly one current Kuzushi row whose source is the local Samurai.',
-    'among those eligible primaries, the endpoint whose target-centered 5-yalm circle intersects the most useful vulnerable enemy hitboxes; nearby cluster members do not need Kuzushi.',
+    'The first living canonical enemy with exactly one current Kuzushi row from the local Samurai starts a fixed 1,500-ms collection window.',
+    'No enemy is selected or frozen during that wait, and the helper claims no scheduler input merely for collecting.',
+    'Additional own-Kuzushi targets can join without restarting the original timer.',
+    'At the exact deadline, the helper builds a fresh live candidate snapshot.',
+    'An eligible living, targetable, natively reachable canonical primary endpoint must still carry exactly one current own-source Kuzushi row.',
+    'The helper then chooses the endpoint whose target-',
+    'centered 5-yalm circle intersects the most useful vulnerable enemy hitboxes; nearby cluster members do not need Kuzushi.',
     'Shields are not an execution gate. Equal clusters still prefer an unshielded own-Kuzushi primary, then lower HP ratio, then stable S-slot.',
     'Exact own-source Kuzushi, identity, life, blocking protection, Bind, readiness, range, and line of sight are checked again at the latest native boundary.',
+    'Casts and other temporary native blocks wait without automatic cast cancellation and do not restart the collection time.',
+    'If every current own-source Kuzushi is gone when the window matures, collection resets and the next fresh proc receives a full 1,500 ms.',
     'If Kuzushi disappears or the endpoint otherwise becomes invalid before any native request, the intent is released and the still-ready LB epoch may rank again on a later frame.',
     'Wolves'' Den testing remains restricted to the exact current duel target or reviewed striking dummy and applies the same exact own-Kuzushi gate, so a dummy cannot bypass it.',
     'Version 0.42.0.3 fixes an Auto Recuperate reliability latch: an accepted heal can no longer wait forever when the client does not expose, or the framework misses, the brief cooldown-unavailable frame.',
@@ -12179,7 +12287,7 @@ Assert-Literals $normalizedReadme @(
     'release-independent tap-to-land wait',
     'protects active PvP Sprint from a second Sprint press by default',
     'adds the separate optional idle Smart Sprint.',
-    'For the current source, the exact 613-test Core registry and source checks pin configuration schema 50',
+    'For the current source, the exact 615-test Core registry and source checks pin configuration schema 50',
     'the independent default-off automatic basic-shot cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
@@ -12194,8 +12302,24 @@ Assert-Literals $normalizedReadme @(
     'constructs sixteen reviewed request shapes across seventeen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.43.0.6 general Smart Action cast ranking, v0.43.0.5 Wolves Den fix, and retained safety history'
+) 'v0.43.0.7 Auto-Zantetsuken collection, v0.43.0.6 Smart Action casts, and retained safety history'
 Assert-Literals $normalizedChangelog @(
+    '## 0.43.0.7',
+    'Auto-Zantetsuken now waits **1.5 seconds from the first exact own-source Kuzushi** instead of firing immediately.',
+    'The collection window stores no enemy target.',
+    'New Kuzushi carriers can appear during the wait; only at the deadline does Seiton rebuild the live candidate snapshot, rank the current 5-yalm cluster, and freeze the winner.',
+    'Higher-priority helpers, Guard, Bind, casts, animation lock, and a temporarily unavailable dispatch frame do not restart or postpone collection.',
+    'No scheduler input is claimed while the timer is still collecting.',
+    'If no current own-source Kuzushi remains when the window matures, collection resets so the next fresh proc receives the complete 1.5-second delay.',
+    'A pre-native invalid target may still be replaced by another carrier from the same matured Kuzushi wave without another delay.',
+    'The final native boundary still requires the exact frozen actor, current own Kuzushi, no Cover or reviewed invulnerability, no Bind, LB readiness, range, line of sight, and the elapsed collection window.',
+    'The 615-test Core registry and source safety contract pin the behavior;',
+    '## 0.43.0.6',
+    'Fixed **Smart Action casts in Crystalline Conflict always falling back to the visible tab target**.',
+    'Exact harmful, non-ground-target PvP casts now use the same reachable Smart Target order as instant actions.',
+    'A direct `<t>` carrier no longer bypasses Smart Target ranking just because it matches the visible target.',
+    'Near Assist and Near Help keep their authored-target cast protection.',
+    'The 613-test Core registry and source safety contract pin the regression.',
     '## 0.43.0.5',
     'Fixed **general Smart Action no-ops in enabled Wolves'' Den testing**.',
     'native zero/default carrier rather than an actor ID;',
@@ -13973,4 +14097,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 50 and the exact 613-test Core registry. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, PLD Guardian, Recuperate, then Auto-Guard own priority in that order. Guardian requires exact Guard and Guardian metadata/readiness through the final boundary: <=20% is unconditional, <=40% needs fresh exact 2+ focus, and <=50% needs fresh exact 3+ focus. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-actor reservation from either a certified direct standard hotbar press, an exact lease/generation-backed /smartaction visible-<t> fallback, or a target-independent CC Smart Action S1-S5 winner; only the first two bind the visible hard target. Queue stays rejected. Release cannot cancel it; new action, context, Guard, CC, identity, protection, or exact-action/actor drift does, only a post-revalidated clean native range/LoS false may retry, accepted or ambiguous outcomes are terminal, and it never reranks or writes target/facing. /seitonfar remains reachable-only. Enabled Wolves Den Smart Action may resolve only FFXIV's native zero/default selected-target carrier through the exact current duel opponent or reviewed dummy, and every current damaging non-ground-target shape shares the same closed admission and final-protection path. Metadata-verified Shield Smite and Chain Stratagem may select Guard; other primary protections remain candidate-local blockers and only incidental/global Chiten vetoes AoE. Every exact Smart Action-owned harmful non-ground-target PvP cast continues through ordinary reachable S1-S5 ranking; Near Assist and Near Help retain authored-target anti-spin. A Smart Action fallback transfers only an exactly consumed live token into the same bounded reservation. Auto-Zantetsuken requires one finite positive exact own-source Kuzushi row at selection and the final boundary. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not reset it, Guard/CC/cast/priority/native waits do not spend, and automatic Sprint/replay cannot rearm themselves. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."
+Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 50 and the exact 615-test Core registry. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, PLD Guardian, Recuperate, then Auto-Guard own priority in that order. Guardian requires exact Guard and Guardian metadata/readiness through the final boundary: <=20% is unconditional, <=40% needs fresh exact 2+ focus, and <=50% needs fresh exact 3+ focus. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-actor reservation from either a certified direct standard hotbar press, an exact lease/generation-backed /smartaction visible-<t> fallback, or a target-independent CC Smart Action S1-S5 winner; only the first two bind the visible hard target. Queue stays rejected. Release cannot cancel it; new action, context, Guard, CC, identity, protection, or exact-action/actor drift does, only a post-revalidated clean native range/LoS false may retry, accepted or ambiguous outcomes are terminal, and it never reranks or writes target/facing. /seitonfar remains reachable-only. Enabled Wolves Den Smart Action may resolve only FFXIV's native zero/default selected-target carrier through the exact current duel opponent or reviewed dummy, and every current damaging non-ground-target shape shares the same closed admission and final-protection path. Metadata-verified Shield Smite and Chain Stratagem may select Guard; other primary protections remain candidate-local blockers and only incidental/global Chiten vetoes AoE. Every exact Smart Action-owned harmful non-ground-target PvP cast continues through ordinary reachable S1-S5 ranking; Near Assist and Near Help retain authored-target anti-spin. A Smart Action fallback transfers only an exactly consumed live token into the same bounded reservation. Auto-Zantetsuken uses an identity/context-bound 1500-ms no-target collection from the first exact own-source Kuzushi, ranks the fresh live cluster only after maturity, and rechecks collection, frozen identity, current Kuzushi, protection, Bind, readiness, range, and line of sight at the final boundary. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not reset it, Guard/CC/cast/priority/native waits do not spend, and automatic Sprint/replay cannot rearm themselves. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."

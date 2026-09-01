@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.43.0.6";
+    private const string CurrentReleaseVersion = "0.43.0.7";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -430,11 +430,11 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Fixed Smart Action casts in CC always staying on your visible tab target.",
-                "Harmful PvP casts now use the same reachable S1-S5 ranking as instant Smart Action attacks.",
-                "The chosen actor is frozen for that cast and protection is checked again immediately before the game call.",
-                "Near Assist and Near Help keep their visible-target cast protection; instant actions are unchanged.",
-                "FFXIV may face the chosen actor once when casting. Later target changes cannot rerank that cast through Seiton.",
+                "Auto-Zantetsuken now waits 1.5 seconds after your first exact own Kuzushi instead of firing immediately.",
+                "It does not lock a target during that wait, so later Kuzushi targets can join the current opportunity.",
+                "At the deadline Seiton reruns the live 5y cluster ranking and only then freezes the best endpoint.",
+                "Priority, Bind, casts, and animation waits do not restart the timer; losing every Kuzushi does.",
+                "The final target, Kuzushi, protection, range, and LB checks remain required before the one game call.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
