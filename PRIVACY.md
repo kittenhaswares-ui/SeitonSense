@@ -217,7 +217,7 @@ following data already available in the local FFXIV client:
   range/line of sight, Bind, cast/queue/animation state, frozen actor, and
   bounded request/retry outcome. Before selection it keeps only the exact local
   actor, PvP context, and first own-Kuzushi observation time for a fixed
-  1,500-ms collection window; no enemy target is stored or changed during that
+  500-ms collection window; no enemy target is stored or changed during that
   wait. The same Kuzushi requirement applies to the
   exact Wolves' Den duel target or reviewed striking dummy;
 - when reactive counter-CC timing is learned, the exact plugin-owned action,

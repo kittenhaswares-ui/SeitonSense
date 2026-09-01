@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.43.0.7";
+    private const string CurrentReleaseVersion = "0.43.0.8";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -430,11 +430,9 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Auto-Zantetsuken now waits 1.5 seconds after your first exact own Kuzushi instead of firing immediately.",
-                "It does not lock a target during that wait, so later Kuzushi targets can join the current opportunity.",
-                "At the deadline Seiton reruns the live 5y cluster ranking and only then freezes the best endpoint.",
-                "Priority, Bind, casts, and animation waits do not restart the timer; losing every Kuzushi does.",
-                "The final target, Kuzushi, protection, range, and LB checks remain required before the one game call.",
+                "Auto-Zantetsuken now waits only 0.5 seconds after your first Kuzushi (previously 1.5 seconds).",
+                "It still checks the best reachable group of enemies after the short wait.",
+                "Kuzushi, immunity, range, and line-of-sight checks are unchanged.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

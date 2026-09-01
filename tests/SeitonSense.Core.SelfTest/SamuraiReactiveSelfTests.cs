@@ -514,10 +514,10 @@ internal static class SamuraiReactiveSelfTests
             "reviewed Wolves Den dummy opt-in");
     }
 
-    public static void ZantetsukenCollectsForFifteenHundredMillisecondsBeforeSelection()
+    public static void ZantetsukenCollectsForFiveHundredMillisecondsBeforeSelection()
     {
         Equal(
-            1_500L,
+            500L,
             SamuraiZantetsukenRules.CollectionDelayMilliseconds,
             "fixed Kuzushi collection delay");
 
@@ -559,36 +559,36 @@ internal static class SamuraiReactiveSelfTests
 
         var additionalEvidence = SamuraiZantetsukenRules.ObserveCollection(
             firstEvidence.NextState,
-            ZantetsukenCollectionObservation(nowMilliseconds: 2_000));
+            ZantetsukenCollectionObservation(nowMilliseconds: 1_300));
         Equal(
             1_100L,
             additionalEvidence.NextState.FirstExactOwnSourceKuzushiAtMilliseconds,
             "later Kuzushi evidence does not restart the window");
-        False(additionalEvidence.CanSelectAndFreezeTarget, "collection remains closed before 1.5 seconds");
+        False(additionalEvidence.CanSelectAndFreezeTarget, "collection remains closed before 0.5 seconds");
 
         var beforeBoundary = SamuraiZantetsukenRules.ObserveCollection(
             additionalEvidence.NextState,
-            ZantetsukenCollectionObservation(nowMilliseconds: 2_599));
-        False(beforeBoundary.CanSelectAndFreezeTarget, "1499 milliseconds remains too early");
+            ZantetsukenCollectionObservation(nowMilliseconds: 1_599));
+        False(beforeBoundary.CanSelectAndFreezeTarget, "499 milliseconds remains too early");
         False(
             SamuraiZantetsukenRules.HasCollectionDelayElapsed(
                 beforeBoundary.NextState,
-                2_599),
-            "pure elapsed gate is closed at 1499 milliseconds");
+                1_599),
+            "pure elapsed gate is closed at 499 milliseconds");
 
         var atBoundary = SamuraiZantetsukenRules.ObserveCollection(
             beforeBoundary.NextState,
-            ZantetsukenCollectionObservation(nowMilliseconds: 2_600));
-        True(atBoundary.CanSelectAndFreezeTarget, "1500 millisecond boundary opens target ranking");
+            ZantetsukenCollectionObservation(nowMilliseconds: 1_600));
+        True(atBoundary.CanSelectAndFreezeTarget, "500 millisecond boundary opens target ranking");
         True(
             SamuraiZantetsukenRules.HasCollectionDelayElapsed(
                 atBoundary.NextState,
-                2_600),
-            "pure elapsed gate opens at exactly 1500 milliseconds");
+                1_600),
+            "pure elapsed gate opens at exactly 500 milliseconds");
         True(
             SamuraiZantetsukenRules.CanSelectAndFreezeTarget(
                 atBoundary.NextState,
-                ZantetsukenCollectionObservation(nowMilliseconds: 2_600)),
+                ZantetsukenCollectionObservation(nowMilliseconds: 1_600)),
             "pure final boundary recheck opens only at the exact deadline");
 
         var candidatesAtMaturity = candidatesAtFirstEvidence.ToArray();
@@ -612,7 +612,7 @@ internal static class SamuraiReactiveSelfTests
                 1),
             "the later carrier reaches itself and its nearby cluster member");
 
-        var armed = SamuraiZantetsukenRules.Arm(Enemy, 2_600);
+        var armed = SamuraiZantetsukenRules.Arm(Enemy, 1_600);
         Equal(
             SamuraiZantetsukenRules.ActionId,
             SamuraiZantetsukenRules.Observe(
@@ -665,7 +665,7 @@ internal static class SamuraiReactiveSelfTests
         var noEvidenceAtMaturity = SamuraiZantetsukenRules.ObserveCollection(
             transientGap.NextState,
             ZantetsukenCollectionObservation(
-                nowMilliseconds: 2_500,
+                nowMilliseconds: 1_500,
                 exactOwnSourceKuzushiPresent: false));
         Equal(
             SamuraiZantetsukenCollectionState.Initial,
@@ -753,27 +753,27 @@ internal static class SamuraiReactiveSelfTests
         False(
             SamuraiZantetsukenRules.CanSelectAndFreezeTarget(
                 restarted.NextState,
-                ZantetsukenCollectionObservation(nowMilliseconds: 3_499)),
+                ZantetsukenCollectionObservation(nowMilliseconds: 2_499)),
             "pure final gate rejects one millisecond before maturity");
         False(
             SamuraiZantetsukenRules.CanSelectAndFreezeTarget(
                 restarted.NextState,
                 ZantetsukenCollectionObservation(
-                    nowMilliseconds: 3_500,
+                    nowMilliseconds: 2_500,
                     exactOwnSourceKuzushiPresent: false)),
             "pure final gate requires current exact own Kuzushi");
         False(
             SamuraiZantetsukenRules.CanSelectAndFreezeTarget(
                 restarted.NextState,
                 ZantetsukenCollectionObservation(
-                    nowMilliseconds: 3_500,
+                    nowMilliseconds: 2_500,
                     context: SupportedPvPContext.WolvesDen)),
             "pure final gate rechecks the exact PvP context");
         False(
             SamuraiZantetsukenRules.CanSelectAndFreezeTarget(
                 restarted.NextState,
                 ZantetsukenCollectionObservation(
-                    nowMilliseconds: 3_500,
+                    nowMilliseconds: 2_500,
                     localPlayer: LocalSamurai with
                     {
                         GameObjectId = LocalSamurai.GameObjectId + 1,

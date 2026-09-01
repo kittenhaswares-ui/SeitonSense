@@ -78,7 +78,7 @@ internal sealed record SamuraiReactiveCounterCcProbeSnapshot(
 /// the episode. Exact sequence-bound ActionEffects warm the optional two-stage
 /// Soten/Mineuchi timing; until then it waits for authoritative status absence.
 /// Zantetsuken is a separate automatic lane which collects exact own-source
-/// Kuzushi for 1.5 seconds before ranking and freezing a primary target,
+/// Kuzushi for 0.5 seconds before ranking and freezing a primary target,
 /// retains reviewed hard-protection exclusions, and uses bounded native retries.
 /// </summary>
 internal sealed class SamuraiReactiveCounterCcProbe

@@ -3,7 +3,7 @@
 Seiton Sense is a local PvP awareness HUD with pressure tracking, nameplate
 cues, warnings, job helpers, Smart Action, and target highlights.
 
-Version 0.43.0.7 makes Auto-Zantetsuken wait 1.5 seconds after the first exact
+Version 0.43.0.8 makes Auto-Zantetsuken wait 0.5 seconds after the first exact
 Kuzushi applied by your Samurai. No target is locked during that collection
 window, so additional marked enemies can join the opportunity. At the deadline
 Seiton reruns the live 5-yalm cluster ranking and only then freezes the winner.
@@ -1405,7 +1405,7 @@ under the common bound.
 
 For fully automatic Auto-Zantetsuken in exact CC, LB readiness alone never
 authorizes a request. The first living canonical enemy with exactly one current
-Kuzushi row from the local Samurai starts a fixed 1,500-ms collection window.
+Kuzushi row from the local Samurai starts a fixed 500-ms collection window.
 No enemy is selected or frozen during that wait, and the helper claims no
 scheduler input merely for collecting. Additional own-Kuzushi targets can join
 without restarting the original timer. At the exact deadline, the helper builds
@@ -1422,7 +1422,7 @@ then lower HP ratio, then stable S-slot.
 The primary endpoint freezes for an intent. Casts and other temporary native
 blocks wait without automatic cast cancellation and do not restart the
 collection time. If every current own-source Kuzushi is gone when the window
-matures, collection resets and the next fresh proc receives a full 1,500 ms.
+matures, collection resets and the next fresh proc receives a full 500 ms.
 Exact own-source Kuzushi,
 identity, life, blocking protection, Bind, readiness, range, and line of sight
 are checked again at the latest native boundary. If Kuzushi disappears or the

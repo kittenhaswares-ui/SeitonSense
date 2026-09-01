@@ -285,13 +285,13 @@ internal sealed partial class SettingsWindow
                 value => configuration.EnableSamuraiZantetsukenOnHeldKey = value);
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
-                "Off by default and Samurai only; no held key is required. Your first exact Kuzushi starts a 1.5-second " +
+                "Off by default and Samurai only; no held key is required. Your first exact Kuzushi starts a 0.5-second " +
                 "collection window without locking a target. Seiton then checks the current marked enemies and uses " +
                 "Zantetsuken on the reachable target whose 5-yalm circle hits the most vulnerable enemies. Covered, " +
                 "Paladin LB, and Dark Knight LB are skipped; Guard, Chiten, and shields are allowed. Wolves' Den uses " +
                 "only your duel target or a supported dummy and still requires your Kuzushi.");
             ImGui.TextDisabled(
-                "Purify and the SAM Soten → Mineuchi counter come first without restarting collection. After the 1.5 " +
+                "Purify and the SAM Soten → Mineuchi counter come first without restarting collection. After the 0.5 " +
                 "seconds, Seiton freezes one target while waiting for casts or animation lock and checks Kuzushi again " +
                 "just before use.");
             ImGui.PopTextWrapPos();

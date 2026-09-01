@@ -231,7 +231,7 @@ public static class SamuraiZantetsukenRules
     public const uint ActionId = 29_537;
     public const uint KuzushiStatusId = 3_202;
     public const float MaximumRangeYalms = 20f;
-    public const long CollectionDelayMilliseconds = 1_500;
+    public const long CollectionDelayMilliseconds = 500;
 
     /// <summary>
     /// Live Kuzushi ownership evidence. A status slot which is already expired
@@ -250,7 +250,7 @@ public static class SamuraiZantetsukenRules
         remainingSeconds > 0f;
 
     /// <summary>
-    /// Waits a fixed 1.5 seconds after the first current exact own-source
+    /// Waits a fixed 0.5 seconds after the first current exact own-source
     /// Kuzushi evidence before allowing target ranking. A temporary evidence
     /// gap cannot restart the window; missing current evidence at maturity,
     /// feature reset, identity/context drift, or invalid time resets it. Target
@@ -308,7 +308,7 @@ public static class SamuraiZantetsukenRules
 
     /// <summary>
     /// Pure monotonic-time gate shared by collection and the final dispatch
-    /// boundary. Equality at exactly 1,500 ms is intentionally eligible.
+    /// boundary. Equality at exactly 500 ms is intentionally eligible.
     /// </summary>
     public static bool HasCollectionDelayElapsed(
         SamuraiZantetsukenCollectionState state,

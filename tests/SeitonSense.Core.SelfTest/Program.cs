@@ -538,7 +538,7 @@ var tests = new (string Name, Action Run)[]
     ("SAM protection end uses current held consent", SamuraiReactiveSelfTests.ProtectionEndConsentUsesTheCurrentHeldKey),
     ("SAM Wolves Den uses exact targeted actions", SamuraiReactiveSelfTests.WolvesDenUsesExactCurrentTargetAndTargetedActions),
     ("SAM automatic Zantetsuken blocks only exact hard protection", SamuraiReactiveSelfTests.ZantetsukenAutomaticGateBlocksOnlyExactHardProtection),
-    ("SAM automatic Zantetsuken collects Kuzushi for 1500ms before selection", SamuraiReactiveSelfTests.ZantetsukenCollectsForFifteenHundredMillisecondsBeforeSelection),
+    ("SAM automatic Zantetsuken collects Kuzushi for 500ms before selection", SamuraiReactiveSelfTests.ZantetsukenCollectsForFiveHundredMillisecondsBeforeSelection),
     ("SAM automatic Zantetsuken collection timing fails closed", SamuraiReactiveSelfTests.ZantetsukenCollectionResetsAndFailsClosedOnInvalidTime),
     ("SAM Zantetsuken requires fresh finite own Kuzushi evidence", SamuraiReactiveSelfTests.ZantetsukenKuzushiEvidenceRequiresFreshFiniteOwnStatus),
     ("SAM Zantetsuken ranks the largest vulnerable 5y cluster", SamuraiReactiveSelfTests.ZantetsukenRanksLargestVulnerableFiveYalmCluster),

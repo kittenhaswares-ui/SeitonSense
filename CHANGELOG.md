@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.43.0.8
+
+- Auto-Zantetsuken now waits **0.5 seconds instead of 1.5 seconds** after the
+  first own Kuzushi.
+- Target selection, the current 5-yalm cluster ranking, and all existing
+  Kuzushi, protection, range, and line-of-sight checks are unchanged.
+- Boundary tests now check that 499 ms is too early and 500 ms is ready.
+
 ## 0.43.0.7
 
 - Auto-Zantetsuken now waits **1.5 seconds from the first exact own-source
