@@ -542,7 +542,7 @@ var tests = new (string Name, Action Run)[]
     ("SAM Zantetsuken ranks the largest vulnerable 5y cluster", SamuraiReactiveSelfTests.ZantetsukenRanksLargestVulnerableFiveYalmCluster),
     ("SAM Zantetsuken cluster ranking fails closed", SamuraiReactiveSelfTests.ZantetsukenClusterRankingFailsClosedAndRequiresReachability),
     ("SAM Smart Action cast raw and adjusted pairs are exact", SamuraiSmartActionCastSelfTests.ExactRawAndAdjustedPairsAreClosed),
-    ("SAM reviewed casts preserve the generic cast anti-spin policy", SamuraiSmartActionCastSelfTests.ReviewedCastDecisionPreservesEveryOtherCastPolicy),
+    ("Smart Action casts preserve the other macro helpers' anti-spin policy", SamuraiSmartActionCastSelfTests.SmartActionCastDecisionPreservesMacroHelperAntiSpinPolicy),
     ("SAM Ogi cone protection is candidate-local and Tendo remains direct", SamuraiSmartActionCastSelfTests.OgiConeProtectionIsCandidateLocalAndTendoRemainsDirect),
     ("Protection-end held lease survives priority and retries", MiracleProtectionEndSelfTests.HeldLeaseSurvivesPriorityAndRetriesOnlyInsideItsBound),
     ("Reactive CC follow-up accepts exact self-Purify action evidence", MiracleCleanseFollowupSelfTests.ExactPurifySignalAcceptsActionLevelOrKnownRecovery),

@@ -3,7 +3,7 @@ namespace SeitonSense.Core;
 public enum CastedMacroRedirectDecision
 {
     NotApplicable,
-    RedirectReviewedSmartActionCast,
+    RedirectSmartActionCast,
     PreserveAuthoredTarget,
     PassThroughStaleLifecycle,
     SuppressHiddenOrMissingTarget,
@@ -11,15 +11,35 @@ public enum CastedMacroRedirectDecision
 }
 
 /// <summary>
-/// Prevents a hidden macro redirect from owning a cast-time action. FFXIV may
-/// resolve and auto-face a queued cast after the initial action call, so casts
-/// retain only their authored visible target while instant actions keep the
-/// existing one-shot redirect behavior. A separately metadata-pinned reviewed
-/// cast may explicitly continue into Smart Action; callers must never apply
-/// that exception to Near Assist, Near Help, or an unreviewed action.
+/// Separates Smart Action cast ranking from the assist helpers' cast policy.
+/// FFXIV may resolve and auto-face a queued cast after the initial action call,
+/// so Near Assist and Near Help retain only their authored visible target. An
+/// exact Smart Action-owned hostile PvP cast may instead continue into ordinary
+/// Smart Target ranking; callers must never apply that path to the assist helpers.
 /// </summary>
 public static class CastedMacroRedirectRules
 {
+    public static bool CanContinueSmartActionCast(
+        bool ownedBySmartAction,
+        bool supportedActionType,
+        uint resolvedActionId,
+        bool exactActionMetadata,
+        uint metadataRowId,
+        bool isPvp,
+        bool canTargetHostile,
+        bool isGroundTargeted,
+        float range) =>
+        ownedBySmartAction &&
+        supportedActionType &&
+        resolvedActionId != 0 &&
+        exactActionMetadata &&
+        metadataRowId == resolvedActionId &&
+        isPvp &&
+        canTargetHostile &&
+        !isGroundTargeted &&
+        float.IsFinite(range) &&
+        range > 0f;
+
     public static bool ShouldPassThroughWithoutRedirect(
         CastedMacroRedirectDecision decision) =>
         decision is
@@ -49,7 +69,7 @@ public static class CastedMacroRedirectRules
         int adjustedCastTimeMilliseconds,
         uint baseCastTime100Milliseconds,
         bool authoredTargetMatchesVisibleTarget,
-        bool allowReviewedSmartActionCastRedirect = false)
+        bool allowSmartActionCastRedirect = false)
     {
         if (!redirectTokenArmed || !supportedActionType)
             return CastedMacroRedirectDecision.NotApplicable;
@@ -60,8 +80,8 @@ public static class CastedMacroRedirectRules
         if (!castTimeProven)
             return CastedMacroRedirectDecision.NotApplicable;
 
-        if (allowReviewedSmartActionCastRedirect)
-            return CastedMacroRedirectDecision.RedirectReviewedSmartActionCast;
+        if (allowSmartActionCastRedirect && exactActionMetadata)
+            return CastedMacroRedirectDecision.RedirectSmartActionCast;
 
         return authoredTargetMatchesVisibleTarget
             ? CastedMacroRedirectDecision.PreserveAuthoredTarget

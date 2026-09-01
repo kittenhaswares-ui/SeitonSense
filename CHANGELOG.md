@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.43.0.6
+
+- Fixed **Smart Action casts in Crystalline Conflict always falling back to the
+  visible tab target**. The cast preflight consumed the one-shot Smart Action
+  token before normal `S1`-`S5` ranking could run.
+- Exact harmful, non-ground-target PvP casts now use the same reachable Smart
+  Target order as instant actions. Seiton freezes one actor and rechecks its
+  identity, range, line of sight, and protection immediately before the sole
+  native game call.
+- A direct `<t>` carrier no longer bypasses Smart Target ranking just because it
+  matches the visible target. If no candidate wins, the normal two-line macro
+  may still reach its exact authored `<t>` fallback.
+- Near Assist and Near Help keep their authored-target cast protection. Instant
+  actions are unchanged. FFXIV may perform its ordinary initial auto-face toward
+  the frozen cast target; later target changes cannot rerank or retarget it
+  through Seiton.
+- The 613-test Core registry and source safety contract pin the regression.
+  Automated checks remain separate from live in-game confirmation.
+
 ## 0.43.0.5
 
 - Fixed **general Smart Action no-ops in enabled Wolves' Den testing**. FFXIV

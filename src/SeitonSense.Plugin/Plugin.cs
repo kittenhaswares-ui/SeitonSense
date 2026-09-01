@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.43.0.5";
+    private const string CurrentReleaseVersion = "0.43.0.6";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -430,11 +430,11 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Fixed Smart Action no-ops in Wolves' Den when FFXIV sends your selected target in its native default form.",
-                "Seiton accepts that carrier only after resolving the exact current duel opponent or reviewed dummy.",
-                "Every current damaging non-ground-target shape now shares one path, including casts and instant AoEs.",
-                "This covers BLM's final Fire AoE and SAM Ogi / Kaeshi: Namikiri while keeping Chiten safety active.",
-                "Guard, Cover, LB safety, CC ranking, and Chase are unchanged. Live in-game confirmation remains separate.",
+                "Fixed Smart Action casts in CC always staying on your visible tab target.",
+                "Harmful PvP casts now use the same reachable S1-S5 ranking as instant Smart Action attacks.",
+                "The chosen actor is frozen for that cast and protection is checked again immediately before the game call.",
+                "Near Assist and Near Help keep their visible-target cast protection; instant actions are unchanged.",
+                "FFXIV may face the chosen actor once when casting. Later target changes cannot rerank that cast through Seiton.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

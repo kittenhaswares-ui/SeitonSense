@@ -3,6 +3,15 @@
 Seiton Sense is a local PvP awareness HUD with pressure tracking, nameplate
 cues, warnings, job helpers, Smart Action, and target highlights.
 
+Version 0.43.0.6 fixes Smart Action casts in Crystalline Conflict always using
+the visible tab target. An exact harmful PvP cast now goes through the same
+reachable `S1`-`S5` ranking as an instant Smart Action attack. Seiton freezes
+that one actor and rechecks range and protection immediately before the native
+game call; it never changes the visible target or reranks the cast. Near Assist
+and Near Help keep their authored-target cast protection, and instant actions
+are unchanged. FFXIV may perform its normal initial auto-face toward the frozen
+cast target. Live in-game confirmation remains separate from automated checks.
+
 Version 0.43.0.5 fixes general Smart Action no-ops in enabled Wolves' Den
 testing. FFXIV can send the selected target as its native zero/default carrier
 instead of an actor ID; Seiton accepts that form only after resolving the exact
@@ -93,9 +102,10 @@ frame cancelled it one millisecond later. The intent now waits through that
 ambiguous frame and can leave when the same public-CC identity is stable and
 native-ready. It also repairs distinct current metadata for held SAM Soten,
 Mineuchi, and Zantetsuken, and makes the reviewed Ogi Namikiri and Tendo
-Setsugekka casts use Smart Action's ranked, frozen target. Every other cast keeps
-v0.42.0.1's visible-target anti-spin behavior; instant actions retain smart
-targeting. The native-ready window remains 30 seconds. Wolves' Den, custom CC,
+Setsugekka casts use Smart Action's ranked, frozen target. At that release,
+every other cast kept v0.42.0.1's visible-target anti-spin behavior; version
+0.43.0.6 extends frozen Smart Action ranking to every exact harmful PvP cast.
+The native-ready window remains 30 seconds. Wolves' Den, custom CC,
 Frontline, and Rival Wings remain excluded from instant leave, and it never
 queues a new match.
 Version 0.41.0.0 makes automatic Purify and
@@ -1587,21 +1597,31 @@ distance and stable native S-slot, without Smart Action's normal melee-first/gap
 closer tier or HP, pressure, Guard-cooldown, and MP order. Every protection,
 cast, frozen-target, fallback, and final-revalidation rule below remains shared.
 
-Cast-time actions are deliberately not invisibly redirected by default. If the
-first `<e1>` carrier has a proven adjusted or base cast time and is not the exact
-current visible hard target, Seiton consumes and suppresses that carrier so the
-following `<t>` line keeps the visible target. A direct `<t>` cast already
-matching the current hard target also keeps that target. When tap-to-land is
-enabled, either exact visible-target path may reserve the same cast after a
-range-only native failure. This avoids FFXIV's delayed native auto-face turning
-the character toward a stale hidden target after a fast manual target switch.
+Smart Action-owned cast-time actions now use ordinary Smart Target ranking. The
+incoming action must resolve to one exact harmful, non-ground-target PvP row with
+a proven cast time and positive range. Reachable `S1`-`S5` actors use the same
+reach, HP, team-pressure, Guard-cooldown, MP, and stable-slot order as instant
+actions. The winner is frozen for that cast, then identity, range, and protection
+are checked again immediately before the sole native call. A direct `<t>` cast
+cannot bypass ranking merely because it matches the visible target. If no
+candidate wins, the normal two-line macro may still reach its exact authored
+`<t>` fallback. Tap-to-land may reserve only that already frozen cast after a
+proven range or line-of-sight rejection. Seiton never changes the visible target
+or reranks after selection. FFXIV may still perform its ordinary initial
+auto-facing toward the frozen cast target.
 
-The only reviewed cast exception is SAM Ogi Namikiri `29530` and Tendo Setsugekka
-(`29536 -> 41454`, or direct `41454`). With exact startup metadata and local SAM
-identity, these two reviewed base casts continue through the ordinary Smart
-Action ranking and freeze one exact actor for the cast. Protection is now checked
-for each candidate rather than globally: an unrelated enemy elsewhere with
-Guard, Cover, Hallowed Ground, or Undead Redemption cannot stall either cast.
+Near Assist and Near Help deliberately keep the authored-target cast policy.
+Their hidden carrier is suppressed so the following visible `<t>` line stays
+vanilla; a cast already authored on the exact current hard target passes through
+unchanged. This prevents those assist helpers from introducing a hidden cast
+target while leaving Smart Action's explicit target-selection command useful.
+
+SAM Ogi Namikiri `29530` and Tendo Setsugekka (`29536 -> 41454`, or direct
+`41454`) retain their additional reviewed protection handling. With exact startup
+metadata and local SAM identity, these base casts use the ordinary Smart Action
+ranking and freeze one exact actor for the cast. Protection is checked for each
+candidate rather than globally: an unrelated enemy elsewhere with Guard, Cover,
+Hallowed Ground, or Undead Redemption cannot stall either cast.
 The selected actor must still be safe under the ordinary direct-target policy.
 Ogi additionally rejects that candidate when a Chiten actor's hitbox intersects
 the reviewed target-facing 8-yalm, 90-degree cone; out-of-cone Chiten and
@@ -1609,12 +1629,10 @@ incidental Guard/Cover/LB-protected actors do not veto it. Instant Kaeshi:
 Namikiri `29531` uses that same candidate-local cone policy, with separately
 pinned icon `9664`, 8-yalm range/effect range, and cast type `3`. Tendo remains a
 direct single-target check. Tendo Kaeshi Setsugekka `41455` is an instant
-follow-up and receives no cast exception. The plugin never calls a
-face-target or rotation function; FFXIV may still perform its ordinary initial
-auto-facing toward the frozen cast target, but later manual target changes cannot
-retarget that cast through Seiton. Near Assist, Near Help, and every other cast
-retain the visible-target policy above. Other instant actions keep the full
-Smart Action selection described below.
+follow-up and receives no cast-specific allowance. The plugin never calls a
+face-target or rotation function; later manual target changes cannot retarget the
+already frozen cast through Seiton. Instant actions keep the full Smart Action
+selection described below.
 
 No selected target is required. Arming performs no `S1`-`S5` scan and has no
 hard-target or live-`S1` prerequisite; `<t>` is only the user-authored fallback
@@ -2193,9 +2211,8 @@ update through the same repository.
   FFXIV's normal forward world-target cycle
 - `/sstarget [on|off|toggle]` - collision-free alias for `/smarttab`
 - `/smartaction` - arm one optional CC-only 750 ms harmful-action target redirect;
-  instant actions and the reviewed SAM Ogi/Tendo base casts use the Smart Target,
-  while every other cast-time hidden carrier is suppressed so the authored
-  visible `<t>` line stays vanilla
+  exact harmful casts and instant actions both use the reachable Smart Target,
+  freeze one actor, and recheck it before the native game call
 - `/ssaction` - collision-free alias for `/smartaction`
 - `/seitonfar` - arm the same optional CC-only harmful-action redirect but rank
   exact safe candidates by farthest action-reachable hitbox-edge distance; it
@@ -2526,9 +2543,10 @@ OFF, reverse targeting, and calls outside the scoped handler retain their native
   paths. Smart Action remains a separate one-shot harmful-action macro contract.
   Its checks now pin target-independent arming, `/seitonfar` as a mode on that
   same token, farthest finite hitbox-edge ranking with action-native reach/line-
-  of-sight authority, the closed metadata-verified SAM
-  Ogi/Tendo cast exception, cast-time hidden-carrier suppression with visible-
-  target pass-through for every other cast, selection with `S1` absent,
+  of-sight authority, exact harmful PvP casts continuing through ordinary Smart
+  Target ranking while Near Assist and Near Help retain cast-time hidden-carrier
+  suppression with visible-target pass-through, the closed metadata-verified SAM
+  Ogi/Tendo protection path, selection with `S1` absent,
 shape-scoped caller-proven target protection safety, exact Chiten,
 Guard, Covered, Hallowed Ground, and Undead Redemption handling, an exact
 resolved-action English metadata gate for Guard-ignoring damage, conservative

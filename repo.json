@@ -5,8 +5,8 @@
     "Punchline": "PvP cues, Smart Tab, responsive helpers, and survival tools.",
     "Description": "A local PvP HUD with nameplate cues, Limit Break alerts, pressure and CC information, Ping Helpers, medicine-kit beacons, range rings, a Wolves' Den map panel, recovery and job helpers, Smart Tab, assist macros, MP sounds, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.43.0.5",
-    "Changelog": "Fixed general Smart Action no-ops in enabled Wolves' Den testing. FFXIV's native zero/default selected-target carrier is now accepted only after resolving the exact current hostile duel opponent or reviewed dummy. Smart Action admission and final safety now share one closed policy for every current damaging non-ground-target shape: direct, target-circle, and cone/line/other AoE, cast or instant. This covers BLM's final Fire AoE and SAM Ogi/Kaeshi: Namikiri. Exact Chiten checks remain active; Guard, Cover, PLD LB, and DRK LB remain candidate-local blockers. CC ranking and Chase are unchanged. Automated checks are separate from live in-game confirmation.",
+    "AssemblyVersion": "0.43.0.6",
+    "Changelog": "Fixed Smart Action casts in Crystalline Conflict always falling back to the visible tab target before S1-S5 ranking. Exact harmful PvP casts now continue through the same reachable Smart Target selection, target freeze, protection recheck, and sole native call as instant Smart Action attacks. Near Assist and Near Help keep their authored-target cast protection, and instant actions are unchanged. FFXIV may perform its ordinary initial auto-face toward the frozen cast target; later manual target changes cannot rerank or retarget that cast through Seiton. Automated checks are separate from live in-game confirmation.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -36,6 +36,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1788273852"
+    "LastUpdate": "1788276039"
   }
 ]

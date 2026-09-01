@@ -49,10 +49,72 @@ internal static class SamuraiSmartActionCastSelfTests
         }
     }
 
-    public static void ReviewedCastDecisionPreservesEveryOtherCastPolicy()
+    public static void SmartActionCastDecisionPreservesMacroHelperAntiSpinPolicy()
     {
+        const uint representativeBlmResolvedAction = 41_480;
+        True(
+            CastedMacroRedirectRules.CanContinueSmartActionCast(
+                ownedBySmartAction: true,
+                supportedActionType: true,
+                representativeBlmResolvedAction,
+                exactActionMetadata: true,
+                metadataRowId: representativeBlmResolvedAction,
+                isPvp: true,
+                canTargetHostile: true,
+                isGroundTargeted: false,
+                range: 25f),
+            "a representative exact ranged PvP cast may enter Smart Target ranking");
+        var closedCastGates = new[]
+        {
+            (Owned: false, SupportedType: true, Resolved: representativeBlmResolvedAction,
+                Exact: true, Row: representativeBlmResolvedAction, Pvp: true,
+                Hostile: true, Ground: false, Range: 25f),
+            (Owned: true, SupportedType: false, Resolved: representativeBlmResolvedAction,
+                Exact: true, Row: representativeBlmResolvedAction, Pvp: true,
+                Hostile: true, Ground: false, Range: 25f),
+            (Owned: true, SupportedType: true, Resolved: 0u,
+                Exact: true, Row: representativeBlmResolvedAction, Pvp: true,
+                Hostile: true, Ground: false, Range: 25f),
+            (Owned: true, SupportedType: true, Resolved: representativeBlmResolvedAction,
+                Exact: false, Row: representativeBlmResolvedAction, Pvp: true,
+                Hostile: true, Ground: false, Range: 25f),
+            (Owned: true, SupportedType: true, Resolved: representativeBlmResolvedAction,
+                Exact: true, Row: representativeBlmResolvedAction + 1, Pvp: true,
+                Hostile: true, Ground: false, Range: 25f),
+            (Owned: true, SupportedType: true, Resolved: representativeBlmResolvedAction,
+                Exact: true, Row: representativeBlmResolvedAction, Pvp: false,
+                Hostile: true, Ground: false, Range: 25f),
+            (Owned: true, SupportedType: true, Resolved: representativeBlmResolvedAction,
+                Exact: true, Row: representativeBlmResolvedAction, Pvp: true,
+                Hostile: false, Ground: false, Range: 25f),
+            (Owned: true, SupportedType: true, Resolved: representativeBlmResolvedAction,
+                Exact: true, Row: representativeBlmResolvedAction, Pvp: true,
+                Hostile: true, Ground: true, Range: 25f),
+            (Owned: true, SupportedType: true, Resolved: representativeBlmResolvedAction,
+                Exact: true, Row: representativeBlmResolvedAction, Pvp: true,
+                Hostile: true, Ground: false, Range: 0f),
+            (Owned: true, SupportedType: true, Resolved: representativeBlmResolvedAction,
+                Exact: true, Row: representativeBlmResolvedAction, Pvp: true,
+                Hostile: true, Ground: false, Range: float.NaN),
+        };
+        foreach (var gate in closedCastGates)
+        {
+            False(
+                CastedMacroRedirectRules.CanContinueSmartActionCast(
+                    gate.Owned,
+                    gate.SupportedType,
+                    gate.Resolved,
+                    gate.Exact,
+                    gate.Row,
+                    gate.Pvp,
+                    gate.Hostile,
+                    gate.Ground,
+                    gate.Range),
+                "every exact Smart Action cast admission gate stays closed independently");
+        }
+
         Equal(
-            CastedMacroRedirectDecision.RedirectReviewedSmartActionCast,
+            CastedMacroRedirectDecision.RedirectSmartActionCast,
             CastedMacroRedirectRules.Evaluate(
                 redirectTokenArmed: true,
                 supportedActionType: true,
@@ -60,21 +122,43 @@ internal static class SamuraiSmartActionCastSelfTests
                 adjustedCastTimeMilliseconds: 1_500,
                 baseCastTime100Milliseconds: 15,
                 authoredTargetMatchesVisibleTarget: false,
-                allowReviewedSmartActionCastRedirect: true),
-            "one caller-proven reviewed cast continues into Smart Action");
+                allowSmartActionCastRedirect: true),
+            "an exact Smart Action-owned hostile PvP cast continues into ranking");
+        Equal(
+            CastedMacroRedirectDecision.RedirectSmartActionCast,
+            CastedMacroRedirectRules.Evaluate(
+                redirectTokenArmed: true,
+                supportedActionType: true,
+                exactActionMetadata: true,
+                adjustedCastTimeMilliseconds: 1_500,
+                baseCastTime100Milliseconds: 15,
+                authoredTargetMatchesVisibleTarget: true,
+                allowSmartActionCastRedirect: true),
+            "the current authored target cannot bypass ordinary Smart Action ranking");
         False(
             CastedMacroRedirectRules.ShouldPassThroughWithoutRedirect(
-                CastedMacroRedirectDecision.RedirectReviewedSmartActionCast),
-            "reviewed SAM cast does not enter the vanilla authored-target path");
+                CastedMacroRedirectDecision.RedirectSmartActionCast),
+            "Smart Action casts do not enter the vanilla authored-target path");
 
         Equal(
             CastedMacroRedirectDecision.PreserveAuthoredTarget,
             CastedMacroRedirectRules.Evaluate(true, true, true, 1_500, 15, true),
-            "ordinary visible cast retains v0.42 anti-spin behavior");
+            "Near Assist and Near Help visible casts retain anti-spin behavior");
         Equal(
             CastedMacroRedirectDecision.SuppressHiddenOrMissingTarget,
             CastedMacroRedirectRules.Evaluate(true, true, true, 1_500, 15, false),
-            "ordinary hidden cast retains v0.42 suppression");
+            "Near Assist and Near Help hidden casts retain suppression");
+        Equal(
+            CastedMacroRedirectDecision.PreserveAuthoredTarget,
+            CastedMacroRedirectRules.Evaluate(
+                redirectTokenArmed: true,
+                supportedActionType: true,
+                exactActionMetadata: false,
+                adjustedCastTimeMilliseconds: 1_500,
+                baseCastTime100Milliseconds: 0,
+                authoredTargetMatchesVisibleTarget: true,
+                allowSmartActionCastRedirect: true),
+            "Smart Action cast permission cannot bypass missing exact metadata");
         Equal(
             CastedMacroRedirectDecision.NotApplicable,
             CastedMacroRedirectRules.Evaluate(
@@ -84,8 +168,8 @@ internal static class SamuraiSmartActionCastSelfTests
                 adjustedCastTimeMilliseconds: 0,
                 baseCastTime100Milliseconds: 0,
                 authoredTargetMatchesVisibleTarget: false,
-                allowReviewedSmartActionCastRedirect: true),
-            "reviewed-cast permission cannot turn an instant action into a cast");
+                allowSmartActionCastRedirect: true),
+            "Smart Action cast permission cannot turn an instant action into a cast");
     }
 
     public static void OgiConeProtectionIsCandidateLocalAndTendoRemainsDirect()

@@ -8685,11 +8685,15 @@ Assert-Literals $nearAssist @(
 ) 'Near Assist redirector'
 Assert-Literals $castedMacroRedirectRules @(
     'public enum CastedMacroRedirectDecision',
-    'RedirectReviewedSmartActionCast',
+    'RedirectSmartActionCast',
     'PreserveAuthoredTarget',
     'PassThroughStaleLifecycle',
     'SuppressHiddenOrMissingTarget',
     'SuppressStaleOwnership',
+    'public static bool CanContinueSmartActionCast(',
+    'metadataRowId == resolvedActionId',
+    '!isGroundTargeted',
+    'float.IsFinite(range)',
     'ShouldTransferExactSmartActionFallbackLease(',
     'exactSmartActionTokenConsumed &&',
     'CanCommitExactSmartActionFallbackLease(',
@@ -8699,20 +8703,22 @@ Assert-Literals $castedMacroRedirectRules @(
     'adjustedCastTimeMilliseconds > 0',
     'exactActionMetadata && baseCastTime100Milliseconds > 0',
     'authoredTargetMatchesVisibleTarget',
-    'bool allowReviewedSmartActionCastRedirect = false',
-    'if (allowReviewedSmartActionCastRedirect)'
-) 'Cast-time macro redirects preserve only the visible authored target except reviewed SAM casts'
+    'bool allowSmartActionCastRedirect = false',
+    'if (allowSmartActionCastRedirect && exactActionMetadata)'
+) 'Exact Smart Action casts rank normally while other macro helpers preserve the visible authored target'
 $normalizedCastedMacroRedirectRules = $castedMacroRedirectRules -replace '\s+', ' '
 if ($normalizedCastedMacroRedirectRules -notmatch
+        'CanContinueSmartActionCast\( bool ownedBySmartAction, bool supportedActionType, uint resolvedActionId, bool exactActionMetadata, uint metadataRowId, bool isPvp, bool canTargetHostile, bool isGroundTargeted, float range\) => ownedBySmartAction && supportedActionType && resolvedActionId != 0 && exactActionMetadata && metadataRowId == resolvedActionId && isPvp && canTargetHostile && !isGroundTargeted && float\.IsFinite\(range\) && range > 0f;' -or
+    $normalizedCastedMacroRedirectRules -notmatch
         'ShouldPassThroughWithoutRedirect\( CastedMacroRedirectDecision decision\) => decision is CastedMacroRedirectDecision\.PreserveAuthoredTarget or CastedMacroRedirectDecision\.PassThroughStaleLifecycle;' -or
     $normalizedCastedMacroRedirectRules -notmatch
         'ShouldTransferExactSmartActionFallbackLease\( bool exactSmartActionTokenConsumed, CastedMacroRedirectDecision decision\) => exactSmartActionTokenConsumed && decision is CastedMacroRedirectDecision\.PreserveAuthoredTarget or CastedMacroRedirectDecision\.SuppressHiddenOrMissingTarget;' -or
     $normalizedCastedMacroRedirectRules -notmatch
         'CanCommitExactSmartActionFallbackLease\( ulong consumedGeneration, ulong currentGeneration, bool newerSmartActionTokenArmed\) => consumedGeneration != 0 && consumedGeneration == currentGeneration && !newerSmartActionTokenArmed;' -or
     $normalizedCastedMacroRedirectRules -notmatch
-        'if \(!redirectTokenArmed \|\| !supportedActionType\) return CastedMacroRedirectDecision\.NotApplicable; var castTimeProven = adjustedCastTimeMilliseconds > 0 \|\| \(exactActionMetadata && baseCastTime100Milliseconds > 0\); if \(!castTimeProven\) return CastedMacroRedirectDecision\.NotApplicable; if \(allowReviewedSmartActionCastRedirect\) return CastedMacroRedirectDecision\.RedirectReviewedSmartActionCast; return authoredTargetMatchesVisibleTarget \? CastedMacroRedirectDecision\.PreserveAuthoredTarget : CastedMacroRedirectDecision\.SuppressHiddenOrMissingTarget;' -or
+        'if \(!redirectTokenArmed \|\| !supportedActionType\) return CastedMacroRedirectDecision\.NotApplicable; var castTimeProven = adjustedCastTimeMilliseconds > 0 \|\| \(exactActionMetadata && baseCastTime100Milliseconds > 0\); if \(!castTimeProven\) return CastedMacroRedirectDecision\.NotApplicable; if \(allowSmartActionCastRedirect && exactActionMetadata\) return CastedMacroRedirectDecision\.RedirectSmartActionCast; return authoredTargetMatchesVisibleTarget \? CastedMacroRedirectDecision\.PreserveAuthoredTarget : CastedMacroRedirectDecision\.SuppressHiddenOrMissingTarget;' -or
     $castedMacroRedirectRules -match '\b(ActionManager|TargetManager|UseAction|SetTarget|SetRotation|FaceTarget|ObjectTable|IClientState)\b') {
-    throw 'Pure cast redirect classification must require a live token, supported type, adjusted or exact base cast proof, allow only an explicit caller-reviewed Smart Action cast, and contain no runtime action, target, facing, or context mutation.'
+    throw 'Pure cast redirect classification must require a live token, supported type, adjusted or exact base cast proof, require exact metadata for an explicitly caller-proven Smart Action cast, retain authored-target behavior for other helpers, and contain no runtime action, target, facing, or context mutation.'
 }
 Assert-Literals $samuraiSmartActionCastRules @(
     'public const uint SamuraiJobId = 34;',
@@ -8733,8 +8739,11 @@ Assert-Literals $samuraiSmartActionCastRules @(
 ) 'Closed Ogi Namikiri and Tendo Setsugekka base-cast catalog with candidate-local cone safety'
 Assert-Literals $samuraiSmartActionCastSelfTests @(
     'public static void ExactRawAndAdjustedPairsAreClosed()',
-    'public static void ReviewedCastDecisionPreservesEveryOtherCastPolicy()',
+    'public static void SmartActionCastDecisionPreservesMacroHelperAntiSpinPolicy()',
     'public static void OgiConeProtectionIsCandidateLocalAndTendoRemainsDirect()',
+    'representativeBlmResolvedAction = 41_480',
+    'a representative exact ranged PvP cast may enter Smart Target ranking',
+    'every exact Smart Action cast admission gate stays closed independently',
     'SamuraiSmartActionCastRules.IsOgiNamikiriConeAction(29_530)',
     'SamuraiSmartActionCastRules.IsOgiNamikiriConeAction(29_531)',
     'Kaeshi Namikiri uses the same reviewed cone protection policy',
@@ -8743,20 +8752,20 @@ Assert-Literals $samuraiSmartActionCastSelfTests @(
     'a Chiten actor intersecting the candidate cone still vetoes Ogi',
     'SmartActionAttackShape.UnsupportedAreaOfEffect',
     'SmartActionAttackShape.DirectSingleTarget'
-) 'Reviewed SAM cast pair, generic anti-spin, and protection-shape regressions'
+) 'Generic Smart Action cast ranking, retained macro-helper anti-spin, and reviewed SAM protection regressions'
 Assert-Literals $smartActionTestProgram @(
     'SamuraiSmartActionCastSelfTests.ExactRawAndAdjustedPairsAreClosed',
-    'SamuraiSmartActionCastSelfTests.ReviewedCastDecisionPreservesEveryOtherCastPolicy',
+    'SamuraiSmartActionCastSelfTests.SmartActionCastDecisionPreservesMacroHelperAntiSpinPolicy',
     'SamuraiSmartActionCastSelfTests.OgiConeProtectionIsCandidateLocalAndTendoRemainsDirect'
-) 'Reviewed SAM Smart Action cast test registration'
+) 'Smart Action cast and reviewed SAM protection test registration'
 Assert-Literals $nearAssist @(
     'TryConsumeCastedMacroRedirect(',
     'CastedMacroRedirectRules.ShouldPassThroughWithoutRedirect(',
     'CastedMacroRedirectDecision.PassThroughStaleLifecycle',
-    'CastedMacroRedirectDecision.RedirectReviewedSmartActionCast',
-    'var continuingReviewedSmartActionCast =',
-    '!continuingReviewedSmartActionCast',
-    'IsReviewedSamuraiSmartActionCast(',
+    'CastedMacroRedirectDecision.RedirectSmartActionCast',
+    'var continuingSmartActionCast =',
+    '!continuingSmartActionCast',
+    'IsExactSmartActionCastRedirect(',
     'samuraiSmartActionCastsMetadataVerified',
     'IsSmartActionProtectionSafe(',
     'SamuraiSmartActionCastRules.IsOgiNamikiriConeAction(resolvedActionId)',
@@ -8795,12 +8804,12 @@ Assert-Literals $nearAssist @(
     'ResolveContext() != SupportedPvPContext.CrystallineConflict',
     'claim.SmartTarget.LocalEntityId == local.EntityId',
     'claim.SmartTarget.LocalGameObjectId == local.GameObjectId'
-) 'Smart Action, Near Assist, and Near Help cast-target retirement'
+) 'Smart Action cast ranking plus Near Assist and Near Help cast-target retirement'
 if ([regex]::Matches($nearAssist, '\bTryConsumeCastedMacroRedirect\s*\(').Count -ne 2 -or
     [regex]::Matches($nearAssist, '\bActionManager\.GetAdjustedCastTime\s*\(').Count -ne 1 -or
     [regex]::Matches($nearAssist, 'castedMacroRedirectGeneration\+\+;').Count -ne 5 -or
     $normalizedNearAssist -notmatch
-        'var castRedirectDecision = !bypassRedirect \? TryConsumeCastedMacroRedirect\(.*?out consumedCastedSmartActionToken, out consumedCastedSmartActionGeneration\) : CastedMacroRedirectDecision\.NotApplicable; var passingThroughWithoutRedirect = CastedMacroRedirectRules\.ShouldPassThroughWithoutRedirect\( castRedirectDecision\); var continuingReviewedSmartActionCast = castRedirectDecision == CastedMacroRedirectDecision\.RedirectReviewedSmartActionCast; if \(castRedirectDecision != CastedMacroRedirectDecision\.NotApplicable && !continuingReviewedSmartActionCast\).*?helperTokenConsumed = true; var castFallbackLeaseArmed = consumedCastedSmartActionToken is \{ \} castSmartActionToken && CastedMacroRedirectRules \.ShouldTransferExactSmartActionFallbackLease\(.*?castRedirectDecision\).*?TryArmSmartActionFallbackSafetyLease\(.*?castSmartActionToken, consumedCastedSmartActionGeneration\);.*?potentialSmartTargetToken = null;.*?SuppressHiddenOrMissingTarget or CastedMacroRedirectDecision\.SuppressStaleOwnership.*?return false;.*?if \(!passingThroughWithoutRedirect && potentialSmartTargetToken is not null\).*?if \(passingThroughWithoutRedirect\).*?Keep every action argument bit-for-bit.*?lifecycle claim cannot consume a newer helper generation.*?else if \(smartTargetOwnershipChanged\)' -or
+        'var castRedirectDecision = !bypassRedirect \? TryConsumeCastedMacroRedirect\(.*?out consumedCastedSmartActionToken, out consumedCastedSmartActionGeneration\) : CastedMacroRedirectDecision\.NotApplicable; var passingThroughWithoutRedirect = CastedMacroRedirectRules\.ShouldPassThroughWithoutRedirect\( castRedirectDecision\); var continuingSmartActionCast = castRedirectDecision == CastedMacroRedirectDecision\.RedirectSmartActionCast; if \(castRedirectDecision != CastedMacroRedirectDecision\.NotApplicable && !continuingSmartActionCast\).*?helperTokenConsumed = true; var castFallbackLeaseArmed = consumedCastedSmartActionToken is \{ \} castSmartActionToken && CastedMacroRedirectRules \.ShouldTransferExactSmartActionFallbackLease\(.*?castRedirectDecision\).*?TryArmSmartActionFallbackSafetyLease\(.*?castSmartActionToken, consumedCastedSmartActionGeneration\);.*?potentialSmartTargetToken = null;.*?SuppressHiddenOrMissingTarget or CastedMacroRedirectDecision\.SuppressStaleOwnership.*?return false;.*?if \(!passingThroughWithoutRedirect && potentialSmartTargetToken is not null\).*?if \(passingThroughWithoutRedirect\).*?Keep every action argument bit-for-bit.*?lifecycle claim cannot consume a newer helper generation.*?else if \(smartTargetOwnershipChanged\)' -or
     $normalizedNearAssist -notmatch
         'if \(!IsLiveCastedMacroRedirectClaim\(claim\)\).*?TryConsumeCastedMacroRedirectClaim\( claim, CastedMacroRedirectDecision\.PassThroughStaleLifecycle\);.*?return CastedMacroRedirectDecision\.PassThroughStaleLifecycle;' -or
     $normalizedNearAssist -notmatch
@@ -8808,12 +8817,12 @@ if ([regex]::Matches($nearAssist, '\bTryConsumeCastedMacroRedirect\s*\(').Count 
     $normalizedNearAssist -notmatch
         'CastedMacroRedirectOwner\.SmartAction => IsEligibleSmartActionRedirectAction\(.*?CastedMacroRedirectOwner\.NearAssist => IsEligibleRedirectAction\(.*?CastedMacroRedirectOwner\.NearHelp => IsEligibleHelpAction\(' -or
     $normalizedNearAssist -notmatch
-        'private bool IsReviewedSamuraiSmartActionCast\(.*?claim\.Owner != CastedMacroRedirectOwner\.SmartAction.*?!samuraiSmartActionCastsMetadataVerified.*?actionType != ActionType\.Action.*?!exactMetadata.*?action\.RowId != resolvedActionId.*?!action\.IsPvP.*?action\.ClassJob\.RowId != SamuraiSmartActionCastRules\.SamuraiJobId.*?action\.Cast100ms != 15.*?!action\.CanTargetHostile.*?action\.TargetArea.*?action\.Range != 8.*?!SamuraiSmartActionCastRules\.IsReviewedBaseCastPair\( rawActionId, resolvedActionId\).*?local\.ClassJob\.RowId == SamuraiSmartActionCastRules\.SamuraiJobId;' -or
+        'private static bool IsExactSmartActionCastRedirect\(.*?CastedMacroRedirectRules\.CanContinueSmartActionCast\( claim\.Owner == CastedMacroRedirectOwner\.SmartAction, IsSupportedActionType\(actionType\), resolvedActionId, exactMetadata, action\.RowId, action\.IsPvP, action\.CanTargetHostile, action\.TargetArea, action\.Range\);' -or
     $normalizedNearAssist -notmatch
-        'if \(decision == CastedMacroRedirectDecision\.RedirectReviewedSmartActionCast\) \{ return decision; \} if \(!TryConsumeCastedMacroRedirectClaim\(claim, decision\)\) return CastedMacroRedirectDecision\.SuppressStaleOwnership;.*?consumedSmartActionToken = claim\.SmartTarget;.*?return decision;' -or
+        'if \(decision == CastedMacroRedirectDecision\.RedirectSmartActionCast\) \{ return decision; \} if \(!TryConsumeCastedMacroRedirectClaim\(claim, decision\)\) return CastedMacroRedirectDecision\.SuppressStaleOwnership;.*?consumedSmartActionToken = claim\.SmartTarget;.*?return decision;' -or
     $normalizedNearAssist -notmatch
         'private bool IsExactCurrentHardTarget\(.*?var incomingIsNativeSelectedTargetCarrier = authoredTargetId is 0 or InvalidObjectId;.*?SmartActionContextRules\.CanUseExactVisibleTargetTestFallback\( ResolveContext\(\), configuration\.EnableWolvesDenTesting, combatPriorityMode: true\);.*?TryResolveExactCurrentHardTarget\( objectTable, wolvesDenStrikingDummyMetadataVerified, local, out _, out _, out _, out var exactNativeHardTargetId\).*?exactNativeHardTargetId == hardTargetId;.*?SmartActionContextRules\.IsExactCurrentTargetCarrier\( ResolveContext\(\), configuration\.EnableWolvesDenTesting, combatPriorityMode: true, incomingIsNativeSelectedTargetCarrier: true, exactNativeHardTargetResolved: exactWolvesDenHardTargetResolved, explicitTargetMatchesNativeHardTarget: false\);.*?if \(!IsNetworkObjectId\(authoredTargetId\)\) return false;.*?if \(hardTargetId == authoredTargetId\) return true;.*?SmartActionContextRules\.IsExactCurrentTargetCarrier\( ResolveContext\(\), configuration\.EnableWolvesDenTesting, combatPriorityMode: true, incomingIsNativeSelectedTargetCarrier: false, exactNativeHardTargetResolved: hardTarget is not null, explicitTargetMatchesNativeHardTarget: HasSameNativeIdentity\(hardTarget, authoredTarget\)\)') {
-    throw 'Casted macro actions must validate and consume only the exact live route-owned generation, suppress hidden/missing or stale carriers, preserve newer arms, resolve the native Wolves Den zero/default selected-target carrier only through one exact current duel/dummy hard target, preserve exact explicit-target identity, and leave instant redirects unchanged.'
+    throw 'Casted macro actions must let only exact Smart Action-owned hostile PvP casts continue into normal ranking, retain authored-target anti-spin for Near Assist and Near Help, validate and consume only the exact live route-owned generation, preserve newer arms, resolve the native Wolves Den zero/default selected-target carrier only through one exact current duel/dummy hard target, preserve exact explicit-target identity, and leave instant redirects unchanged.'
 }
 Assert-Literals $nearAssistOneShotSelfTests @(
     '"adjusted cast keeps authored target"',
@@ -11762,18 +11771,18 @@ $whatsNewWindow = Read-RequiredSource $whatsNewWindowPath 'What''s New window'
 $releaseNotesContentRules = Read-RequiredSource $releaseNotesContentRulesPath 'Release-note content rules'
 $releaseNotesContentSelfTests = Read-RequiredSource $releaseNotesContentSelfTestsPath 'Release-note content self-tests'
 Assert-Literals $projectFile @(
-    '<Version>0.43.0.5</Version>',
-    '<AssemblyVersion>0.43.0.5</AssemblyVersion>',
-    '<FileVersion>0.43.0.5</FileVersion>'
-) 'v0.43.0.5 project version'
+    '<Version>0.43.0.6</Version>',
+    '<AssemblyVersion>0.43.0.6</AssemblyVersion>',
+    '<FileVersion>0.43.0.6</FileVersion>'
+) 'v0.43.0.6 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.43.0.5";',
-    'Fixed Smart Action no-ops in Wolves'' Den when FFXIV sends your selected target in its native default form.',
-    'Seiton accepts that carrier only after resolving the exact current duel opponent or reviewed dummy.',
-    'Every current damaging non-ground-target shape now shares one path, including casts and instant AoEs.',
-    'This covers BLM''s final Fire AoE and SAM Ogi / Kaeshi: Namikiri while keeping Chiten safety active.',
-    'Guard, Cover, LB safety, CC ranking, and Chase are unchanged. Live in-game confirmation remains separate.'
-) 'v0.43.0.5 version-acknowledged player-facing What''s New content'
+    'private const string CurrentReleaseVersion = "0.43.0.6";',
+    'Fixed Smart Action casts in CC always staying on your visible tab target.',
+    'Harmful PvP casts now use the same reachable S1-S5 ranking as instant Smart Action attacks.',
+    'The chosen actor is frozen for that cast and protection is checked again immediately before the game call.',
+    'Near Assist and Near Help keep their visible-target cast protection; instant actions are unchanged.',
+    'FFXIV may face the chosen actor once when casting. Later target changes cannot rerank that cast through Seiton.'
+) 'v0.43.0.6 version-acknowledged player-facing What''s New content'
 Assert-Literals $releaseNotesContentRules @(
     'public const int MaximumBulletCount = 5;',
     'if (bullets is null) return [];',
@@ -11826,25 +11835,23 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.43.0.5 plugin manifest metadata'
+) 'v0.43.0.6 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.43.0.5"',
-    'Fixed general Smart Action no-ops in enabled Wolves'' Den testing.',
-    'FFXIV''s native zero/default selected-target carrier is now accepted only after resolving the exact current hostile duel opponent or reviewed dummy.',
-    'every current damaging non-ground-target shape: direct, target-circle, and cone/line/other AoE, cast or instant.',
-    'This covers BLM''s final Fire AoE and SAM Ogi/Kaeshi: Namikiri.',
-    'Exact Chiten checks remain active; Guard, Cover, PLD LB, and DRK LB remain candidate-local blockers.',
-    'CC ranking and Chase are unchanged.',
+    '"AssemblyVersion": "0.43.0.6"',
+    'Fixed Smart Action casts in Crystalline Conflict always falling back to the visible tab target before S1-S5 ranking.',
+    'Exact harmful PvP casts now continue through the same reachable Smart Target selection, target freeze, protection recheck, and sole native call as instant Smart Action attacks.',
+    'Near Assist and Near Help keep their authored-target cast protection, and instant actions are unchanged.',
+    'FFXIV may perform its ordinary initial auto-face toward the frozen cast target; later manual target changes cannot rerank or retarget that cast through Seiton.',
     'Automated checks are separate from live in-game confirmation.',
     '"IsHide": false',
     '"IsTestingExclusive": false',
     '"DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"',
     '"DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"',
     '"DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"'
-) 'v0.43.0.5 custom-repository metadata'
+) 'v0.43.0.6 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -11948,16 +11955,26 @@ Assert-Literals $normalizedPrivacy @(
     'Your own active or still-propagating Guard suppresses both action requests and is rechecked at the final action-hook and optional held-cast-cancel boundaries;',
     'this helper cannot remove or break Guard.',
     'Arming reads no enemy slot and stores only the current territory, exact local identity, expiry, and whether combat-priority or farthest-reachable ranking was requested; a live `S1` is not a plugin-side arm prerequisite.',
-    'An action with a proven adjusted or exact base cast time is normally never invisibly retargeted by Smart Action, Near Assist, or Near Help.',
-    'the hidden or missing carrier is suppressed and its one-shot token is consumed so the following authored `<t>` line remains the visible-target game path.',
-    'the exact consumed Smart Action generation, action, local identity, and visible target may transfer into one bounded fallback reservation;',
+    'For an action with a proven adjusted or base cast time, an exact Smart Action-owned harmful PvP cast uses the same reachable Smart Target ranking as an instant action and freezes one actor for the native request.',
+    'Near Assist and Near Help retain their separate authored-',
+    'target policy: a hidden or missing carrier is suppressed so the visible `<t>` fallback remains vanilla,',
+    'while an authored target that already equals the exact current hard target passes through unchanged.',
+    'An exact Smart Action-owned harmful, non-ground-target PvP cast with a proven adjusted or exact base cast time now uses the existing canonical ranking, range/line-of-sight check, frozen actor, and final protection recheck.',
+    'A direct `<t>` carrier cannot bypass that ranking just because it matches the visible hard target.',
+    'If no candidate wins, the normal two-line macro may still reach its exact authored `<t>` fallback.',
+    'If tap-to-land is enabled, only the already frozen Smart Action cast may transfer into one bounded reservation after a proven range or line-of-sight rejection;',
     'FFXIV Macro/raw-100 and normal carriers are accepted, while Queue is rejected.',
-    'A cast already aimed at the visible target may enter that same exact reservation in its current call.',
-    'The only retargeting exception remains the exact local-SAM Smart Action pair Ogi Namikiri `29530 -> 29530` and Tendo Setsugekka `29536 -> 41454` or `41454 -> 41454`',
+    'Near Assist and Near Help retain the authored-target cast policy.',
+    'If their authored target is the exact current visible hard target, the incoming call passes through unchanged;',
+    'otherwise the hidden or missing carrier is suppressed and its one-shot token is consumed so the following authored `<t>` line remains the visible-target game path.',
+    'Missing or drifted action metadata also fails closed instead of entering Smart Action cast ranking.',
+    'The exact local-SAM Smart Action pair Ogi Namikiri `29530 -> 29530` and Tendo Setsugekka `29536 -> 41454` or `41454 -> 41454` retains additional protection handling',
+    'For metadata-verified SAM Ogi and instant Kaeshi: Namikiri, protection is candidate-local:',
     'Instant Kaeshi: Namikiri `29531` uses the same cone policy after its separate icon `9664`, 8-yalm range/effect range, and cast-type-`3` metadata pin.',
-    'The instant Kaeshi actions `29531` and `41455` are not cast exceptions.',
-    'Near Assist, Near Help, every unreviewed cast, and metadata drift retain the visible-target path.',
-    'Seiton Sense does not write facing or camera state for this rule; any initial facing is FFXIV''s normal cast behavior toward the frozen or visible target.',
+    'The instant Kaeshi actions `29531` and `41455` do not receive that cast-specific handling.',
+    'Other instant actions retain the existing one-shot smart redirect.',
+    'The plugin does not call a face-',
+    'target or rotation function for this policy.',
     'Their hostile S-slot/object-table proof fails closed only for an unaccounted Samurai, unknown job, or actor visibly carrying Chiten;',
     'A direct single-target action instead requires exact protection evidence for its selected actor and does not require unrelated hostile object-table completeness.',
     'shape-appropriate protection proof is rebuilt immediately before forwarding.',
@@ -11984,6 +12001,12 @@ Assert-Literals $normalizedPrivacy @(
     'Automatic Zantetsuken and Auto-Seiton never use this permission.'
 ) 'v0.42.0.8 retained required-Kuzushi Zantetsuken, Auto-Seiton/Namikiri, and safety/privacy disclosure'
 Assert-Literals $normalizedReadme @(
+    'Version 0.43.0.6 fixes Smart Action casts in Crystalline Conflict always using the visible tab target.',
+    'An exact harmful PvP cast now goes through the same reachable `S1`-`S5` ranking as an instant Smart Action attack.',
+    'Seiton freezes that one actor and rechecks range and protection immediately before the native game call; it never changes the visible target or reranks the cast.',
+    'Near Assist and Near Help keep their authored-target cast protection, and instant actions are unchanged.',
+    'FFXIV may perform its normal initial auto-face toward the frozen cast target.',
+    'Live in-game confirmation remains separate from automated checks.',
     'Version 0.43.0.5 fixes general Smart Action no-ops in enabled Wolves'' Den testing.',
     'FFXIV can send the selected target as its native zero/default carrier instead of an actor ID;',
     'Seiton accepts that form only after resolving the exact current hostile duel opponent or reviewed dummy.',
@@ -12053,7 +12076,7 @@ Assert-Literals $normalizedReadme @(
     'The exact verified 1.0-second recast remains an anti-duplicate floor; after it elapses, current positive readiness may open the next fully revalidated heal episode.',
     'Version 0.42.0.2 fixes the observed instant-leave race where the exact result intent armed and a transient `BetweenAreas` frame cancelled it one millisecond later.',
     'It also repairs distinct current metadata for held SAM Soten, Mineuchi, and Zantetsuken, and makes the reviewed Ogi Namikiri and Tendo Setsugekka casts use Smart Action''s ranked, frozen target.',
-    'Every other cast keeps v0.42.0.1''s visible-target anti-spin behavior; instant actions retain smart targeting.',
+    'At that release, every other cast kept v0.42.0.1''s visible-target anti-spin behavior; version 0.43.0.6 extends frozen Smart Action ranking to every exact harmful PvP cast.',
     '**Optional instant public-CC exit:** after one complete public 5v5 result with the exact local Content ID is confirmed',
     'A brief `BetweenAreas` result-boundary frame keeps the same intent waiting instead of cancelling it; the void request is never retried.',
     'Local W/L is attempted first when enabled.',
@@ -12124,13 +12147,16 @@ Assert-Literals $normalizedReadme @(
     'It retains Emergency Teleport plus v0.31''s ranged Smart Tab',
     'paired handler/helper hooks preserve the game''s own binding and UI/input gates',
     '`/smartaction` (`/ssaction`) behind its own default-off setting',
-    'Cast-time actions are deliberately not invisibly redirected by default.',
-    'Seiton consumes and suppresses that carrier so the following `<t>` line keeps the visible target.',
-    'When tap-to-land is enabled, either exact visible-target path may reserve the same cast after a range-only native failure.',
-    'The only reviewed cast exception is SAM Ogi Namikiri `29530` and Tendo Setsugekka (`29536 -> 41454`, or direct `41454`).',
-    'Protection is now checked for each candidate rather than globally: an unrelated enemy elsewhere with Guard, Cover, Hallowed Ground, or Undead Redemption cannot stall either cast.',
+    'Smart Action-owned cast-time actions now use ordinary Smart Target ranking.',
+    'The incoming action must resolve to one exact harmful, non-ground-target PvP row with a proven cast time and positive range.',
+    'A direct `<t>` cast cannot bypass ranking merely because it matches the visible target.',
+    'If no candidate wins, the normal two-line macro may still reach its exact authored `<t>` fallback.',
+    'Near Assist and Near Help deliberately keep the authored-target cast policy.',
+    'Their hidden carrier is suppressed so the following visible `<t>` line stays vanilla;',
+    'SAM Ogi Namikiri `29530` and Tendo Setsugekka (`29536 -> 41454`, or direct `41454`) retain their additional reviewed protection handling.',
+    'Protection is checked for each candidate rather than globally: an unrelated enemy elsewhere with Guard, Cover, Hallowed Ground, or Undead Redemption cannot stall either cast.',
     'Instant Kaeshi: Namikiri `29531` uses that same candidate-local cone policy, with separately pinned icon `9664`, 8-yalm range/effect range, and cast type `3`.',
-    'Near Assist, Near Help, and every other cast retain the visible-target policy above.',
+    'exact harmful casts and instant actions both use the reachable Smart Target, freeze one actor, and recheck it before the native game call',
     'exact enemy nameplate icons, a safe self activation banner, and a bounded ally damage feed',
     'visible `/autoseiton` ON/OFF tile that arms fully automatic NIN Seiton',
     'The separate **Automatic Seiton when available** experiment is disabled by default',
@@ -12158,7 +12184,8 @@ Assert-Literals $normalizedReadme @(
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
     'target-independent arming, `/seitonfar` as a mode on that same token, farthest finite hitbox-edge ranking with action-native reach/line-',
-    'Ogi/Tendo cast exception, cast-time hidden-carrier suppression with visible- target pass-through for every other cast, selection with `S1` absent',
+    'exact harmful PvP casts continuing through ordinary Smart Target ranking while Near Assist and Near Help retain cast-time hidden-carrier suppression with visible-target pass-through',
+    'the closed metadata-verified SAM Ogi/Tendo protection path, selection with `S1` absent',
     'resolved-action English metadata gate for Guard-ignoring damage',
     'a frozen canonical target ID for the sole native action call',
     'a bounded exact-action fallback lease',
@@ -12167,7 +12194,7 @@ Assert-Literals $normalizedReadme @(
     'constructs sixteen reviewed request shapes across seventeen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.43.0.5 general Wolves Den Smart Action carrier/shape fix and retained safety history'
+) 'v0.43.0.6 general Smart Action cast ranking, v0.43.0.5 Wolves Den fix, and retained safety history'
 Assert-Literals $normalizedChangelog @(
     '## 0.43.0.5',
     'Fixed **general Smart Action no-ops in enabled Wolves'' Den testing**.',
@@ -13946,4 +13973,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 50 and the exact 613-test Core registry. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, PLD Guardian, Recuperate, then Auto-Guard own priority in that order. Guardian requires exact Guard and Guardian metadata/readiness through the final boundary: <=20% is unconditional, <=40% needs fresh exact 2+ focus, and <=50% needs fresh exact 3+ focus. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-actor reservation from either a certified direct standard hotbar press, an exact lease/generation-backed /smartaction visible-<t> fallback, or a target-independent CC Smart Action S1-S5 winner; only the first two bind the visible hard target. Queue stays rejected. Release cannot cancel it; new action, context, Guard, CC, identity, protection, or exact-action/actor drift does, only a post-revalidated clean native range/LoS false may retry, accepted or ambiguous outcomes are terminal, and it never reranks or writes target/facing. /seitonfar remains reachable-only. Enabled Wolves Den Smart Action may resolve only FFXIV's native zero/default selected-target carrier through the exact current duel opponent or reviewed dummy, and every current damaging non-ground-target shape shares the same closed admission and final-protection path. Metadata-verified Shield Smite and Chain Stratagem may select Guard; other primary protections remain candidate-local blockers and only incidental/global Chiten vetoes AoE. Supported Smart Action casts transfer only an exactly consumed live token into the same bounded reservation. Auto-Zantetsuken requires one finite positive exact own-source Kuzushi row at selection and the final boundary. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not reset it, Guard/CC/cast/priority/native waits do not spend, and automatic Sprint/replay cannot rearm themselves. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."
+Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 50 and the exact 613-test Core registry. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, PLD Guardian, Recuperate, then Auto-Guard own priority in that order. Guardian requires exact Guard and Guardian metadata/readiness through the final boundary: <=20% is unconditional, <=40% needs fresh exact 2+ focus, and <=50% needs fresh exact 3+ focus. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-actor reservation from either a certified direct standard hotbar press, an exact lease/generation-backed /smartaction visible-<t> fallback, or a target-independent CC Smart Action S1-S5 winner; only the first two bind the visible hard target. Queue stays rejected. Release cannot cancel it; new action, context, Guard, CC, identity, protection, or exact-action/actor drift does, only a post-revalidated clean native range/LoS false may retry, accepted or ambiguous outcomes are terminal, and it never reranks or writes target/facing. /seitonfar remains reachable-only. Enabled Wolves Den Smart Action may resolve only FFXIV's native zero/default selected-target carrier through the exact current duel opponent or reviewed dummy, and every current damaging non-ground-target shape shares the same closed admission and final-protection path. Metadata-verified Shield Smite and Chain Stratagem may select Guard; other primary protections remain candidate-local blockers and only incidental/global Chiten vetoes AoE. Every exact Smart Action-owned harmful non-ground-target PvP cast continues through ordinary reachable S1-S5 ranking; Near Assist and Near Help retain authored-target anti-spin. A Smart Action fallback transfers only an exactly consumed live token into the same bounded reservation. Auto-Zantetsuken requires one finite positive exact own-source Kuzushi row at selection and the final boundary. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not reset it, Guard/CC/cast/priority/native waits do not spend, and automatic Sprint/replay cannot rearm themselves. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."

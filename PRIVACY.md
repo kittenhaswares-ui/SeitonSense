@@ -13,15 +13,14 @@ separate default-off Smart Action macro helper can replace
 only the target ID on one already incoming exact harmful PvP action after an
 explicit `/smartaction`, `/ssaction`, or `/seitonfar` token; it does not change a visible hard,
 soft, Focus, mouseover, camera, or facing target. For an action with a proven
-adjusted or base cast time, Smart Action, Near Assist, and Near Help normally
-consume their one-shot token without an invisible redirect: a hidden or missing
-carrier is suppressed so the authored visible `<t>` fallback remains vanilla,
-while an authored target that already equals the exact current hard target passes
-through unchanged. The sole closed exception is metadata-verified local SAM Ogi
-Namikiri or Tendo Setsugekka through Smart Action; those two casts freeze one
-ranked exact actor while Near Assist, Near Help, and every other cast retain the
-visible-target policy. The plugin does not call a face-target or rotation
-function for this policy. For Ogi and instant Kaeshi: Namikiri, protection is candidate-local: the selected
+adjusted or base cast time, an exact Smart Action-owned harmful PvP cast uses the
+same reachable Smart Target ranking as an instant action and freezes one actor
+for the native request. Near Assist and Near Help retain their separate authored-
+target policy: a hidden or missing carrier is suppressed so the visible `<t>`
+fallback remains vanilla, while an authored target that already equals the exact
+current hard target passes through unchanged. The plugin does not call a face-
+target or rotation function for this policy. For metadata-verified SAM Ogi and
+instant Kaeshi: Namikiri, protection is candidate-local: the selected
 actor must be directly safe and any Chiten actor intersecting the reviewed
 8-yalm, 90-degree cone vetoes that candidate, while unrelated Guard, Cover, or
 LB invulnerability elsewhere does not. Tendo remains direct-target. The separate default-off NIN Guard-
@@ -667,33 +666,38 @@ observations. In enabled Wolves' Den testing, Smart Action uses only the exact
 current hostile duel opponent or reviewed dummy and never performs CC
 `S1`-`S5` ranking. `/seitonfar` remains reachable-only in every context.
 
-An action with a proven adjusted or exact base cast time is normally never
-invisibly retargeted by Smart Action, Near Assist, or Near Help. If its authored
-target is the exact current visible hard target, the incoming call passes through
-unchanged; otherwise the hidden or missing carrier is suppressed and its one-shot
-token is consumed so the following authored `<t>` line remains the visible-target
-game path. If tap-to-land is enabled, the exact consumed Smart Action generation,
-action, local identity, and visible target may transfer into one bounded fallback
-reservation; FFXIV Macro/raw-100 and normal carriers are accepted, while Queue is
-rejected. A cast already aimed at the visible target may enter that same exact
-reservation in its current call. The only retargeting exception remains the exact
-local-SAM Smart Action pair Ogi Namikiri
-`29530 -> 29530` and Tendo Setsugekka `29536 -> 41454` or `41454 -> 41454`, after
-strict current English action metadata verifies the cast, range, hostile target,
-job, and action identity. These two casts use the existing canonical ranking,
-range/line-of-sight check, frozen actor, and final protection recheck. The
-selected actor must remain directly protection-safe. Ogi additionally checks
+An exact Smart Action-owned harmful, non-ground-target PvP cast with a proven
+adjusted or exact base cast time now uses the existing canonical ranking,
+range/line-of-sight check, frozen actor, and final protection recheck. A direct
+`<t>` carrier cannot bypass that ranking just because it matches the visible
+hard target. If no candidate wins, the normal two-line macro may still reach its
+exact authored `<t>` fallback. If tap-to-land is enabled, only the already frozen
+Smart Action cast may transfer into one bounded reservation after a proven range
+or line-of-sight rejection; FFXIV Macro/raw-100 and normal carriers are accepted,
+while Queue is rejected.
+
+Near Assist and Near Help retain the authored-target cast policy. If their
+authored target is the exact current visible hard target, the incoming call
+passes through unchanged; otherwise the hidden or missing carrier is suppressed
+and its one-shot token is consumed so the following authored `<t>` line remains
+the visible-target game path. Missing or drifted action metadata also fails
+closed instead of entering Smart Action cast ranking.
+
+The exact local-SAM Smart Action pair Ogi Namikiri `29530 -> 29530` and Tendo
+Setsugekka `29536 -> 41454` or `41454 -> 41454` retains additional protection
+handling after strict current English action metadata verifies the cast, range,
+hostile target, job, and action identity. The selected actor must remain directly
+protection-safe. Ogi additionally checks
 the candidate-facing reviewed 8-yalm, 90-degree cone and vetoes a candidate only
 when a Chiten actor's hitbox intersects it; unrelated Guard, Cover, Hallowed
 Ground, Undead Redemption, and out-of-cone Chiten actors do not globally stall
 the cast. Instant Kaeshi: Namikiri `29531` uses the same cone policy after its
 separate icon `9664`, 8-yalm range/effect range, and cast-type-`3` metadata pin.
-Tendo remains direct-target. The instant Kaeshi actions `29531` and `41455` are
-not cast exceptions. Near Assist,
-Near Help, every unreviewed cast, and metadata drift retain the visible-target
-path. Other instant actions retain the existing one-shot smart redirect. Seiton
-Sense does not write facing or camera state for this rule; any initial facing is
-FFXIV's normal cast behavior toward the frozen or visible target.
+Tendo remains direct-target. The instant Kaeshi actions `29531` and `41455` do
+not receive that cast-specific handling. Other instant actions retain the
+existing one-shot smart redirect. Seiton Sense does not write facing or camera
+state for this rule; any initial facing is FFXIV's normal cast behavior toward
+the frozen or visible target.
 
 ## One-shot Near Assist
 
