@@ -845,14 +845,14 @@ if (-not $earlySmartActionTailClassificationCatch.Success -or
     throw 'Both Smart Action macro-tail classification exception paths must retire the old Chase reservation as replaced before returning false; an unproven or faulted tail may not swallow newer intent while leaving the old reservation alive.'
 }
 
-if ($normalizedNearAssistForIntegratedInput -notmatch 'TryConsumeCastedMacroRedirect\( thisPtr, actionType, actionId, targetId, mode, out consumedCastedSmartActionToken, out consumedCastedSmartActionGeneration\).*?var castFallbackLeaseArmed = consumedCastedSmartActionToken is \{ \} castSmartActionToken && CastedMacroRedirectRules \.ShouldTransferExactSmartActionFallbackLease\( exactSmartActionTokenConsumed: true, castRedirectDecision\) && TryArmSmartActionFallbackSafetyLease\( thisPtr, actionType, actionId, castSmartActionToken, consumedCastedSmartActionGeneration\);.*?castRedirectDecision == CastedMacroRedirectDecision\.PreserveAuthoredTarget.*?smartActionSafetyInspection = InspectSmartActionSafetyLease\( thisPtr, actionType, actionId, targetId, mode, out inspectedSmartActionTargetId\);.*?forwardedTargetId = inspectedSmartActionTargetId;' -or
-    $normalizedNearAssistForIntegratedInput -notmatch 'private CastedMacroRedirectDecision TryConsumeCastedMacroRedirect\(.*?out ArmedSmartTarget\? consumedSmartActionToken, out ulong consumedSmartActionGeneration\).*?consumedSmartActionToken = null; consumedSmartActionGeneration = 0;.*?if \(!TryConsumeCastedMacroRedirectClaim\(claim, decision\)\) return CastedMacroRedirectDecision\.SuppressStaleOwnership;.*?claim\.Owner == CastedMacroRedirectOwner\.SmartAction && decision is CastedMacroRedirectDecision\.PreserveAuthoredTarget or CastedMacroRedirectDecision\.SuppressHiddenOrMissingTarget.*?consumedSmartActionToken = claim\.SmartTarget; consumedSmartActionGeneration = claim\.Generation;.*?catch \(Exception exception\).*?return consumed \? CastedMacroRedirectDecision\.SuppressHiddenOrMissingTarget : CastedMacroRedirectDecision\.SuppressStaleOwnership;' -or
+if ($normalizedNearAssistForIntegratedInput -notmatch 'TryConsumeCastedMacroRedirect\( thisPtr, actionType, actionId, targetId, mode, out consumedCastedSmartActionToken, out consumedCastedSmartActionGeneration, out continuingNearHelpCastClaim\).*?var castFallbackLeaseArmed = consumedCastedSmartActionToken is \{ \} castSmartActionToken && CastedMacroRedirectRules \.ShouldTransferExactSmartActionFallbackLease\( exactSmartActionTokenConsumed: true, castRedirectDecision\) && TryArmSmartActionFallbackSafetyLease\( thisPtr, actionType, actionId, castSmartActionToken, consumedCastedSmartActionGeneration\);.*?castRedirectDecision == CastedMacroRedirectDecision\.PreserveAuthoredTarget.*?smartActionSafetyInspection = InspectSmartActionSafetyLease\( thisPtr, actionType, actionId, targetId, mode, out inspectedSmartActionTargetId\);.*?forwardedTargetId = inspectedSmartActionTargetId;' -or
+    $normalizedNearAssistForIntegratedInput -notmatch 'private CastedMacroRedirectDecision TryConsumeCastedMacroRedirect\(.*?out ArmedSmartTarget\? consumedSmartActionToken, out ulong consumedSmartActionGeneration, out CastedMacroRedirectClaim\? continuingNearHelpCastClaim\).*?consumedSmartActionToken = null; consumedSmartActionGeneration = 0;.*?if \(!TryConsumeCastedMacroRedirectClaim\(claim, decision\)\) return CastedMacroRedirectDecision\.SuppressStaleOwnership;.*?claim\.Owner == CastedMacroRedirectOwner\.SmartAction && decision is CastedMacroRedirectDecision\.PreserveAuthoredTarget or CastedMacroRedirectDecision\.SuppressHiddenOrMissingTarget.*?consumedSmartActionToken = claim\.SmartTarget; consumedSmartActionGeneration = claim\.Generation;.*?catch \(Exception exception\).*?return consumed \? CastedMacroRedirectDecision\.SuppressHiddenOrMissingTarget : CastedMacroRedirectDecision\.SuppressStaleOwnership;' -or
     $normalizedNearAssistForIntegratedInput -notmatch 'private bool TryArmSmartActionFallbackSafetyLease\(.*?ulong exactRedirectGeneration\).*?exactRedirectGeneration == 0 \|\| exactToken\.TapGeneration <= 0 \|\| exactToken\.ExpiresAtMilliseconds <= now \|\| exactToken\.TerritoryId != clientState\.TerritoryType \|\| local!\.EntityId != exactToken\.LocalEntityId \|\| local\.GameObjectId != exactToken\.LocalGameObjectId.*?resolvedActionId == 0.*?var nextSafetyLease = SmartActionSafetyLeaseRules\.Arm\( exactToken\.TerritoryId, new TargetPressureActorIdentity\(local\.GameObjectId, local\.EntityId\), \(uint\)actionType, rawActionId, resolvedActionId, now, now \+ SmartActionSafetyLeaseRules\.DefaultLifetimeMilliseconds\);.*?!nextSafetyLease\.IsArmed.*?lock \(tokenGate\).*?CanCommitExactSmartActionFallbackLease\( exactRedirectGeneration, castedMacroRedirectGeneration, newerSmartActionTokenArmed: armedSmartTarget is not null\).*?smartActionSafetyLeaseState = nextSafetyLease; smartActionSafetyTapGeneration = exactToken\.TapGeneration; smartActionFallbackTapGeneration = exactToken\.TapGeneration; return true;') {
     throw 'Cast-time Smart Action must transfer only a successfully consumed exact token into the fallback lease: hidden carriers reserve the later visible fallback, already-visible casts are protection-inspected in the same call, and stale, faulted, expired, unresolved, or identity-drifted claims cannot arm chase.'
 }
 
 # Pin all retained buffer/repeat/compatibility suites and the exact current
-# 615-test registry.
+# 618-test registry.
 $integratedCoreTestProgram = Read-RequiredSource (Join-Path $coreSelfTestRoot 'Program.cs') 'Integrated Core self-test registry'
 $smartActionBufferSelfTests = Read-RequiredSource $smartActionBufferSelfTestsPath 'Smart action-buffer self-tests'
 $logicalHotbarRepeatSelfTests = Read-RequiredSource $logicalHotbarRepeatSelfTestsPath 'Logical hotbar repeat self-tests'
@@ -876,11 +876,11 @@ Assert-Literals $smartActionBufferCompatibilitySelfTests @(
     'reActionOwnsExactAction: false)',
     'reActionOwnsExactAction: true)'
 ) 'Generic-buffer compatibility self-tests'
-if ($staticIntegratedTestCount -ne 574 -or
+if ($staticIntegratedTestCount -ne 577 -or
     $logicalRepeatTestCount -ne 31 -or
     $physicalLatchTestCount -ne 6 -or
     $repeatPolicyTestCount -ne 4 -or
-    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 615 -or
+    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 618 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches($smartActionBufferSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferCompatibilitySelfTests\.\w+').Count -ne 6 -or
@@ -890,7 +890,7 @@ if ($staticIntegratedTestCount -ne 574 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatPolicySelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartSprintSelfTests\.\w+').Count -ne 6 -or
     [regex]::Matches((Read-RequiredSource $smartSprintSelfTestsPath 'Smart Sprint self-tests'), '\bpublic static void\s+\w+\s*\(').Count -ne 6) {
-    throw 'Schema 50 must retain seven smart-buffer tests, six compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, six Smart Sprint tests, and the exact 615-test combined Core registry.'
+    throw 'Schema 50 must retain seven smart-buffer tests, six compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, six Smart Sprint tests, and the exact 618-test combined Core registry.'
 }
 
 # Pin the two schema-42 visual overlays and the fail-closed local map-result
@@ -5047,8 +5047,8 @@ if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
     [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 11 -or
     [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 11 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 574) {
-    throw 'All four shared protection-end tests, all eleven SAM reactive tests, and the exact 574-test static Core registry before the appended repeat-policy suites must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 577) {
+    throw 'All four shared protection-end tests, all eleven SAM reactive tests, and the exact 577-test static Core registry before the appended repeat-policy suites must remain pinned.'
 }
 Assert-Literals $samuraiReactiveRuntimeRules @(
     'public static bool IsExactCurrentOwnSourceKuzushi(',
@@ -8783,6 +8783,10 @@ Assert-Literals $castedMacroRedirectRules @(
     'SuppressHiddenOrMissingTarget',
     'SuppressStaleOwnership',
     'public static bool CanContinueSmartActionCast(',
+    'public static bool CanContinueNearHelpCast(',
+    'public static bool ShouldContinueThroughTargetRanking(',
+    'public static bool CanConsumeExactNearHelpCastClaim(',
+    'RedirectNearHelpCast',
     'metadataRowId == resolvedActionId',
     '!isGroundTargeted',
     'float.IsFinite(range)',
@@ -8797,8 +8801,16 @@ Assert-Literals $castedMacroRedirectRules @(
     'authoredTargetMatchesVisibleTarget',
     'bool allowSmartActionCastRedirect = false',
     'if (allowSmartActionCastRedirect && exactActionMetadata)'
-) 'Exact Smart Action casts rank normally while other macro helpers preserve the visible authored target'
+) 'Exact Smart Action and Near Help casts rank normally while Near Assist preserves the visible authored target'
 $normalizedCastedMacroRedirectRules = $castedMacroRedirectRules -replace '\s+', ' '
+if ($normalizedCastedMacroRedirectRules -notmatch
+        'CanContinueNearHelpCast\( bool ownedByNearHelp, bool supportedActionType, uint resolvedActionId, bool exactActionMetadata, uint metadataRowId, bool isPvp, bool canTargetFriendly, bool isGroundTargeted, float range\) => ownedByNearHelp && supportedActionType && resolvedActionId != 0 && exactActionMetadata && metadataRowId == resolvedActionId && isPvp && canTargetFriendly && !isGroundTargeted && float\.IsFinite\(range\) && range > 0f;' -or
+    $normalizedCastedMacroRedirectRules -notmatch
+        'ShouldContinueThroughTargetRanking\( CastedMacroRedirectDecision decision\) => decision is CastedMacroRedirectDecision\.RedirectSmartActionCast or CastedMacroRedirectDecision\.RedirectNearHelpCast;' -or
+    $normalizedCastedMacroRedirectRules -notmatch
+        'CanConsumeExactNearHelpCastClaim\( ulong claimedGeneration, ulong currentGeneration, bool ownerAndStateMatch\) => claimedGeneration != 0 && claimedGeneration == currentGeneration && ownerAndStateMatch;') {
+    throw 'Near Help casts require exact owned friendly non-ground PvP metadata and finite positive range, continue only through closed cast ranking decisions, and consume only one matching nonzero generation with exact owner/state identity.'
+}
 if ($normalizedCastedMacroRedirectRules -notmatch
         'CanContinueSmartActionCast\( bool ownedBySmartAction, bool supportedActionType, uint resolvedActionId, bool exactActionMetadata, uint metadataRowId, bool isPvp, bool canTargetHostile, bool isGroundTargeted, float range\) => ownedBySmartAction && supportedActionType && resolvedActionId != 0 && exactActionMetadata && metadataRowId == resolvedActionId && isPvp && canTargetHostile && !isGroundTargeted && float\.IsFinite\(range\) && range > 0f;' -or
     $normalizedCastedMacroRedirectRules -notmatch
@@ -8808,9 +8820,9 @@ if ($normalizedCastedMacroRedirectRules -notmatch
     $normalizedCastedMacroRedirectRules -notmatch
         'CanCommitExactSmartActionFallbackLease\( ulong consumedGeneration, ulong currentGeneration, bool newerSmartActionTokenArmed\) => consumedGeneration != 0 && consumedGeneration == currentGeneration && !newerSmartActionTokenArmed;' -or
     $normalizedCastedMacroRedirectRules -notmatch
-        'if \(!redirectTokenArmed \|\| !supportedActionType\) return CastedMacroRedirectDecision\.NotApplicable; var castTimeProven = adjustedCastTimeMilliseconds > 0 \|\| \(exactActionMetadata && baseCastTime100Milliseconds > 0\); if \(!castTimeProven\) return CastedMacroRedirectDecision\.NotApplicable; if \(allowSmartActionCastRedirect && exactActionMetadata\) return CastedMacroRedirectDecision\.RedirectSmartActionCast; return authoredTargetMatchesVisibleTarget \? CastedMacroRedirectDecision\.PreserveAuthoredTarget : CastedMacroRedirectDecision\.SuppressHiddenOrMissingTarget;' -or
+        'if \(!redirectTokenArmed \|\| !supportedActionType\) return CastedMacroRedirectDecision\.NotApplicable; var castTimeProven = adjustedCastTimeMilliseconds > 0 \|\| \(exactActionMetadata && baseCastTime100Milliseconds > 0\); if \(!castTimeProven\) return CastedMacroRedirectDecision\.NotApplicable; if \(allowSmartActionCastRedirect && exactActionMetadata\) return CastedMacroRedirectDecision\.RedirectSmartActionCast; if \(allowNearHelpCastRedirect && exactActionMetadata\) return CastedMacroRedirectDecision\.RedirectNearHelpCast; return authoredTargetMatchesVisibleTarget \? CastedMacroRedirectDecision\.PreserveAuthoredTarget : CastedMacroRedirectDecision\.SuppressHiddenOrMissingTarget;' -or
     $castedMacroRedirectRules -match '\b(ActionManager|TargetManager|UseAction|SetTarget|SetRotation|FaceTarget|ObjectTable|IClientState)\b') {
-    throw 'Pure cast redirect classification must require a live token, supported type, adjusted or exact base cast proof, require exact metadata for an explicitly caller-proven Smart Action cast, retain authored-target behavior for other helpers, and contain no runtime action, target, facing, or context mutation.'
+    throw 'Pure cast redirect classification must require a live token, supported type, adjusted or exact base cast proof, require exact metadata for an explicitly caller-proven Smart Action or Near Help cast, retain authored-target behavior for Near Assist, and contain no runtime action, target, facing, or context mutation.'
 }
 Assert-Literals $samuraiSmartActionCastRules @(
     'public const uint SamuraiJobId = 34;',
@@ -8850,20 +8862,57 @@ Assert-Literals $smartActionTestProgram @(
     'SamuraiSmartActionCastSelfTests.SmartActionCastDecisionPreservesMacroHelperAntiSpinPolicy',
     'SamuraiSmartActionCastSelfTests.OgiConeProtectionIsCandidateLocalAndTendoRemainsDirect'
 ) 'Smart Action cast and reviewed SAM protection test registration'
+$nearHelpCastSelfTests = Read-RequiredSource (Join-Path $coreSelfTestRoot 'NearHelpCastRedirectSelfTests.cs') 'Near Help cast routing regression tests'
+Assert-Literals $nearHelpCastSelfTests @(
+    'public static void ExactFriendlyCastAdmissionAndDecisionsAreClosed()',
+    'public static void FriendlyCastsRankAtActionTimeAndConsumeOnce()',
+    'public static void ExactCastClaimGenerationPreservesNewerIntent()',
+    'each exact friendly cast admission gate independently denies',
+    'visible <t> cannot bypass friendly ranking',
+    'hidden <2> carrier continues into friendly ranking',
+    'Near Help cast cannot fall through to authored-target or self healing',
+    'Near Help redirect decision cannot transfer a hostile fallback lease',
+    'Near Help permission cannot bypass missing exact metadata for visible <t>',
+    'Near Help permission cannot bypass missing exact metadata for hidden <2>',
+    'instant friendly actions keep the existing path',
+    'Near Assist retains authored visible casts without Near Help ownership',
+    'Near Assist retains hidden cast suppression without Near Help ownership',
+    'hostile Smart Action casts retain their separate path',
+    'injured reachable ally beats healthy self even when self is closest',
+    'a self-authored cast still selects the injured reachable ally',
+    'cast token is consumed before native dispatch',
+    'later cast cannot reuse a consumed Near Help intent',
+    'critical self remains a legitimate winner when exact action permits self heal',
+    'casts cannot select self unless exact action supports self-targeting',
+    'hidden <2> invalidation and visible <t> fallback keep their existing policy',
+    'denied claim leaves newer owner/state untouched',
+    'denied old cast cannot clear newly armed macro',
+    'full-width generation comparison has no truncation',
+    'the consumed state prevents duplicate consumption even at same generation'
+) 'Closed friendly-cast admission, current ally selection, and exact one-shot claim regressions'
+Assert-Literals $smartActionTestProgram @(
+    'NearHelpCastRedirectSelfTests.ExactFriendlyCastAdmissionAndDecisionsAreClosed',
+    'NearHelpCastRedirectSelfTests.FriendlyCastsRankAtActionTimeAndConsumeOnce',
+    'NearHelpCastRedirectSelfTests.ExactCastClaimGenerationPreservesNewerIntent'
+) 'Near Help cast regression registration'
+if ([regex]::Matches($nearHelpCastSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 3 -or
+    [regex]::Matches($smartActionTestProgram, '\bNearHelpCastRedirectSelfTests\.\w+').Count -ne 3) {
+    throw 'All three Near Help cast routing, action-time selection, and exact generation regressions must remain registered exactly once.'
+}
 Assert-Literals $nearAssist @(
     'TryConsumeCastedMacroRedirect(',
     'CastedMacroRedirectRules.ShouldPassThroughWithoutRedirect(',
     'CastedMacroRedirectDecision.PassThroughStaleLifecycle',
-    'CastedMacroRedirectDecision.RedirectSmartActionCast',
-    'var continuingSmartActionCast =',
-    '!continuingSmartActionCast',
+    'CastedMacroRedirectRules.ShouldContinueThroughTargetRanking(',
+    'var continuingRankedCast =',
+    '!continuingRankedCast',
     'IsExactSmartActionCastRedirect(',
     'samuraiSmartActionCastsMetadataVerified',
     'IsSmartActionProtectionSafe(',
     'SamuraiSmartActionCastRules.IsOgiNamikiriConeAction(resolvedActionId)',
     'SamuraiSmartActionCastRules.IsOgiNamikiriProtectionSafe(',
     'var passingThroughWithoutRedirect =',
-    'if (!passingThroughWithoutRedirect && potentialSmartTargetToken is not null)',
+    'continuingNearHelpCastClaim is null &&',
     'if (passingThroughWithoutRedirect)',
     'IsLiveCastedMacroRedirectClaim(claim)',
     'IsEligibleCastedMacroRedirectAction(',
@@ -8896,12 +8945,25 @@ Assert-Literals $nearAssist @(
     'ResolveContext() != SupportedPvPContext.CrystallineConflict',
     'claim.SmartTarget.LocalEntityId == local.EntityId',
     'claim.SmartTarget.LocalGameObjectId == local.GameObjectId'
-) 'Smart Action cast ranking plus Near Assist and Near Help cast-target retirement'
+) 'Smart Action and Near Help cast ranking plus Near Assist cast-target retirement'
+if ($normalizedNearAssist -notmatch
+        'private static bool IsExactNearHelpCastRedirect\(.*?CastedMacroRedirectRules\.CanContinueNearHelpCast\( claim\.Owner == CastedMacroRedirectOwner\.NearHelp, IsSupportedActionType\(actionType\), resolvedActionId, exactMetadata, action\.RowId, action\.IsPvP, action\.CanTargetParty \|\| action\.CanTargetAlly \|\| action\.CanTargetAlliance, action\.TargetArea, action\.Range\);' -or
+    $normalizedNearAssist -notmatch
+        'else if \(continuingNearHelpCastClaim is \{ \} helpCastClaim\).*?if \(!IsEligibleHelpAction\(thisPtr, actionType, actionId, mode\) \|\| !TryConsumeEligibleHelpToken\( actionType, mode, targetId, out var helpCastToken, out var previousHelpCastState, out consumedFallbackCarrier, helpCastClaim\)\) \{ return false; \} helperTokenConsumed = true; handlingNearHelp = true; forwardedTargetId = ResolveConsumedHelpRedirect\( thisPtr, actionType, actionId, mode, targetId, helpCastToken, previousHelpCastState, consumedFallbackCarrier, out targetSuppressedByRedirect\);' -or
+    $normalizedNearAssist -notmatch
+        'private bool TryConsumeEligibleHelpToken\(.*?CastedMacroRedirectClaim\? expectedCastClaim = null\).*?lock \(tokenGate\).*?if \(expectedCastClaim is \{ \} claim && !CastedMacroRedirectRules\.CanConsumeExactNearHelpCastClaim\( claim\.Generation, castedMacroRedirectGeneration, claim\.Owner == CastedMacroRedirectOwner\.NearHelp && candidate\.Equals\(claim\.NearHelp\) && nearHelpState\.Equals\(claim\.NearHelpState\)\)\).*?token = default; previousState = NearHelpOneShotState\.Initial; fallbackCarrier = false;.*?stale Near Help cast suppressed; newer token preserved.*?return false;.*?token = candidate; previousState = nearHelpState;.*?armedHelpTarget = null; nearHelpState = NearHelpOneShotState\.Initial;.*?return true;' -or
+    $normalizedNearAssist -notmatch
+        'private ulong ResolveConsumedHelpRedirect\(.*?var forwardedTargetId = TryResolveHelpRedirect\( actionManager, actionType, actionId, mode, originalTargetId, token, previousState, isFallbackCarrier, out var rewritten, out var reason\); targetSuppressed = !rewritten && isFallbackCarrier; if \(targetSuppressed\) forwardedTargetId = InvalidCarrierTargetId;.*?if \(rewritten\) helpRedirectedCount\+\+; else helpFallbackCount\+\+;.*?return forwardedTargetId;' -or
+    [regex]::Matches($nearAssist, '\bResolveConsumedHelpRedirect\s*\(').Count -ne 3 -or
+    [regex]::Matches($nearAssist, '\bTryResolveHelpRedirect\s*\(').Count -ne 2 -or
+    [regex]::Matches($nearAssist, '\bTryConsumeEligibleHelpToken\s*\(').Count -ne 3) {
+    throw 'Casted and instant Near Help must share exactly one ally ranking/fallback path, consume the captured cast generation atomically before resolution, reject generation/owner/state drift without consuming newer intent, and never fall through to another helper after a failed cast claim.'
+}
 if ([regex]::Matches($nearAssist, '\bTryConsumeCastedMacroRedirect\s*\(').Count -ne 2 -or
     [regex]::Matches($nearAssist, '\bActionManager\.GetAdjustedCastTime\s*\(').Count -ne 1 -or
     [regex]::Matches($nearAssist, 'castedMacroRedirectGeneration\+\+;').Count -ne 5 -or
     $normalizedNearAssist -notmatch
-        'var castRedirectDecision = !bypassRedirect \? TryConsumeCastedMacroRedirect\(.*?out consumedCastedSmartActionToken, out consumedCastedSmartActionGeneration\) : CastedMacroRedirectDecision\.NotApplicable; var passingThroughWithoutRedirect = CastedMacroRedirectRules\.ShouldPassThroughWithoutRedirect\( castRedirectDecision\); var continuingSmartActionCast = castRedirectDecision == CastedMacroRedirectDecision\.RedirectSmartActionCast; if \(castRedirectDecision != CastedMacroRedirectDecision\.NotApplicable && !continuingSmartActionCast\).*?helperTokenConsumed = true; var castFallbackLeaseArmed = consumedCastedSmartActionToken is \{ \} castSmartActionToken && CastedMacroRedirectRules \.ShouldTransferExactSmartActionFallbackLease\(.*?castRedirectDecision\).*?TryArmSmartActionFallbackSafetyLease\(.*?castSmartActionToken, consumedCastedSmartActionGeneration\);.*?potentialSmartTargetToken = null;.*?SuppressHiddenOrMissingTarget or CastedMacroRedirectDecision\.SuppressStaleOwnership.*?return false;.*?if \(!passingThroughWithoutRedirect && potentialSmartTargetToken is not null\).*?if \(passingThroughWithoutRedirect\).*?Keep every action argument bit-for-bit.*?lifecycle claim cannot consume a newer helper generation.*?else if \(smartTargetOwnershipChanged\)' -or
+        'var castRedirectDecision = !bypassRedirect \? TryConsumeCastedMacroRedirect\(.*?out consumedCastedSmartActionToken, out consumedCastedSmartActionGeneration, out continuingNearHelpCastClaim\) : CastedMacroRedirectDecision\.NotApplicable; var passingThroughWithoutRedirect = CastedMacroRedirectRules\.ShouldPassThroughWithoutRedirect\( castRedirectDecision\); var continuingRankedCast = CastedMacroRedirectRules\.ShouldContinueThroughTargetRanking\( castRedirectDecision\); if \(castRedirectDecision != CastedMacroRedirectDecision\.NotApplicable && !continuingRankedCast\).*?helperTokenConsumed = true; var castFallbackLeaseArmed = consumedCastedSmartActionToken is \{ \} castSmartActionToken && CastedMacroRedirectRules \.ShouldTransferExactSmartActionFallbackLease\(.*?castRedirectDecision\).*?TryArmSmartActionFallbackSafetyLease\(.*?castSmartActionToken, consumedCastedSmartActionGeneration\);.*?potentialSmartTargetToken = null;.*?SuppressHiddenOrMissingTarget or CastedMacroRedirectDecision\.SuppressStaleOwnership.*?return false;.*?if \(!passingThroughWithoutRedirect && continuingNearHelpCastClaim is null && potentialSmartTargetToken is not null\).*?if \(passingThroughWithoutRedirect\).*?Keep every action argument bit-for-bit.*?lifecycle claim cannot consume a newer helper generation.*?else if \(smartTargetOwnershipChanged\)' -or
     $normalizedNearAssist -notmatch
         'if \(!IsLiveCastedMacroRedirectClaim\(claim\)\).*?TryConsumeCastedMacroRedirectClaim\( claim, CastedMacroRedirectDecision\.PassThroughStaleLifecycle\);.*?return CastedMacroRedirectDecision\.PassThroughStaleLifecycle;' -or
     $normalizedNearAssist -notmatch
@@ -8911,10 +8973,10 @@ if ([regex]::Matches($nearAssist, '\bTryConsumeCastedMacroRedirect\s*\(').Count 
     $normalizedNearAssist -notmatch
         'private static bool IsExactSmartActionCastRedirect\(.*?CastedMacroRedirectRules\.CanContinueSmartActionCast\( claim\.Owner == CastedMacroRedirectOwner\.SmartAction, IsSupportedActionType\(actionType\), resolvedActionId, exactMetadata, action\.RowId, action\.IsPvP, action\.CanTargetHostile, action\.TargetArea, action\.Range\);' -or
     $normalizedNearAssist -notmatch
-        'if \(decision == CastedMacroRedirectDecision\.RedirectSmartActionCast\) \{ return decision; \} if \(!TryConsumeCastedMacroRedirectClaim\(claim, decision\)\) return CastedMacroRedirectDecision\.SuppressStaleOwnership;.*?consumedSmartActionToken = claim\.SmartTarget;.*?return decision;' -or
+        'if \(CastedMacroRedirectRules\.ShouldContinueThroughTargetRanking\(decision\)\) \{ if \(decision == CastedMacroRedirectDecision\.RedirectNearHelpCast\) continuingNearHelpCastClaim = claim; return decision; \} if \(!TryConsumeCastedMacroRedirectClaim\(claim, decision\)\) return CastedMacroRedirectDecision\.SuppressStaleOwnership;.*?consumedSmartActionToken = claim\.SmartTarget;.*?return decision;' -or
     $normalizedNearAssist -notmatch
         'private bool IsExactCurrentHardTarget\(.*?var incomingIsNativeSelectedTargetCarrier = authoredTargetId is 0 or InvalidObjectId;.*?SmartActionContextRules\.CanUseExactVisibleTargetTestFallback\( ResolveContext\(\), configuration\.EnableWolvesDenTesting, combatPriorityMode: true\);.*?TryResolveExactCurrentHardTarget\( objectTable, wolvesDenStrikingDummyMetadataVerified, local, out _, out _, out _, out var exactNativeHardTargetId\).*?exactNativeHardTargetId == hardTargetId;.*?SmartActionContextRules\.IsExactCurrentTargetCarrier\( ResolveContext\(\), configuration\.EnableWolvesDenTesting, combatPriorityMode: true, incomingIsNativeSelectedTargetCarrier: true, exactNativeHardTargetResolved: exactWolvesDenHardTargetResolved, explicitTargetMatchesNativeHardTarget: false\);.*?if \(!IsNetworkObjectId\(authoredTargetId\)\) return false;.*?if \(hardTargetId == authoredTargetId\) return true;.*?SmartActionContextRules\.IsExactCurrentTargetCarrier\( ResolveContext\(\), configuration\.EnableWolvesDenTesting, combatPriorityMode: true, incomingIsNativeSelectedTargetCarrier: false, exactNativeHardTargetResolved: hardTarget is not null, explicitTargetMatchesNativeHardTarget: HasSameNativeIdentity\(hardTarget, authoredTarget\)\)') {
-    throw 'Casted macro actions must let only exact Smart Action-owned hostile PvP casts continue into normal ranking, retain authored-target anti-spin for Near Assist and Near Help, validate and consume only the exact live route-owned generation, preserve newer arms, resolve the native Wolves Den zero/default selected-target carrier only through one exact current duel/dummy hard target, preserve exact explicit-target identity, and leave instant redirects unchanged.'
+    throw 'Casted macro actions must let exact Smart Action-owned hostile PvP casts and Near Help-owned friendly PvP casts continue into their normal ranking, retain authored-target anti-spin for Near Assist, validate and consume only the exact live route-owned generation, preserve newer arms, resolve the native Wolves Den zero/default selected-target carrier only through one exact current duel/dummy hard target, preserve exact explicit-target identity, and leave instant redirects unchanged.'
 }
 Assert-Literals $nearAssistOneShotSelfTests @(
     '"adjusted cast keeps authored target"',
@@ -9033,12 +9095,15 @@ if (-not $guardStateObserverMatch.Success -or
     throw 'Smart Paean own-Guard suppression must use exact live Guard or the bounded same-identity/territory propagation latch and fail closed on an uncertain Guard view.'
 }
 $nearAssistBranchIndex = $normalizedUseActionDetour.IndexOf('TryConsumeEligibleToken(')
-$nearHelpBranchIndex = $normalizedUseActionDetour.IndexOf('TryConsumeEligibleHelpToken(')
+$nearHelpCastBranchIndex = $normalizedUseActionDetour.IndexOf('TryConsumeEligibleHelpToken(')
+$nearHelpBranchIndex = $normalizedUseActionDetour.IndexOf('TryConsumeEligibleHelpToken(', [Math]::Max(0, $nearAssistBranchIndex))
 $farHelpBranchIndex = $normalizedUseActionDetour.IndexOf('TryConsumeEligibleFarHelpToken(')
 $smartPaeanBranchIndex = $normalizedUseActionDetour.IndexOf('smartWardensPaean.Evaluate(')
 $smartPaeanSuppressIndex = $normalizedUseActionDetour.IndexOf('if (smartPaeanResult.ShouldSuppress) return false;')
 $smartPaeanRedirectIndex = $normalizedUseActionDetour.IndexOf('if (smartPaeanResult.ShouldRedirect)', [Math]::Max(0, $smartPaeanSuppressIndex))
 if ($nearAssistBranchIndex -lt 0 -or
+    $nearHelpCastBranchIndex -lt 0 -or
+    $nearHelpCastBranchIndex -ge $nearAssistBranchIndex -or
     $nearHelpBranchIndex -le $nearAssistBranchIndex -or
     $farHelpBranchIndex -le $nearHelpBranchIndex -or
     $smartPaeanBranchIndex -le $farHelpBranchIndex -or
@@ -9088,7 +9153,8 @@ $allConditionalZeroAssignments = [regex]::Matches(
 if ($normalizedUseActionDetour -notmatch 'var targetSuppressedByRedirect = false;' -or
     $directZeroSuppressions.Count -ne $allDirectZeroAssignments.Count -or
     $conditionalZeroSuppressions.Count -ne $allConditionalZeroAssignments.Count -or
-    $allDirectZeroAssignments.Count -ne 8 -or
+    $allDirectZeroAssignments.Count -ne 7 -or
+    [regex]::Matches($normalizedUseActionDetour, 'ResolveConsumedHelpRedirect\(.*?out targetSuppressedByRedirect\);').Count -ne 2 -or
     $allConditionalZeroAssignments.Count -ne 2) {
     throw 'Every reviewed Smart Target/Near/Far path that can author target zero must set explicit targetSuppressedByRedirect provenance before the CC brake inspects the call.'
 }
@@ -11863,16 +11929,17 @@ $whatsNewWindow = Read-RequiredSource $whatsNewWindowPath 'What''s New window'
 $releaseNotesContentRules = Read-RequiredSource $releaseNotesContentRulesPath 'Release-note content rules'
 $releaseNotesContentSelfTests = Read-RequiredSource $releaseNotesContentSelfTestsPath 'Release-note content self-tests'
 Assert-Literals $projectFile @(
-    '<Version>0.43.0.8</Version>',
-    '<AssemblyVersion>0.43.0.8</AssemblyVersion>',
-    '<FileVersion>0.43.0.8</FileVersion>'
-) 'v0.43.0.8 project version'
+    '<Version>0.43.0.9</Version>',
+    '<AssemblyVersion>0.43.0.9</AssemblyVersion>',
+    '<FileVersion>0.43.0.9</FileVersion>'
+) 'v0.43.0.9 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.43.0.8";',
-    'Auto-Zantetsuken now waits only 0.5 seconds after your first Kuzushi (previously 1.5 seconds).',
-    'It still checks the best reachable group of enemies after the short wait.',
-    'Kuzushi, immunity, range, and line-of-sight checks are unchanged.'
-) 'v0.43.0.8 version-acknowledged player-facing What''s New content'
+    'private const string CurrentReleaseVersion = "0.43.0.9";',
+    'Fixed /nearhelp casted heals falling back to yourself instead of selecting an ally.',
+    'Casted heals now use the same reachable-ally HP and pressure selection as instant heals.',
+    'The chosen ally stays fixed for that cast; your visible target is not changed.',
+    'Near Assist and Far Help are unchanged.'
+) 'v0.43.0.9 version-acknowledged player-facing What''s New content'
 Assert-Literals $releaseNotesContentRules @(
     'public const int MaximumBulletCount = 5;',
     'if (bullets is null) return [];',
@@ -11925,21 +11992,23 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.43.0.8 plugin manifest metadata'
+) 'v0.43.0.9 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.43.0.8"',
-    'Auto-Zantetsuken now waits 0.5 seconds after your first own Kuzushi (previously 1.5 seconds).',
-    'Target selection and existing Kuzushi, protection, range, and line-of-sight checks are unchanged.',
+    '"AssemblyVersion": "0.43.0.9"',
+    'Fixed /nearhelp casted heals falling back to yourself instead of selecting an ally.',
+    'Casted heals now use the same reachable-ally HP and pressure selection as instant heals.',
+    'The chosen ally stays fixed for that cast; your visible target is not changed.',
+    'Near Assist and Far Help are unchanged.',
     'Automated checks are separate from live in-game confirmation.',
     '"IsHide": false',
     '"IsTestingExclusive": false',
     '"DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"',
     '"DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"',
     '"DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"'
-) 'v0.43.0.8 custom-repository metadata'
+) 'v0.43.0.9 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -12044,18 +12113,22 @@ Assert-Literals $normalizedPrivacy @(
     'this helper cannot remove or break Guard.',
     'Arming reads no enemy slot and stores only the current territory, exact local identity, expiry, and whether combat-priority or farthest-reachable ranking was requested; a live `S1` is not a plugin-side arm prerequisite.',
     'For an action with a proven adjusted or base cast time, an exact Smart Action-owned harmful PvP cast uses the same reachable Smart Target ranking as an instant action and freezes one actor for the native request.',
-    'Near Assist and Near Help retain their separate authored-',
-    'target policy: a hidden or missing carrier is suppressed so the visible `<t>` fallback remains vanilla,',
+    'Exact Near Help-owned friendly PvP casts instead use the existing one-shot ally selection with an exact token-generation check.',
+    'Near Assist retains its separate authored-target policy: a hidden or missing carrier is suppressed so the visible `<t>` fallback remains vanilla,',
     'while an authored target that already equals the exact current hard target passes through unchanged.',
     'An exact Smart Action-owned harmful, non-ground-target PvP cast with a proven adjusted or exact base cast time now uses the existing canonical ranking, range/line-of-sight check, frozen actor, and final protection recheck.',
     'A direct `<t>` carrier cannot bypass that ranking just because it matches the visible hard target.',
     'If no candidate wins, the normal two-line macro may still reach its exact authored `<t>` fallback.',
     'If tap-to-land is enabled, only the already frozen Smart Action cast may transfer into one bounded reservation after a proven range or line-of-sight rejection;',
     'FFXIV Macro/raw-100 and normal carriers are accepted, while Queue is rejected.',
-    'Near Assist and Near Help retain the authored-target cast policy.',
-    'If their authored target is the exact current visible hard target, the incoming call passes through unchanged;',
+    'Near Assist retains the authored-target cast policy.',
+    'If its authored target is the exact current visible hard target, the incoming call passes through unchanged;',
     'otherwise the hidden or missing carrier is suppressed and its one-shot token is consumed so the following authored `<t>` line remains the visible-target game path.',
-    'Missing or drifted action metadata also fails closed instead of entering Smart Action cast ranking.',
+    'Missing or drifted action metadata also fails closed instead of entering Smart Action or Near Help cast ranking.',
+    'An exact Near Help-owned friendly, non-ground-target PvP cast may continue into the same current ally ranking as an instant heal.',
+    'The exact captured token and generation are consumed once; an older request cannot consume a newer helper.',
+    'The selected actor ID is forwarded before the native request, with no cast-end retargeting or extra action.',
+    'Near Help cannot acquire a Smart Action fallback lease through this path.',
     'The exact local-SAM Smart Action pair Ogi Namikiri `29530 -> 29530` and Tendo Setsugekka `29536 -> 41454` or `41454 -> 41454` retains additional protection handling',
     'For metadata-verified SAM Ogi and instant Kaeshi: Namikiri, protection is candidate-local:',
     'Instant Kaeshi: Namikiri `29531` uses the same cone policy after its separate icon `9664`, 8-yalm range/effect range, and cast-type-`3` metadata pin.',
@@ -12090,6 +12163,13 @@ Assert-Literals $normalizedPrivacy @(
     'Automatic Zantetsuken and Auto-Seiton never use this permission.'
 ) 'v0.42.0.8 retained required-Kuzushi Zantetsuken, Auto-Seiton/Namikiri, and safety/privacy disclosure'
 Assert-Literals $normalizedReadme @(
+    'Version 0.43.0.9 fixes `/nearhelp` casted heals falling back to self before ally selection.',
+    'Friendly PvP casts now use the same reachable-ally HP and pressure selection as instant Near Help actions.',
+    'The ally is chosen once before the native cast request; the visible target is unchanged, and the cast is never reranked after it starts.',
+    'Exact token ownership prevents an older cast from consuming a newer helper.',
+    'Heals with a cast time use this same selection for both `<2>` and `<t>` macro carriers.',
+    'The exact Near Help token and generation must still match when the request is consumed.',
+    'The chosen actor ID is forwarded once before the cast starts; later target changes do not rerank that cast.',
     'Version 0.43.0.8 makes Auto-Zantetsuken wait 0.5 seconds after the first exact Kuzushi applied by your Samurai.',
     'No target is locked during that collection window, so additional marked enemies can join the opportunity.',
     'At the deadline Seiton reruns the live 5-yalm cluster ranking and only then freezes the winner.',
@@ -12099,7 +12179,7 @@ Assert-Literals $normalizedReadme @(
     'Version 0.43.0.6 fixes Smart Action casts in Crystalline Conflict always using the visible tab target.',
     'An exact harmful PvP cast now goes through the same reachable `S1`-`S5` ranking as an instant Smart Action attack.',
     'Seiton freezes that one actor and rechecks range and protection immediately before the native game call; it never changes the visible target or reranks the cast.',
-    'Near Assist and Near Help keep their authored-target cast protection, and instant actions are unchanged.',
+    'At that release, Near Assist and Near Help kept their authored-target cast protection; v0.43.0.9 also enables Near Help cast ranking. Instant actions are unchanged.',
     'FFXIV may perform its normal initial auto-face toward the frozen cast target.',
     'Live in-game confirmation remains separate from automated checks.',
     'Version 0.43.0.5 fixes general Smart Action no-ops in enabled Wolves'' Den testing.',
@@ -12253,8 +12333,9 @@ Assert-Literals $normalizedReadme @(
     'The incoming action must resolve to one exact harmful, non-ground-target PvP row with a proven cast time and positive range.',
     'A direct `<t>` cast cannot bypass ranking merely because it matches the visible target.',
     'If no candidate wins, the normal two-line macro may still reach its exact authored `<t>` fallback.',
-    'Near Assist and Near Help deliberately keep the authored-target cast policy.',
-    'Their hidden carrier is suppressed so the following visible `<t>` line stays vanilla;',
+    'Near Assist deliberately keeps the authored-target cast policy.',
+    'Its hidden carrier is suppressed so the following visible `<t>` line stays vanilla;',
+    'Near Help instead permits exact friendly PvP casts to use its normal one-shot ally ranking, with the selected actor fixed before the native request.',
     'SAM Ogi Namikiri `29530` and Tendo Setsugekka (`29536 -> 41454`, or direct `41454`) retain their additional reviewed protection handling.',
     'Protection is checked for each candidate rather than globally: an unrelated enemy elsewhere with Guard, Cover, Hallowed Ground, or Undead Redemption cannot stall either cast.',
     'Instant Kaeshi: Namikiri `29531` uses that same candidate-local cone policy, with separately pinned icon `9664`, 8-yalm range/effect range, and cast type `3`.',
@@ -12281,12 +12362,12 @@ Assert-Literals $normalizedReadme @(
     'release-independent tap-to-land wait',
     'protects active PvP Sprint from a second Sprint press by default',
     'adds the separate optional idle Smart Sprint.',
-    'For the current source, the exact 615-test Core registry and source checks pin configuration schema 50',
+    'For the current source, the exact 618-test Core registry and source checks pin configuration schema 50',
     'the independent default-off automatic basic-shot cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
     'target-independent arming, `/seitonfar` as a mode on that same token, farthest finite hitbox-edge ranking with action-native reach/line-',
-    'exact harmful PvP casts continuing through ordinary Smart Target ranking while Near Assist and Near Help retain cast-time hidden-carrier suppression with visible-target pass-through',
+    'exact harmful PvP casts continuing through ordinary Smart Target ranking and exact friendly PvP casts using Near Help''s one-shot ally ranking, while Near Assist retains cast-time hidden-carrier suppression with visible-target pass-through',
     'the closed metadata-verified SAM Ogi/Tendo protection path, selection with `S1` absent',
     'resolved-action English metadata gate for Guard-ignoring damage',
     'a frozen canonical target ID for the sole native action call',
@@ -12296,8 +12377,13 @@ Assert-Literals $normalizedReadme @(
     'constructs sixteen reviewed request shapes across seventeen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.43.0.8 Auto-Zantetsuken collection, v0.43.0.6 Smart Action casts, and retained safety history'
+) 'v0.43.0.9 Near Help casts, v0.43.0.8 Auto-Zantetsuken collection, v0.43.0.6 Smart Action casts, and retained safety history'
 Assert-Literals $normalizedChangelog @(
+    '## 0.43.0.9',
+    'Fixed `/nearhelp` casted heals falling back to self before ally selection.',
+    'Friendly PvP casts now use the same reachable-ally HP and pressure selection as instant Near Help actions, including the normal `<2>` and `<t>` carriers.',
+    'The chosen ally is fixed before the native cast request. No cast-end target switching, extra casts, or visible target changes were added.',
+    'An older cast request cannot consume a newly armed helper. Near Assist and Far Help are unchanged. Auto-Zantetsuken retains its 0.5-second wait.',
     '## 0.43.0.8',
     'Auto-Zantetsuken now waits **0.5 seconds instead of 1.5 seconds** after the first own Kuzushi.',
     'Target selection, the current 5-yalm cluster ranking, and all existing Kuzushi, protection, range, and line-of-sight checks are unchanged.',
@@ -14095,4 +14181,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 50 and the exact 615-test Core registry. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, PLD Guardian, Recuperate, then Auto-Guard own priority in that order. Guardian requires exact Guard and Guardian metadata/readiness through the final boundary: <=20% is unconditional, <=40% needs fresh exact 2+ focus, and <=50% needs fresh exact 3+ focus. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-actor reservation from either a certified direct standard hotbar press, an exact lease/generation-backed /smartaction visible-<t> fallback, or a target-independent CC Smart Action S1-S5 winner; only the first two bind the visible hard target. Queue stays rejected. Release cannot cancel it; new action, context, Guard, CC, identity, protection, or exact-action/actor drift does, only a post-revalidated clean native range/LoS false may retry, accepted or ambiguous outcomes are terminal, and it never reranks or writes target/facing. /seitonfar remains reachable-only. Enabled Wolves Den Smart Action may resolve only FFXIV's native zero/default selected-target carrier through the exact current duel opponent or reviewed dummy, and every current damaging non-ground-target shape shares the same closed admission and final-protection path. Metadata-verified Shield Smite and Chain Stratagem may select Guard; other primary protections remain candidate-local blockers and only incidental/global Chiten vetoes AoE. Every exact Smart Action-owned harmful non-ground-target PvP cast continues through ordinary reachable S1-S5 ranking; Near Assist and Near Help retain authored-target anti-spin. A Smart Action fallback transfers only an exactly consumed live token into the same bounded reservation. Auto-Zantetsuken uses an identity/context-bound 500-ms no-target collection from the first exact own-source Kuzushi, ranks the fresh live cluster only after maturity, and rechecks collection, frozen identity, current Kuzushi, protection, Bind, readiness, range, and line of sight at the final boundary. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not reset it, Guard/CC/cast/priority/native waits do not spend, and automatic Sprint/replay cannot rearm themselves. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."
+Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 50 and the exact 618-test Core registry. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, PLD Guardian, Recuperate, then Auto-Guard own priority in that order. Guardian requires exact Guard and Guardian metadata/readiness through the final boundary: <=20% is unconditional, <=40% needs fresh exact 2+ focus, and <=50% needs fresh exact 3+ focus. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-actor reservation from either a certified direct standard hotbar press, an exact lease/generation-backed /smartaction visible-<t> fallback, or a target-independent CC Smart Action S1-S5 winner; only the first two bind the visible hard target. Queue stays rejected. Release cannot cancel it; new action, context, Guard, CC, identity, protection, or exact-action/actor drift does, only a post-revalidated clean native range/LoS false may retry, accepted or ambiguous outcomes are terminal, and it never reranks or writes target/facing. /seitonfar remains reachable-only. Enabled Wolves Den Smart Action may resolve only FFXIV's native zero/default selected-target carrier through the exact current duel opponent or reviewed dummy, and every current damaging non-ground-target shape shares the same closed admission and final-protection path. Metadata-verified Shield Smite and Chain Stratagem may select Guard; other primary protections remain candidate-local blockers and only incidental/global Chiten vetoes AoE. Every exact Smart Action-owned harmful non-ground-target PvP cast continues through ordinary reachable S1-S5 ranking; exact Near Help-owned friendly PvP casts use one-shot current ally ranking after atomic exact-generation consumption, while Near Assist retains authored-target anti-spin. A Smart Action fallback transfers only an exactly consumed live token into the same bounded reservation. Auto-Zantetsuken uses an identity/context-bound 500-ms no-target collection from the first exact own-source Kuzushi, ranks the fresh live cluster only after maturity, and rechecks collection, frozen identity, current Kuzushi, protection, Bind, readiness, range, and line of sight at the final boundary. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not reset it, Guard/CC/cast/priority/native waits do not spend, and automatic Sprint/replay cannot rearm themselves. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."

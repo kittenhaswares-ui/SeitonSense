@@ -1790,6 +1790,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             var smartToken = default(ArmedSmartTarget);
             ArmedSmartTarget? consumedCastedSmartActionToken = null;
             var consumedCastedSmartActionGeneration = 0UL;
+            CastedMacroRedirectClaim? continuingNearHelpCastClaim = null;
             var castRedirectDecision = !bypassRedirect
                 ? TryConsumeCastedMacroRedirect(
                     thisPtr,
@@ -1798,16 +1799,17 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                     targetId,
                     mode,
                     out consumedCastedSmartActionToken,
-                    out consumedCastedSmartActionGeneration)
+                    out consumedCastedSmartActionGeneration,
+                    out continuingNearHelpCastClaim)
                 : CastedMacroRedirectDecision.NotApplicable;
             var passingThroughWithoutRedirect =
                 CastedMacroRedirectRules.ShouldPassThroughWithoutRedirect(
                     castRedirectDecision);
-            var continuingSmartActionCast =
-                castRedirectDecision ==
-                CastedMacroRedirectDecision.RedirectSmartActionCast;
+            var continuingRankedCast =
+                CastedMacroRedirectRules.ShouldContinueThroughTargetRanking(
+                    castRedirectDecision);
             if (castRedirectDecision != CastedMacroRedirectDecision.NotApplicable &&
-                !continuingSmartActionCast)
+                !continuingRankedCast)
             {
                 helperTokenConsumed = true;
                 var castFallbackLeaseArmed =
@@ -1858,7 +1860,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 }
             }
 
-            if (!passingThroughWithoutRedirect && potentialSmartTargetToken is not null)
+            if (!passingThroughWithoutRedirect &&
+                continuingNearHelpCastClaim is null &&
+                potentialSmartTargetToken is not null)
             {
                 var smartTargetCallEligible = IsEligibleSmartActionRedirectAction(
                     thisPtr,
@@ -1890,6 +1894,36 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 // Keep every action argument bit-for-bit. Native facing now
                 // follows only the user's authored/visible target, and a stale
                 // lifecycle claim cannot consume a newer helper generation.
+            }
+            else if (continuingNearHelpCastClaim is { } helpCastClaim)
+            {
+                // A cast continues only with the exact Near Help generation
+                // captured by preflight. Never steal a newer helper's token.
+                if (!IsEligibleHelpAction(thisPtr, actionType, actionId, mode) ||
+                    !TryConsumeEligibleHelpToken(
+                        actionType,
+                        mode,
+                        targetId,
+                        out var helpCastToken,
+                        out var previousHelpCastState,
+                        out consumedFallbackCarrier,
+                        helpCastClaim))
+                {
+                    return false;
+                }
+
+                helperTokenConsumed = true;
+                handlingNearHelp = true;
+                forwardedTargetId = ResolveConsumedHelpRedirect(
+                    thisPtr,
+                    actionType,
+                    actionId,
+                    mode,
+                    targetId,
+                    helpCastToken,
+                    previousHelpCastState,
+                    consumedFallbackCarrier,
+                    out targetSuppressedByRedirect);
             }
             else if (smartTargetOwnershipChanged)
             {
@@ -2061,7 +2095,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             {
                 helperTokenConsumed = true;
                 handlingNearHelp = true;
-                forwardedTargetId = TryResolveHelpRedirect(
+                forwardedTargetId = ResolveConsumedHelpRedirect(
                     thisPtr,
                     actionType,
                     actionId,
@@ -2070,31 +2104,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                     helpToken,
                     previousHelpState,
                     consumedFallbackCarrier,
-                    out var rewritten,
-                    out var reason);
-                if (!rewritten && consumedFallbackCarrier)
-                {
-                    forwardedTargetId = InvalidCarrierTargetId;
-                    targetSuppressedByRedirect = true;
-                }
-                lock (tokenGate)
-                {
-                    if (rewritten)
-                    {
-                        helpRedirectedCount++;
-                        helpLastEvent = reason;
-                    }
-                    else
-                    {
-                        helpFallbackCount++;
-                        helpLastEvent = reason;
-                    }
-
-                    RecordTraceLocked(
-                        $"help-action type={(uint)actionType} id={actionId} mode={(uint)mode} " +
-                        $"age={Math.Max(0, Environment.TickCount64 - (helpToken.ExpiresAtMilliseconds - TokenLifetimeMilliseconds))}ms " +
-                        $"result={(rewritten ? "redirect" : reason)}");
-                }
+                    out targetSuppressedByRedirect);
             }
             else if (!bypassRedirect &&
                      IsEligibleFarHelpAction(thisPtr, actionType, actionId, mode, out var resolvedFarHelpActionId) &&
@@ -2620,10 +2630,12 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         ulong authoredTargetId,
         ActionManager.UseActionMode mode,
         out ArmedSmartTarget? consumedSmartActionToken,
-        out ulong consumedSmartActionGeneration)
+        out ulong consumedSmartActionGeneration,
+        out CastedMacroRedirectClaim? continuingNearHelpCastClaim)
     {
         consumedSmartActionToken = null;
         consumedSmartActionGeneration = 0;
+        continuingNearHelpCastClaim = null;
         var claim = CaptureCastedMacroRedirectClaim();
         if (!claim.IsValid)
             return CastedMacroRedirectDecision.NotApplicable;
@@ -2681,12 +2693,19 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                     actionType,
                     resolvedActionId,
                     exactMetadata,
+                    action),
+                IsExactNearHelpCastRedirect(
+                    claim,
+                    actionType,
+                    resolvedActionId,
+                    exactMetadata,
                     action));
             if (decision == CastedMacroRedirectDecision.NotApplicable)
                 return decision;
-            if (decision ==
-                CastedMacroRedirectDecision.RedirectSmartActionCast)
+            if (CastedMacroRedirectRules.ShouldContinueThroughTargetRanking(decision))
             {
+                if (decision == CastedMacroRedirectDecision.RedirectNearHelpCast)
+                    continuingNearHelpCastClaim = claim;
                 return decision;
             }
 
@@ -2734,6 +2753,23 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             action.RowId,
             action.IsPvP,
             action.CanTargetHostile,
+            action.TargetArea,
+            action.Range);
+
+    private static bool IsExactNearHelpCastRedirect(
+        CastedMacroRedirectClaim claim,
+        ActionType actionType,
+        uint resolvedActionId,
+        bool exactMetadata,
+        GameAction action) =>
+        CastedMacroRedirectRules.CanContinueNearHelpCast(
+            claim.Owner == CastedMacroRedirectOwner.NearHelp,
+            IsSupportedActionType(actionType),
+            resolvedActionId,
+            exactMetadata,
+            action.RowId,
+            action.IsPvP,
+            action.CanTargetParty || action.CanTargetAlly || action.CanTargetAlliance,
             action.TargetArea,
             action.Range);
 
@@ -4435,6 +4471,48 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         return decision.ForwardTargetId;
     }
 
+    private ulong ResolveConsumedHelpRedirect(
+        ActionManager* actionManager,
+        ActionType actionType,
+        uint actionId,
+        ActionManager.UseActionMode mode,
+        ulong originalTargetId,
+        ArmedNearHelpTarget token,
+        NearHelpOneShotState previousState,
+        bool isFallbackCarrier,
+        out bool targetSuppressed)
+    {
+        var forwardedTargetId = TryResolveHelpRedirect(
+            actionManager,
+            actionType,
+            actionId,
+            mode,
+            originalTargetId,
+            token,
+            previousState,
+            isFallbackCarrier,
+            out var rewritten,
+            out var reason);
+        targetSuppressed = !rewritten && isFallbackCarrier;
+        if (targetSuppressed)
+            forwardedTargetId = InvalidCarrierTargetId;
+
+        lock (tokenGate)
+        {
+            if (rewritten)
+                helpRedirectedCount++;
+            else
+                helpFallbackCount++;
+            helpLastEvent = reason;
+            RecordTraceLocked(
+                $"help-action type={(uint)actionType} id={actionId} mode={(uint)mode} " +
+                $"age={Math.Max(0, Environment.TickCount64 - (token.ExpiresAtMilliseconds - TokenLifetimeMilliseconds))}ms " +
+                $"result={(rewritten ? "redirect" : reason)}");
+        }
+
+        return forwardedTargetId;
+    }
+
     private ulong TryResolveHelpRedirect(
         ActionManager* actionManager,
         ActionType actionType,
@@ -5907,7 +5985,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         ulong incomingTargetId,
         out ArmedNearHelpTarget token,
         out NearHelpOneShotState previousState,
-        out bool fallbackCarrier)
+        out bool fallbackCarrier,
+        CastedMacroRedirectClaim? expectedCastClaim = null)
     {
         lock (tokenGate)
         {
@@ -5918,6 +5997,22 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 token = default;
                 previousState = NearHelpOneShotState.Initial;
                 fallbackCarrier = false;
+                return false;
+            }
+
+            if (expectedCastClaim is { } claim &&
+                !CastedMacroRedirectRules.CanConsumeExactNearHelpCastClaim(
+                    claim.Generation,
+                    castedMacroRedirectGeneration,
+                    claim.Owner == CastedMacroRedirectOwner.NearHelp &&
+                    candidate.Equals(claim.NearHelp) &&
+                    nearHelpState.Equals(claim.NearHelpState)))
+            {
+                token = default;
+                previousState = NearHelpOneShotState.Initial;
+                fallbackCarrier = false;
+                RecordTraceLocked(
+                    "stale Near Help cast suppressed; newer token preserved");
                 return false;
             }
 

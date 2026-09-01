@@ -143,11 +143,11 @@ internal static class SamuraiSmartActionCastSelfTests
         Equal(
             CastedMacroRedirectDecision.PreserveAuthoredTarget,
             CastedMacroRedirectRules.Evaluate(true, true, true, 1_500, 15, true),
-            "Near Assist and Near Help visible casts retain anti-spin behavior");
+            "Near Assist visible casts retain anti-spin behavior");
         Equal(
             CastedMacroRedirectDecision.SuppressHiddenOrMissingTarget,
             CastedMacroRedirectRules.Evaluate(true, true, true, 1_500, 15, false),
-            "Near Assist and Near Help hidden casts retain suppression");
+            "Near Assist hidden casts retain suppression");
         Equal(
             CastedMacroRedirectDecision.PreserveAuthoredTarget,
             CastedMacroRedirectRules.Evaluate(

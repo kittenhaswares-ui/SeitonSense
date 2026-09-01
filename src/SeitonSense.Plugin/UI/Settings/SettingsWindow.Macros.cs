@@ -93,6 +93,7 @@ internal sealed partial class SettingsWindow
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
                 "Near Help sends this action to the reachable party member who needs it most, which may include you. " +
+                "Heals with a cast time use the same selection. The ally is chosen once before the cast starts. " +
                 "If nobody is valid, the <t> line uses your normal target. Your visible target does not change. Keep " +
                 "/mlock at the top so Turbo does not restart the macro.");
             ImGui.PopTextWrapPos();

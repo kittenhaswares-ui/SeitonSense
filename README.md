@@ -3,6 +3,13 @@
 Seiton Sense is a local PvP awareness HUD with pressure tracking, nameplate
 cues, warnings, job helpers, Smart Action, and target highlights.
 
+Version 0.43.0.9 fixes `/nearhelp` casted heals falling back to self before
+ally selection. Friendly PvP casts now use the same reachable-ally HP and
+pressure selection as instant Near Help actions. The ally is chosen once before
+the native cast request; the visible target is unchanged, and the cast is never
+reranked after it starts. Exact token ownership prevents an older cast from
+consuming a newer helper. Near Assist and Far Help are unchanged.
+
 Version 0.43.0.8 makes Auto-Zantetsuken wait 0.5 seconds after the first exact
 Kuzushi applied by your Samurai. No target is locked during that collection
 window, so additional marked enemies can join the opportunity. At the deadline
@@ -17,9 +24,10 @@ Version 0.43.0.6 fixes Smart Action casts in Crystalline Conflict always using
 the visible tab target. An exact harmful PvP cast now goes through the same
 reachable `S1`-`S5` ranking as an instant Smart Action attack. Seiton freezes
 that one actor and rechecks range and protection immediately before the native
-game call; it never changes the visible target or reranks the cast. Near Assist
-and Near Help keep their authored-target cast protection, and instant actions
-are unchanged. FFXIV may perform its normal initial auto-face toward the frozen
+game call; it never changes the visible target or reranks the cast. At that
+release, Near Assist and Near Help kept their authored-target cast protection;
+v0.43.0.9 also enables Near Help cast ranking. Instant actions are unchanged.
+FFXIV may perform its normal initial auto-face toward the frozen
 cast target. Live in-game confirmation remains separate from automated checks.
 
 Version 0.43.0.5 fixes general Smart Action no-ops in enabled Wolves' Den
@@ -1628,11 +1636,11 @@ proven range or line-of-sight rejection. Seiton never changes the visible target
 or reranks after selection. FFXIV may still perform its ordinary initial
 auto-facing toward the frozen cast target.
 
-Near Assist and Near Help deliberately keep the authored-target cast policy.
-Their hidden carrier is suppressed so the following visible `<t>` line stays
+Near Assist deliberately keeps the authored-target cast policy.
+Its hidden carrier is suppressed so the following visible `<t>` line stays
 vanilla; a cast already authored on the exact current hard target passes through
-unchanged. This prevents those assist helpers from introducing a hidden cast
-target while leaving Smart Action's explicit target-selection command useful.
+unchanged. Near Help instead permits exact friendly PvP casts to use its normal
+one-shot ally ranking, with the selected actor fixed before the native request.
 
 SAM Ogi Namikiri `29530` and Tendo Setsugekka (`29536 -> 41454`, or direct
 `41454`) retain their additional reviewed protection handling. With exact startup
@@ -1795,6 +1803,12 @@ checks every exact, live, targetable party member against that action's native
 target, range, and line-of-sight rules. Self enters the same candidate list only
 when the resolved action explicitly supports self-targeting and the native
 target check succeeds.
+
+Heals with a cast time use this same selection for both `<2>` and `<t>` macro
+carriers. The exact Near Help token and generation must still match when the
+request is consumed. The chosen actor ID is forwarded once before the cast
+starts; later target changes do not rerank that cast. FFXIV may still perform
+its normal initial auto-facing toward the chosen ally.
 
 Lowest exact HP is always the anchor. At 25% HP or lower, that critical target
 always wins. Otherwise, when **Prefer incoming pressure near the lowest-health
@@ -2536,7 +2550,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 615-test Core registry and source checks pin
+For the current source, the exact 618-test Core registry and source checks pin
 configuration schema 50, the shared monotonic response clock and framework
 epoch, true not-ready-to-ready wakeups, strict unchanged-queue critical recovery,
 the immutable release-independent tap-to-land buffer, active-Sprint repeat
@@ -2562,8 +2576,9 @@ OFF, reverse targeting, and calls outside the scoped handler retain their native
   Its checks now pin target-independent arming, `/seitonfar` as a mode on that
   same token, farthest finite hitbox-edge ranking with action-native reach/line-
   of-sight authority, exact harmful PvP casts continuing through ordinary Smart
-  Target ranking while Near Assist and Near Help retain cast-time hidden-carrier
-  suppression with visible-target pass-through, the closed metadata-verified SAM
+  Target ranking and exact friendly PvP casts using Near Help's one-shot ally
+  ranking, while Near Assist retains cast-time hidden-carrier suppression with
+  visible-target pass-through, the closed metadata-verified SAM
   Ogi/Tendo protection path, selection with `S1` absent,
 shape-scoped caller-proven target protection safety, exact Chiten,
 Guard, Covered, Hallowed Ground, and Undead Redemption handling, an exact

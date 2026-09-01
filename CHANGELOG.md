@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.43.0.9
+
+- Fixed `/nearhelp` casted heals falling back to self before ally selection.
+- Friendly PvP casts now use the same reachable-ally HP and pressure selection
+  as instant Near Help actions, including the normal `<2>` and `<t>` carriers.
+- The chosen ally is fixed before the native cast request. No cast-end target
+  switching, extra casts, or visible target changes were added.
+- An older cast request cannot consume a newly armed helper. Near Assist and
+  Far Help are unchanged. Auto-Zantetsuken retains its 0.5-second wait.
+- Automated tests and package checks are separate from live-game confirmation.
+
 ## 0.43.0.8
 
 - Auto-Zantetsuken now waits **0.5 seconds instead of 1.5 seconds** after the

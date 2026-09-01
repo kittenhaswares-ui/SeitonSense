@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.43.0.8";
+    private const string CurrentReleaseVersion = "0.43.0.9";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -430,9 +430,10 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Auto-Zantetsuken now waits only 0.5 seconds after your first Kuzushi (previously 1.5 seconds).",
-                "It still checks the best reachable group of enemies after the short wait.",
-                "Kuzushi, immunity, range, and line-of-sight checks are unchanged.",
+                "Fixed /nearhelp casted heals falling back to yourself instead of selecting an ally.",
+                "Casted heals now use the same reachable-ally HP and pressure selection as instant heals.",
+                "The chosen ally stays fixed for that cast; your visible target is not changed.",
+                "Near Assist and Far Help are unchanged.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

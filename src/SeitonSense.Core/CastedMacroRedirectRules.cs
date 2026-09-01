@@ -8,14 +8,15 @@ public enum CastedMacroRedirectDecision
     PassThroughStaleLifecycle,
     SuppressHiddenOrMissingTarget,
     SuppressStaleOwnership,
+    RedirectNearHelpCast,
 }
 
 /// <summary>
-/// Separates Smart Action cast ranking from the assist helpers' cast policy.
+/// Separates Smart Action and Near Help cast ranking from Near Assist's policy.
 /// FFXIV may resolve and auto-face a queued cast after the initial action call,
-/// so Near Assist and Near Help retain only their authored visible target. An
-/// exact Smart Action-owned hostile PvP cast may instead continue into ordinary
-/// Smart Target ranking; callers must never apply that path to the assist helpers.
+/// so Near Assist retains only its authored visible target. An exact owned PvP
+/// cast may instead continue into Smart Action's hostile ranking or Near Help's
+/// friendly ranking. Neither path changes an already started cast's target.
 /// </summary>
 public static class CastedMacroRedirectRules
 {
@@ -39,6 +40,41 @@ public static class CastedMacroRedirectRules
         !isGroundTargeted &&
         float.IsFinite(range) &&
         range > 0f;
+
+    public static bool CanContinueNearHelpCast(
+        bool ownedByNearHelp,
+        bool supportedActionType,
+        uint resolvedActionId,
+        bool exactActionMetadata,
+        uint metadataRowId,
+        bool isPvp,
+        bool canTargetFriendly,
+        bool isGroundTargeted,
+        float range) =>
+        ownedByNearHelp &&
+        supportedActionType &&
+        resolvedActionId != 0 &&
+        exactActionMetadata &&
+        metadataRowId == resolvedActionId &&
+        isPvp &&
+        canTargetFriendly &&
+        !isGroundTargeted &&
+        float.IsFinite(range) &&
+        range > 0f;
+
+    public static bool ShouldContinueThroughTargetRanking(
+        CastedMacroRedirectDecision decision) =>
+        decision is
+            CastedMacroRedirectDecision.RedirectSmartActionCast or
+            CastedMacroRedirectDecision.RedirectNearHelpCast;
+
+    public static bool CanConsumeExactNearHelpCastClaim(
+        ulong claimedGeneration,
+        ulong currentGeneration,
+        bool ownerAndStateMatch) =>
+        claimedGeneration != 0 &&
+        claimedGeneration == currentGeneration &&
+        ownerAndStateMatch;
 
     public static bool ShouldPassThroughWithoutRedirect(
         CastedMacroRedirectDecision decision) =>
@@ -69,7 +105,8 @@ public static class CastedMacroRedirectRules
         int adjustedCastTimeMilliseconds,
         uint baseCastTime100Milliseconds,
         bool authoredTargetMatchesVisibleTarget,
-        bool allowSmartActionCastRedirect = false)
+        bool allowSmartActionCastRedirect = false,
+        bool allowNearHelpCastRedirect = false)
     {
         if (!redirectTokenArmed || !supportedActionType)
             return CastedMacroRedirectDecision.NotApplicable;
@@ -82,6 +119,9 @@ public static class CastedMacroRedirectRules
 
         if (allowSmartActionCastRedirect && exactActionMetadata)
             return CastedMacroRedirectDecision.RedirectSmartActionCast;
+
+        if (allowNearHelpCastRedirect && exactActionMetadata)
+            return CastedMacroRedirectDecision.RedirectNearHelpCast;
 
         return authoredTargetMatchesVisibleTarget
             ? CastedMacroRedirectDecision.PreserveAuthoredTarget

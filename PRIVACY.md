@@ -15,8 +15,10 @@ explicit `/smartaction`, `/ssaction`, or `/seitonfar` token; it does not change 
 soft, Focus, mouseover, camera, or facing target. For an action with a proven
 adjusted or base cast time, an exact Smart Action-owned harmful PvP cast uses the
 same reachable Smart Target ranking as an instant action and freezes one actor
-for the native request. Near Assist and Near Help retain their separate authored-
-target policy: a hidden or missing carrier is suppressed so the visible `<t>`
+for the native request. Exact Near Help-owned friendly PvP casts instead use
+the existing one-shot ally selection with an exact token-generation check.
+Near Assist retains its separate authored-target policy: a hidden or missing
+carrier is suppressed so the visible `<t>`
 fallback remains vanilla, while an authored target that already equals the exact
 current hard target passes through unchanged. The plugin does not call a face-
 target or rotation function for this policy. For metadata-verified SAM Ogi and
@@ -679,12 +681,19 @@ Smart Action cast may transfer into one bounded reservation after a proven range
 or line-of-sight rejection; FFXIV Macro/raw-100 and normal carriers are accepted,
 while Queue is rejected.
 
-Near Assist and Near Help retain the authored-target cast policy. If their
+Near Assist retains the authored-target cast policy. If its
 authored target is the exact current visible hard target, the incoming call
 passes through unchanged; otherwise the hidden or missing carrier is suppressed
 and its one-shot token is consumed so the following authored `<t>` line remains
 the visible-target game path. Missing or drifted action metadata also fails
-closed instead of entering Smart Action cast ranking.
+closed instead of entering Smart Action or Near Help cast ranking.
+
+An exact Near Help-owned friendly, non-ground-target PvP cast may continue into
+the same current ally ranking as an instant heal. The exact captured token and
+generation are consumed once; an older request cannot consume a newer helper.
+The selected actor ID is forwarded before the native request, with no cast-end
+retargeting or extra action. Near Help cannot acquire a Smart Action fallback
+lease through this path.
 
 The exact local-SAM Smart Action pair Ogi Namikiri `29530 -> 29530` and Tendo
 Setsugekka `29536 -> 41454` or `41454 -> 41454` retains additional protection
@@ -755,6 +764,8 @@ exact carrier attempt so the following authored `<t>` line can run normally.
 A compact `<t>` form otherwise preserves its incoming target. The token is
 consumed before the one original game call. Near Help does not initiate an
 action, visibly change a target, try a second candidate, or retry.
+The same applies to casted heals: the ally is selected once before the cast,
+and the plugin never reranks or retargets it after the cast starts.
 
 ## Experimental Astrologian held Near Help
 
