@@ -852,7 +852,7 @@ if ($normalizedNearAssistForIntegratedInput -notmatch 'TryConsumeCastedMacroRedi
 }
 
 # Pin all retained buffer/repeat/compatibility suites and the exact current
-# 611-test registry.
+# 613-test registry.
 $integratedCoreTestProgram = Read-RequiredSource (Join-Path $coreSelfTestRoot 'Program.cs') 'Integrated Core self-test registry'
 $smartActionBufferSelfTests = Read-RequiredSource $smartActionBufferSelfTestsPath 'Smart action-buffer self-tests'
 $logicalHotbarRepeatSelfTests = Read-RequiredSource $logicalHotbarRepeatSelfTestsPath 'Logical hotbar repeat self-tests'
@@ -876,11 +876,11 @@ Assert-Literals $smartActionBufferCompatibilitySelfTests @(
     'reActionOwnsExactAction: false)',
     'reActionOwnsExactAction: true)'
 ) 'Generic-buffer compatibility self-tests'
-if ($staticIntegratedTestCount -ne 570 -or
+if ($staticIntegratedTestCount -ne 572 -or
     $logicalRepeatTestCount -ne 31 -or
     $physicalLatchTestCount -ne 6 -or
     $repeatPolicyTestCount -ne 4 -or
-    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 611 -or
+    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 613 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches($smartActionBufferSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferCompatibilitySelfTests\.\w+').Count -ne 6 -or
@@ -890,7 +890,7 @@ if ($staticIntegratedTestCount -ne 570 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatPolicySelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartSprintSelfTests\.\w+').Count -ne 6 -or
     [regex]::Matches((Read-RequiredSource $smartSprintSelfTestsPath 'Smart Sprint self-tests'), '\bpublic static void\s+\w+\s*\(').Count -ne 6) {
-    throw 'Schema 50 must retain seven smart-buffer tests, six compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, six Smart Sprint tests, and the exact 611-test combined Core registry.'
+    throw 'Schema 50 must retain seven smart-buffer tests, six compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, six Smart Sprint tests, and the exact 613-test combined Core registry.'
 }
 
 # Pin the two schema-42 visual overlays and the fail-closed local map-result
@@ -1709,6 +1709,18 @@ Assert-Literals $smartActionContextRules @(
     'context == SupportedPvPContext.CrystallineConflict;',
     'public static bool CanUseExactVisibleTargetTestFallback(',
     'combatPriorityMode;',
+    'public static bool CanInspectExactVisibleTargetTestFallback(',
+    'SmartActionAttackShape.DirectSingleTarget => true,',
+    'SmartActionAttackShape.TargetCenteredCircle => true,',
+    'SmartActionAttackShape.UnsupportedAreaOfEffect => true,',
+    'public static bool IsExactCurrentTargetCarrier(',
+    'SupportedPvPContext context,',
+    'bool wolvesDenTestingEnabled,',
+    'bool combatPriorityMode,',
+    'exactNativeHardTargetResolved &&',
+    'incomingIsNativeSelectedTargetCarrier',
+    '? CanUseExactVisibleTargetTestFallback(',
+    ': explicitTargetMatchesNativeHardTarget);',
     'public static bool CanUseSameCallVisibleTargetFallback(',
     '!redirectApplied &&',
     '!rankedWinnerSelected &&',
@@ -1719,15 +1731,17 @@ if ($smartActionContextRules -match '\b(?:ActionManager|ObjectTable|IPlayerChara
 }
 foreach ($test in @(
     'WolvesDenRequiresItsExactTestOptIn',
-    'WolvesDenUsesOnlyCombatPriorityVisibleTargetFallback'
+    'WolvesDenUsesOnlyCombatPriorityVisibleTargetFallback',
+    'WolvesDenVisibleTargetShapeEligibilityIsExact',
+    'NativeSelectedTargetCarrierRequiresResolvedHardTarget'
 )) {
     Assert-Literals $smartActionContextSelfTests @("public static void $test()") "Smart Action context self-test $test"
     if ([regex]::Matches($smartTabTestProgram, [regex]::Escape("SmartActionContextSelfTests.$test")).Count -ne 1) {
         throw "Smart Action context self-test must be registered exactly once: $test"
     }
 }
-if ([regex]::Matches($smartActionContextSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 2) {
-    throw 'Exactly two Smart Action context regressions must remain implemented.'
+if ([regex]::Matches($smartActionContextSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 4) {
+    throw 'Exactly four Smart Action context regressions must remain implemented.'
 }
 $smartActionArmMethod = [regex]::Match(
     $normalizedNearAssistForSmartAction,
@@ -2092,14 +2106,15 @@ if ([regex]::Matches($normalizedSmartActionRuntime, 'SmartActionProtectionRules\
     $normalizedSmartActionRuntime -notmatch 'if \(exactKind == SmartActionProtectionKind\.Chiten\).*?jobId != EnemyCombatConstants\.SamuraiJobId.*?!\(!chitenMetadataVerified && jobId == 0\).*?return false;' -or
     $normalizedSmartActionRuntime -notmatch 'forwardedTargetId = TryResolveSmartTargetRedirect\( thisPtr, actionType, actionId, mode, targetId, smartToken, heldActionSelection: false, out var rewritten, out var smartWinnerSelected, out var selectedSlot, out var reason\);.*?useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId,' -or
     $normalizedSmartActionRuntime -notmatch 'private ulong TryResolveSmartTargetRedirect\(.*?bool heldActionSelection, out bool rewritten, out bool smartWinnerSelected,.*?smartWinnerSelected = true;.*?var frozenIntentStillValid = spatialChaseSelection.*?if \(!frozenIntentStillValid\).*?rewritten = true; selectedSlot = intent\.EnemySlot;.*?return intent\.Target\.GameObjectId;' -or
-    $normalizedSmartActionRuntime -notmatch 'private bool TryEvaluateExactSmartActionTargetProtection\(.*?if \(context == SupportedPvPContext\.CrystallineConflict\).*?exactMatches\.Length != 1.*?IsSmartActionProtectionSafe\(.*?canonicalTargetId = target\.Player\.GameObjectId;.*?SmartActionContextRules\.CanUseExactVisibleTargetTestFallback\(.*?attackShape != SmartActionAttackShape\.DirectSingleTarget.*?TryResolveExactCurrentHardTarget\(.*?IsSmartActionProtectionSafe\(' -or
+    $normalizedSmartActionRuntime -notmatch 'private bool TryEvaluateExactSmartActionTargetProtection\(.*?if \(context == SupportedPvPContext\.CrystallineConflict\).*?exactMatches\.Length != 1.*?IsSmartActionProtectionSafe\(.*?canonicalTargetId = target\.Player\.GameObjectId;.*?SmartActionContextRules\.CanInspectExactVisibleTargetTestFallback\( context, configuration\.EnableWolvesDenTesting, combatPriorityMode: true, attackShape\).*?TryResolveExactCurrentHardTarget\(.*?TryBuildWolvesDenSmartActionProtectionSnapshot\( localPlayer, wolvesTarget, targetGeometry, attackShape, protectionKind, out var wolvesProtectedActors\).*?IsSmartActionProtectionSafe\(' -or
+    $normalizedSmartActionRuntime -notmatch 'private bool TryBuildWolvesDenSmartActionProtectionSnapshot\(.*?SmartActionProtectionRules\.RequiresCompleteHostileSnapshot\(attackShape\).*?player\.StatusFlags & StatusFlags\.Hostile.*?status\.StatusId != SmartActionProtectionRules\.ChitenStatusId.*?nextSyntheticSlot > EnemySlotRules\.LastSlot.*?protectedActors = protections\.ToArray\(\); return true;' -or
     $normalizedSmartActionRuntime -notmatch '\$"\{displayName\} arm failed closed: protection metadata unverified"') {
     throw 'Smart Action must replace its target only after candidate-local protection proof, retain conservative Chiten completeness for area/unknown shapes, permit only reviewed movement actions through Guard, exclude unverified SAM conservatively, and revalidate the one frozen actor without reranking.'
 }
 if ($normalizedSmartActionRuntime -notmatch 'var inspectedSmartActionTargetId = targetId; var smartActionSafetyInspection = !bypassRedirect \? InspectSmartActionSafetyLease\( thisPtr, actionType, actionId, targetId, mode, out inspectedSmartActionTargetId\).*?if \(smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Unsafe\) return false;.*?var forwardedTargetId = smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe \? inspectedSmartActionTargetId : targetId;.*?TryConsumeEligibleSmartTargetToken' -or
     $normalizedSmartActionRuntime -notmatch 'ArmedSmartTarget\? potentialSmartTargetToken = null;.*?potentialSmartTargetToken = armedSmartTarget;.*?var smartTargetCallEligible = IsEligibleSmartActionRedirectAction\( thisPtr, actionType, actionId, mode\); if \(!smartTargetCallEligible\).*?potentialSmartTargetToken = null;.*?smartTargetTokenConsumed = TryConsumeEligibleSmartTargetToken\( potentialSmartTargetToken\.Value, actionType, mode, out smartToken, out smartTargetOwnershipChanged\); potentialSmartTargetToken = smartTargetTokenConsumed \? smartToken : null;.*?if \(smartTargetOwnershipChanged\).*?suppressingSmartTargetCall = true;.*?newer token preserved.*?else if \(!bypassRedirect && smartTargetTokenConsumed\)' -or
     $normalizedSmartActionRuntime -notmatch 'private bool TryConsumeEligibleSmartTargetToken\( ArmedSmartTarget expectedToken,.*?if \(!candidate\.Equals\(expectedToken\)\).*?ownershipChanged = true; return false;.*?armedSmartTarget = null;' -or
-    $normalizedSmartActionRuntime -notmatch 'private bool IsEligibleSmartActionRedirectAction\(.*?if \(!IsPotentialMacroAction\(actionType, mode\) \|\| actionId == 0\) return false;.*?if \(resolvedActionId == 0\) return true;.*?if \(!TryGetExactResolvedPvpActionMetadata\(resolvedActionId, out var action\)\).*?return true;.*?return action\.CanTargetHostile && !action\.TargetArea && action\.Range > 0;' -or
+    $normalizedSmartActionRuntime -notmatch 'private bool IsEligibleSmartActionRedirectAction\(.*?if \(!IsPotentialMacroAction\(actionType, mode\) \|\| actionId == 0\) return false;.*?if \(resolvedActionId == 0\) return true;.*?if \(!TryGetExactResolvedPvpActionMetadata\(resolvedActionId, out var action\)\).*?return true;.*?if \(!action\.CanTargetHostile \|\| action\.TargetArea \|\| action\.Range <= 0\) return false;.*?SmartActionContextRules\.IsSupported\( context, configuration\.EnableWolvesDenTesting\).*?return context != SupportedPvPContext\.WolvesDen \|\| SmartActionContextRules\.CanInspectExactVisibleTargetTestFallback\( context, configuration\.EnableWolvesDenTesting, combatPriorityMode: true, ClassifySmartActionAttackShape\(action\)\);' -or
     $normalizedSmartActionRuntime -notmatch 'if \(!heldActionSelection\) \{ ArmSmartActionSafetyLease\( token, localActor, actionType, actionId, resolvedActionId, now\); \}.*?TryBuildSmartActionProtectionSnapshot' -or
     $normalizedSmartActionRuntime -notmatch 'if \(!rewritten\) \{ forwardedTargetId = InvalidCarrierTargetId; targetSuppressedByRedirect = true; suppressingSmartTargetCall = true; \}.*?if \(suppressingSmartTargetCall\) return false;.*?InspectSmartActionSafetyLease' -or
     $normalizedSmartActionRuntime -notmatch 'if \(!recognizedMode \|\| !IsSupportedActionType\(actionType\)\).*?if \(!potentiallyExactAction\).*?SmartActionSafetyInspectionOutcome\.NotApplicable;.*?Blocked exact Smart Action fallback: invocation mode drifted.*?SmartActionSafetyInspectionOutcome\.Unsafe;' -or
@@ -5028,8 +5043,8 @@ if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
     [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 9 -or
     [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 9 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 570) {
-    throw 'All four shared protection-end tests, all nine SAM reactive tests, and the exact 570-test static Core registry before the appended repeat-policy suites must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 572) {
+    throw 'All four shared protection-end tests, all nine SAM reactive tests, and the exact 572-test static Core registry before the appended repeat-policy suites must remain pinned.'
 }
 Assert-Literals $samuraiReactiveRuntimeRules @(
     'public static bool IsExactCurrentOwnSourceKuzushi(',
@@ -8797,8 +8812,8 @@ if ([regex]::Matches($nearAssist, '\bTryConsumeCastedMacroRedirect\s*\(').Count 
     $normalizedNearAssist -notmatch
         'if \(decision == CastedMacroRedirectDecision\.RedirectReviewedSmartActionCast\) \{ return decision; \} if \(!TryConsumeCastedMacroRedirectClaim\(claim, decision\)\) return CastedMacroRedirectDecision\.SuppressStaleOwnership;.*?consumedSmartActionToken = claim\.SmartTarget;.*?return decision;' -or
     $normalizedNearAssist -notmatch
-        'private bool IsExactCurrentHardTarget\(.*?if \(hardTargetId == authoredTargetId\) return true;.*?ResolveGameObjectByNativeId\(hardTargetId\).*?ResolveGameObjectByNativeId\(authoredTargetId\).*?HasSameNativeIdentity\(hardTarget, authoredTarget\)') {
-    throw 'Casted macro actions must validate and consume only the exact live route-owned generation, suppress hidden/missing or stale carriers, preserve newer arms, preserve the exact visible hard target, and leave instant redirects unchanged.'
+        'private bool IsExactCurrentHardTarget\(.*?var incomingIsNativeSelectedTargetCarrier = authoredTargetId is 0 or InvalidObjectId;.*?SmartActionContextRules\.CanUseExactVisibleTargetTestFallback\( ResolveContext\(\), configuration\.EnableWolvesDenTesting, combatPriorityMode: true\);.*?TryResolveExactCurrentHardTarget\( objectTable, wolvesDenStrikingDummyMetadataVerified, local, out _, out _, out _, out var exactNativeHardTargetId\).*?exactNativeHardTargetId == hardTargetId;.*?SmartActionContextRules\.IsExactCurrentTargetCarrier\( ResolveContext\(\), configuration\.EnableWolvesDenTesting, combatPriorityMode: true, incomingIsNativeSelectedTargetCarrier: true, exactNativeHardTargetResolved: exactWolvesDenHardTargetResolved, explicitTargetMatchesNativeHardTarget: false\);.*?if \(!IsNetworkObjectId\(authoredTargetId\)\) return false;.*?if \(hardTargetId == authoredTargetId\) return true;.*?SmartActionContextRules\.IsExactCurrentTargetCarrier\( ResolveContext\(\), configuration\.EnableWolvesDenTesting, combatPriorityMode: true, incomingIsNativeSelectedTargetCarrier: false, exactNativeHardTargetResolved: hardTarget is not null, explicitTargetMatchesNativeHardTarget: HasSameNativeIdentity\(hardTarget, authoredTarget\)\)') {
+    throw 'Casted macro actions must validate and consume only the exact live route-owned generation, suppress hidden/missing or stale carriers, preserve newer arms, resolve the native Wolves Den zero/default selected-target carrier only through one exact current duel/dummy hard target, preserve exact explicit-target identity, and leave instant redirects unchanged.'
 }
 Assert-Literals $nearAssistOneShotSelfTests @(
     '"adjusted cast keeps authored target"',
@@ -11747,18 +11762,18 @@ $whatsNewWindow = Read-RequiredSource $whatsNewWindowPath 'What''s New window'
 $releaseNotesContentRules = Read-RequiredSource $releaseNotesContentRulesPath 'Release-note content rules'
 $releaseNotesContentSelfTests = Read-RequiredSource $releaseNotesContentSelfTestsPath 'Release-note content self-tests'
 Assert-Literals $projectFile @(
-    '<Version>0.43.0.4</Version>',
-    '<AssemblyVersion>0.43.0.4</AssemblyVersion>',
-    '<FileVersion>0.43.0.4</FileVersion>'
-) 'v0.43.0.4 project version'
+    '<Version>0.43.0.5</Version>',
+    '<AssemblyVersion>0.43.0.5</AssemblyVersion>',
+    '<FileVersion>0.43.0.5</FileVersion>'
+) 'v0.43.0.5 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.43.0.4";',
-    'Smart Action Chase now works without a selected target in CC and remembers the best safe S1-S5 enemy.',
-    'It keeps that exact ability and enemy until they enter range. It never reranks or changes your visible target.',
-    'Seiton Far stays reachable-only. Auto-Zantetsuken now requires your own current Kuzushi debuff.',
-    'PLD Guardian now runs after Purify: 2+ focus at 40%, 3+ at 50%. Your own Guard must remain ready.',
-    'Smart Action can use PLD Shield Smite and SCH Chain Stratagem on Guard. Other protected targets are skipped; only incidental Chiten can veto an AoE.'
-) 'v0.43.0.4 version-acknowledged player-facing What''s New content'
+    'private const string CurrentReleaseVersion = "0.43.0.5";',
+    'Fixed Smart Action no-ops in Wolves'' Den when FFXIV sends your selected target in its native default form.',
+    'Seiton accepts that carrier only after resolving the exact current duel opponent or reviewed dummy.',
+    'Every current damaging non-ground-target shape now shares one path, including casts and instant AoEs.',
+    'This covers BLM''s final Fire AoE and SAM Ogi / Kaeshi: Namikiri while keeping Chiten safety active.',
+    'Guard, Cover, LB safety, CC ranking, and Chase are unchanged. Live in-game confirmation remains separate.'
+) 'v0.43.0.5 version-acknowledged player-facing What''s New content'
 Assert-Literals $releaseNotesContentRules @(
     'public const int MaximumBulletCount = 5;',
     'if (bullets is null) return [];',
@@ -11811,25 +11826,25 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.43.0.4 plugin manifest metadata'
+) 'v0.43.0.5 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.43.0.4"',
-    'PLD Guardian now runs directly after Purify: exact 2+ focus opens it at 40% HP and 3+ at 50%, while generic Guard must remain ready for self-protection.',
-    'Smart Action now lets metadata-verified Shield Smite/Schildhieb and Chain Stratagem/Kritische Strategie select Guard;',
-    'only Chiten can veto incidental AoE.',
-    'Target-independent Smart Action Chase in CC now remembers the best safe S1-S5 enemy plus the exact ability without changing target or reranking.',
-    '/seitonfar remains reachable-only.',
-    'Auto-Zantetsuken requires exactly one current own Kuzushi.',
+    '"AssemblyVersion": "0.43.0.5"',
+    'Fixed general Smart Action no-ops in enabled Wolves'' Den testing.',
+    'FFXIV''s native zero/default selected-target carrier is now accepted only after resolving the exact current hostile duel opponent or reviewed dummy.',
+    'every current damaging non-ground-target shape: direct, target-circle, and cone/line/other AoE, cast or instant.',
+    'This covers BLM''s final Fire AoE and SAM Ogi/Kaeshi: Namikiri.',
+    'Exact Chiten checks remain active; Guard, Cover, PLD LB, and DRK LB remain candidate-local blockers.',
+    'CC ranking and Chase are unchanged.',
     'Automated checks are separate from live in-game confirmation.',
     '"IsHide": false',
     '"IsTestingExclusive": false',
     '"DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"',
     '"DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"',
     '"DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"'
-) 'v0.43.0.4 custom-repository metadata'
+) 'v0.43.0.5 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -11969,6 +11984,15 @@ Assert-Literals $normalizedPrivacy @(
     'Automatic Zantetsuken and Auto-Seiton never use this permission.'
 ) 'v0.42.0.8 retained required-Kuzushi Zantetsuken, Auto-Seiton/Namikiri, and safety/privacy disclosure'
 Assert-Literals $normalizedReadme @(
+    'Version 0.43.0.5 fixes general Smart Action no-ops in enabled Wolves'' Den testing.',
+    'FFXIV can send the selected target as its native zero/default carrier instead of an actor ID;',
+    'Seiton accepts that form only after resolving the exact current hostile duel opponent or reviewed dummy.',
+    'Admission and final safety now share one closed path for every current damaging non-ground-target shape:',
+    'direct, target-circle, and cone/line/other AoE, whether cast or instant.',
+    'This covers BLM''s final Fire AoE and SAM Ogi / Kaeshi: Namikiri.',
+    'Exact Chiten checks remain active;',
+    'Guard, Cover, PLD LB, and DRK LB still block the protected primary target.',
+    'CC ranking and Chase are unchanged.',
     'Version 0.43.0.4 fixes Smart Action Chase in Crystalline Conflict when you have no target selected.',
     'one `/smartaction` press remembers the best safe `S1`-`S5` enemy and the exact ability for the configured Chase time.',
     'It uses only that same ability and enemy when native range and line of sight become valid.',
@@ -12129,7 +12153,7 @@ Assert-Literals $normalizedReadme @(
     'release-independent tap-to-land wait',
     'protects active PvP Sprint from a second Sprint press by default',
     'adds the separate optional idle Smart Sprint.',
-    'For the current source, the exact 611-test Core registry and source checks pin configuration schema 50',
+    'For the current source, the exact 613-test Core registry and source checks pin configuration schema 50',
     'the independent default-off automatic basic-shot cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
@@ -12143,8 +12167,22 @@ Assert-Literals $normalizedReadme @(
     'constructs sixteen reviewed request shapes across seventeen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.43.0.4 target-independent Smart Action Chase, Guardian, Guard-halving actions, finite own-Kuzushi, and retained safety history'
+) 'v0.43.0.5 general Wolves Den Smart Action carrier/shape fix and retained safety history'
 Assert-Literals $normalizedChangelog @(
+    '## 0.43.0.5',
+    'Fixed **general Smart Action no-ops in enabled Wolves'' Den testing**.',
+    'native zero/default carrier rather than an actor ID;',
+    'old exact-object-ID check treated that form as hidden',
+    'The native selected-target carrier is now admitted only after Seiton resolves the exact current hostile duel opponent or reviewed dummy.',
+    'Explicit target IDs still require exact identity, and other contexts cannot borrow this path.',
+    'closed attack-shape policy for every current damaging non-ground-target form:',
+    'direct, target-centered circle, and cone/line/other AoE, cast or instant.',
+    'covers the BLM final Fire AoE and SAM Ogi / Kaeshi: Namikiri.',
+    'Wolves'' Den area checks still include exact visible hostile Chiten carriers.',
+    'Guard, Cover, PLD LB, and DRK LB remain candidate-local blockers;',
+    'CC ranking and Chase timing are unchanged.',
+    '613-test Core registry and source safety contract;',
+    'live in-game confirmation remains separate.',
     '## 0.43.0.4',
     'Made **Paladin Guardian react earlier**.',
     'first helper slot after Purify, before Recuperate and automatic Guard.',
@@ -13908,4 +13946,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 50 and the exact 611-test Core registry. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, PLD Guardian, Recuperate, then Auto-Guard own priority in that order. Guardian requires exact Guard and Guardian metadata/readiness through the final boundary: <=20% is unconditional, <=40% needs fresh exact 2+ focus, and <=50% needs fresh exact 3+ focus. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-actor reservation from either a certified direct standard hotbar press, an exact lease/generation-backed /smartaction visible-<t> fallback, or a target-independent CC Smart Action S1-S5 winner; only the first two bind the visible hard target. Queue stays rejected. Release cannot cancel it; new action, context, Guard, CC, identity, protection, or exact-action/actor drift does, only a post-revalidated clean native range/LoS false may retry, accepted or ambiguous outcomes are terminal, and it never reranks or writes target/facing. /seitonfar remains reachable-only. Metadata-verified Shield Smite and Chain Stratagem may select Guard; other primary protections remain candidate-local blockers and only incidental/global Chiten vetoes AoE. Supported Smart Action casts transfer only an exactly consumed live token into the same bounded reservation. Auto-Zantetsuken requires one finite positive exact own-source Kuzushi row at selection and the final boundary. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not reset it, Guard/CC/cast/priority/native waits do not spend, and automatic Sprint/replay cannot rearm themselves. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."
+Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 50 and the exact 613-test Core registry. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, PLD Guardian, Recuperate, then Auto-Guard own priority in that order. Guardian requires exact Guard and Guardian metadata/readiness through the final boundary: <=20% is unconditional, <=40% needs fresh exact 2+ focus, and <=50% needs fresh exact 3+ focus. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-actor reservation from either a certified direct standard hotbar press, an exact lease/generation-backed /smartaction visible-<t> fallback, or a target-independent CC Smart Action S1-S5 winner; only the first two bind the visible hard target. Queue stays rejected. Release cannot cancel it; new action, context, Guard, CC, identity, protection, or exact-action/actor drift does, only a post-revalidated clean native range/LoS false may retry, accepted or ambiguous outcomes are terminal, and it never reranks or writes target/facing. /seitonfar remains reachable-only. Enabled Wolves Den Smart Action may resolve only FFXIV's native zero/default selected-target carrier through the exact current duel opponent or reviewed dummy, and every current damaging non-ground-target shape shares the same closed admission and final-protection path. Metadata-verified Shield Smite and Chain Stratagem may select Guard; other primary protections remain candidate-local blockers and only incidental/global Chiten vetoes AoE. Supported Smart Action casts transfer only an exactly consumed live token into the same bounded reservation. Auto-Zantetsuken requires one finite positive exact own-source Kuzushi row at selection and the final boundary. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not reset it, Guard/CC/cast/priority/native waits do not spend, and automatic Sprint/replay cannot rearm themselves. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."

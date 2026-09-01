@@ -53,6 +53,8 @@ var tests = new (string Name, Action Run)[]
     ("smart action buffer dispatches exactly once under contention", SmartActionBufferSelfTests.ConcurrentEvaluationDispatchesExactlyOnce),
     ("Smart Action Wolves' Den context requires exact test opt-in", SmartActionContextSelfTests.WolvesDenRequiresItsExactTestOptIn),
     ("Smart Action Wolves' Den uses only exact visible target fallback", SmartActionContextSelfTests.WolvesDenUsesOnlyCombatPriorityVisibleTargetFallback),
+    ("Smart Action Wolves' Den visible target admits only reviewed attack shapes", SmartActionContextSelfTests.WolvesDenVisibleTargetShapeEligibilityIsExact),
+    ("Smart Action native selected-target carrier requires resolved hard target", SmartActionContextSelfTests.NativeSelectedTargetCarrierRequiresResolvedHardTarget),
     ("held chase buffer arms only for exact range loss", HeldChaseBufferSelfTests.OnlyRangeOrLineOfSightCanArm),
     ("held chase buffer freezes physical input action target and context", HeldChaseBufferSelfTests.ReleaseNewInputAndFrozenIdentityDriftCancel),
     ("held chase buffer cancels every live safety drift", HeldChaseBufferSelfTests.EveryLiveSafetyDriftCancels),

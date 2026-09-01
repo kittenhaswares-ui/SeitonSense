@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.43.0.5
+
+- Fixed **general Smart Action no-ops in enabled Wolves' Den testing**. FFXIV
+  can provide the selected target as its native zero/default carrier rather
+  than an actor ID; the old exact-object-ID check treated that form as hidden
+  and could suppress the authored action before FFXIV received it.
+- The native selected-target carrier is now admitted only after Seiton resolves
+  the exact current hostile duel opponent or reviewed dummy. Explicit target
+  IDs still require exact identity, and other contexts cannot borrow this path.
+- Smart Action admission and final protection inspection now share the same
+  closed attack-shape policy for every current damaging non-ground-target form:
+  direct, target-centered circle, and cone/line/other AoE, cast or instant. This
+  covers the BLM final Fire AoE and SAM Ogi / Kaeshi: Namikiri.
+- Wolves' Den area checks still include exact visible hostile Chiten carriers.
+  Guard, Cover, PLD LB, and DRK LB remain candidate-local blockers; incidental
+  Chiten keeps its circle/cone/global AoE veto.
+- CC ranking and Chase timing are unchanged. The regressions are pinned by the
+  613-test Core registry and source safety contract; live in-game confirmation
+  remains separate.
+
 ## 0.43.0.4
 
 - Made **Paladin Guardian react earlier**. It now gets the first helper slot

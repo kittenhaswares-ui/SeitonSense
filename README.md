@@ -3,6 +3,16 @@
 Seiton Sense is a local PvP awareness HUD with pressure tracking, nameplate
 cues, warnings, job helpers, Smart Action, and target highlights.
 
+Version 0.43.0.5 fixes general Smart Action no-ops in enabled Wolves' Den
+testing. FFXIV can send the selected target as its native zero/default carrier
+instead of an actor ID; Seiton accepts that form only after resolving the exact
+current hostile duel opponent or reviewed dummy. Admission and final safety now
+share one closed path for every current damaging non-ground-target shape:
+direct, target-circle, and cone/line/other AoE, whether cast or instant. This
+covers BLM's final Fire AoE and SAM Ogi / Kaeshi: Namikiri. Exact Chiten checks
+remain active; Guard, Cover, PLD LB, and DRK LB still block the protected
+primary target. CC ranking and Chase are unchanged.
+
 Version 0.43.0.4 fixes Smart Action Chase in Crystalline Conflict when you have
 no target selected. If no safe enemy is currently reachable, one
 `/smartaction` press remembers the best safe `S1`-`S5` enemy and the exact
@@ -2491,7 +2501,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 611-test Core registry and source checks pin
+For the current source, the exact 613-test Core registry and source checks pin
 configuration schema 50, the shared monotonic response clock and framework
 epoch, true not-ready-to-ready wakeups, strict unchanged-queue critical recovery,
 the immutable release-independent tap-to-land buffer, active-Sprint repeat

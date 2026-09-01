@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.43.0.4";
+    private const string CurrentReleaseVersion = "0.43.0.5";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -430,11 +430,11 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Smart Action Chase now works without a selected target in CC and remembers the best safe S1-S5 enemy.",
-                "It keeps that exact ability and enemy until they enter range. It never reranks or changes your visible target.",
-                "Seiton Far stays reachable-only. Auto-Zantetsuken now requires your own current Kuzushi debuff.",
-                "PLD Guardian now runs after Purify: 2+ focus at 40%, 3+ at 50%. Your own Guard must remain ready.",
-                "Smart Action can use PLD Shield Smite and SCH Chain Stratagem on Guard. Other protected targets are skipped; only incidental Chiten can veto an AoE.",
+                "Fixed Smart Action no-ops in Wolves' Den when FFXIV sends your selected target in its native default form.",
+                "Seiton accepts that carrier only after resolving the exact current duel opponent or reviewed dummy.",
+                "Every current damaging non-ground-target shape now shares one path, including casts and instant AoEs.",
+                "This covers BLM's final Fire AoE and SAM Ogi / Kaeshi: Namikiri while keeping Chiten safety active.",
+                "Guard, Cover, LB safety, CC ranking, and Chase are unchanged. Live in-game confirmation remains separate.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

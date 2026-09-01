@@ -2943,17 +2943,54 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
     private bool IsExactCurrentHardTarget(ulong authoredTargetId)
     {
-        if (!IsNetworkObjectId(authoredTargetId)) return false;
-
         var local = objectTable.LocalPlayer;
         if (!IsLivePlayer(local)) return false;
         var hardTargetId = GetNativeHardTargetId(local!);
         if (!IsNetworkObjectId(hardTargetId)) return false;
-        if (hardTargetId == authoredTargetId) return true;
 
         var hardTarget = ResolveGameObjectByNativeId(hardTargetId);
+        var incomingIsNativeSelectedTargetCarrier =
+            authoredTargetId is 0 or InvalidObjectId;
+        if (incomingIsNativeSelectedTargetCarrier)
+        {
+            var nativeSelectedTargetCarrierAllowed =
+                SmartActionContextRules.CanUseExactVisibleTargetTestFallback(
+                    ResolveContext(),
+                    configuration.EnableWolvesDenTesting,
+                    combatPriorityMode: true);
+            var exactWolvesDenHardTargetResolved =
+                nativeSelectedTargetCarrierAllowed &&
+                DarkKnightWolvesDenCurrentTargetResolver
+                    .TryResolveExactCurrentHardTarget(
+                        objectTable,
+                        wolvesDenStrikingDummyMetadataVerified,
+                        local,
+                        out _,
+                        out _,
+                        out _,
+                        out var exactNativeHardTargetId) &&
+                exactNativeHardTargetId == hardTargetId;
+            return SmartActionContextRules.IsExactCurrentTargetCarrier(
+                ResolveContext(),
+                configuration.EnableWolvesDenTesting,
+                combatPriorityMode: true,
+                incomingIsNativeSelectedTargetCarrier: true,
+                exactNativeHardTargetResolved: exactWolvesDenHardTargetResolved,
+                explicitTargetMatchesNativeHardTarget: false);
+        }
+
+        if (!IsNetworkObjectId(authoredTargetId)) return false;
+        if (hardTargetId == authoredTargetId) return true;
+
         var authoredTarget = ResolveGameObjectByNativeId(authoredTargetId);
-        return HasSameNativeIdentity(hardTarget, authoredTarget);
+        return SmartActionContextRules.IsExactCurrentTargetCarrier(
+            ResolveContext(),
+            configuration.EnableWolvesDenTesting,
+            combatPriorityMode: true,
+            incomingIsNativeSelectedTargetCarrier: false,
+            exactNativeHardTargetResolved: hardTarget is not null,
+            explicitTargetMatchesNativeHardTarget:
+                HasSameNativeIdentity(hardTarget, authoredTarget));
     }
 
     private IGameObject? ResolveGameObjectByNativeId(ulong nativeId)
@@ -3141,11 +3178,11 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             return true;
         }
 
-        if (!SmartActionContextRules.CanUseExactVisibleTargetTestFallback(
+        if (!SmartActionContextRules.CanInspectExactVisibleTargetTestFallback(
                 context,
                 configuration.EnableWolvesDenTesting,
-                combatPriorityMode: true) ||
-            attackShape != SmartActionAttackShape.DirectSingleTarget ||
+                combatPriorityMode: true,
+                attackShape) ||
             !DarkKnightWolvesDenCurrentTargetResolver.TryResolveExactCurrentHardTarget(
                 objectTable,
                 wolvesDenStrikingDummyMetadataVerified,
@@ -3176,10 +3213,16 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             ExactCanonicalIdentity: true,
             wolvesTarget.Position,
             wolvesTarget.HitboxRadius);
-        SmartActionProtectedActor[] wolvesProtectedActors =
-            protectionKind == SmartActionProtectionKind.None
-                ? []
-                : [new SmartActionProtectedActor(targetGeometry, protectionKind)];
+        if (!TryBuildWolvesDenSmartActionProtectionSnapshot(
+                localPlayer,
+                wolvesTarget,
+                targetGeometry,
+                attackShape,
+                protectionKind,
+                out var wolvesProtectedActors))
+        {
+            return false;
+        }
         var wolvesSafe = IsSmartActionProtectionSafe(
             resolvedActionId,
             localPlayer,
@@ -3232,6 +3275,97 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
         return protectionKind == SmartActionProtectionKind.None ||
                SmartActionProtectionRules.IsExactProtectionKind(protectionKind);
+    }
+
+    private bool TryBuildWolvesDenSmartActionProtectionSnapshot(
+        IPlayerCharacter localPlayer,
+        IBattleChara exactTarget,
+        SmartActionActorGeometry targetGeometry,
+        SmartActionAttackShape attackShape,
+        SmartActionProtectionKind targetProtectionKind,
+        out SmartActionProtectedActor[] protectedActors)
+    {
+        var protections = new List<SmartActionProtectedActor>(5);
+        if (targetProtectionKind != SmartActionProtectionKind.None)
+        {
+            protections.Add(new SmartActionProtectedActor(
+                targetGeometry,
+                targetProtectionKind));
+        }
+
+        if (!SmartActionProtectionRules.RequiresCompleteHostileSnapshot(attackShape))
+        {
+            protectedActors = protections.ToArray();
+            return true;
+        }
+
+        var observedGameObjectIds = new HashSet<ulong>
+        {
+            exactTarget.GameObjectId,
+        };
+        var observedEntityIds = new HashSet<uint>
+        {
+            exactTarget.EntityId,
+        };
+        var nextSyntheticSlot = EnemySlotRules.FirstSlot + 1;
+        foreach (var player in objectTable.PlayerObjects.OfType<IPlayerCharacter>())
+        {
+            if (!IsLivePlayer(player) ||
+                player.GameObjectId == localPlayer.GameObjectId ||
+                HasSameNativeIdentity(player, exactTarget) ||
+                (player.StatusFlags & StatusFlags.Hostile) == 0)
+            {
+                continue;
+            }
+
+            if (!observedGameObjectIds.Add(player.GameObjectId) ||
+                !observedEntityIds.Add(player.EntityId))
+            {
+                protectedActors = [];
+                return false;
+            }
+
+            var jobId = player.ClassJob.IsValid ? player.ClassJob.RowId : 0;
+            var incidentalKind = !chitenMetadataVerified &&
+                                 jobId is 0 or EnemyCombatConstants.SamuraiJobId
+                ? SmartActionProtectionKind.Chiten
+                : SmartActionProtectionKind.None;
+            foreach (var status in player.StatusList)
+            {
+                if (status.StatusId != SmartActionProtectionRules.ChitenStatusId)
+                    continue;
+                if (jobId != EnemyCombatConstants.SamuraiJobId &&
+                    !(!chitenMetadataVerified && jobId == 0))
+                {
+                    protectedActors = [];
+                    return false;
+                }
+
+                incidentalKind |= SmartActionProtectionKind.Chiten;
+            }
+
+            if (incidentalKind == SmartActionProtectionKind.None)
+                continue;
+            if (nextSyntheticSlot > EnemySlotRules.LastSlot)
+            {
+                protectedActors = [];
+                return false;
+            }
+
+            protections.Add(new SmartActionProtectedActor(
+                new SmartActionActorGeometry(
+                    nextSyntheticSlot++,
+                    new TargetPressureActorIdentity(
+                        player.GameObjectId,
+                        player.EntityId),
+                    ExactCanonicalIdentity: true,
+                    player.Position,
+                    player.HitboxRadius),
+                incidentalKind));
+        }
+
+        protectedActors = protections.ToArray();
+        return true;
     }
 
     private bool UseActionLocationDetour(
@@ -6024,9 +6158,23 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             return true;
         }
 
-        return action.CanTargetHostile &&
-               !action.TargetArea &&
-               action.Range > 0;
+        if (!action.CanTargetHostile || action.TargetArea || action.Range <= 0)
+            return false;
+
+        var context = ResolveContext();
+        if (!SmartActionContextRules.IsSupported(
+                context,
+                configuration.EnableWolvesDenTesting))
+        {
+            return false;
+        }
+
+        return context != SupportedPvPContext.WolvesDen ||
+               SmartActionContextRules.CanInspectExactVisibleTargetTestFallback(
+                   context,
+                   configuration.EnableWolvesDenTesting,
+                   combatPriorityMode: true,
+                   ClassifySmartActionAttackShape(action));
     }
 
     private bool IsEligibleHelpAction(

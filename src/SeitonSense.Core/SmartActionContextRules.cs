@@ -25,6 +25,30 @@ public static class SmartActionContextRules
         wolvesDenTestingEnabled &&
         combatPriorityMode;
 
+    /// <summary>
+    /// Shapes which can be protection-checked against the exact visible
+    /// Wolves' Den target. Every current shape has a closed protection policy:
+    /// direct attacks are candidate-local, target-centered circles use exact
+    /// hitbox geometry, and unsupported areas retain the conservative global
+    /// incidental-Chiten veto. Future enum values remain closed.
+    /// </summary>
+    public static bool CanInspectExactVisibleTargetTestFallback(
+        SupportedPvPContext context,
+        bool wolvesDenTestingEnabled,
+        bool combatPriorityMode,
+        SmartActionAttackShape attackShape) =>
+        CanUseExactVisibleTargetTestFallback(
+            context,
+            wolvesDenTestingEnabled,
+            combatPriorityMode) &&
+        attackShape switch
+        {
+            SmartActionAttackShape.DirectSingleTarget => true,
+            SmartActionAttackShape.TargetCenteredCircle => true,
+            SmartActionAttackShape.UnsupportedAreaOfEffect => true,
+            _ => false,
+        };
+
     public static bool CanUseSameCallVisibleTargetFallback(
         SupportedPvPContext context,
         bool wolvesDenTestingEnabled,
@@ -39,4 +63,24 @@ public static class SmartActionContextRules
         !redirectApplied &&
         !rankedWinnerSelected &&
         exactCurrentHardTarget;
+
+    /// <summary>
+    /// A native zero/default target is a valid selected-target carrier only
+    /// when the client still exposes one exact resolvable hard target. Explicit
+    /// target IDs retain their existing exact-identity comparison.
+    /// </summary>
+    public static bool IsExactCurrentTargetCarrier(
+        SupportedPvPContext context,
+        bool wolvesDenTestingEnabled,
+        bool combatPriorityMode,
+        bool incomingIsNativeSelectedTargetCarrier,
+        bool exactNativeHardTargetResolved,
+        bool explicitTargetMatchesNativeHardTarget) =>
+        exactNativeHardTargetResolved &&
+        (incomingIsNativeSelectedTargetCarrier
+            ? CanUseExactVisibleTargetTestFallback(
+                context,
+                wolvesDenTestingEnabled,
+                combatPriorityMode)
+            : explicitTargetMatchesNativeHardTarget);
 }
