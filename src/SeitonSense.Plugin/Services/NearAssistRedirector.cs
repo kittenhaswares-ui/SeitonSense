@@ -175,7 +175,8 @@ internal readonly record struct ExactAutomaticActionBoundaryIntent(
     ActionType ActionType,
     uint RequestedActionId,
     ulong TargetId,
-    ActionManager.UseActionMode Mode)
+    ActionManager.UseActionMode Mode,
+    bool RequiresSmartActionProtectionRecheck = false)
 {
     internal bool IsValid =>
         ActionType is ActionType.Action or ActionType.PvPAction &&
@@ -2557,6 +2558,21 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             return false;
         }
 
+        // Automatic helpers that borrowed Smart Action selection must retain
+        // the same exact target-safety contract at the final native boundary.
+        // In particular, BRD Mannstopper must not slip through when Chiten,
+        // Guard, Resilience, Meikyo, or another reviewed CC immunity appears
+        // after the target was frozen. Damage-only PLD/DRK invulnerability is
+        // intentionally still allowed for this CC utility.
+        if (ShouldVetoExactAutomaticSmartActionAtFinalBoundary(
+                actionType,
+                actionId,
+                forwardedTargetId,
+                mode))
+        {
+            return false;
+        }
+
         // Exact automatic owners are allowed to interpret a false result only
         // after this final hook boundary proves the raw action, target, and mode
         // are still the one call they authored. Any mismatch fails closed and
@@ -4066,6 +4082,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 sourceObject,
                 targetObject)
             : uint.MaxValue;
+        var isDirectCrowdControlUtility =
+            resolvedActionId == BardRepellingShotRules.RepellingShotActionId;
         var protectionSafe = IsSmartActionProtectionSafe(
             resolvedActionId,
             local!,
@@ -4073,7 +4091,13 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             exact,
             action.EffectRange,
             protectedActors,
-            CanSmartActionTargetGuard(resolvedActionId, action));
+            CanSmartActionTargetGuard(resolvedActionId, action),
+            allowDamageOnlyInvulnerabilityForCcUtility:
+                isDirectCrowdControlUtility) &&
+            (!isDirectCrowdControlUtility ||
+             IsExactCrowdControlUtilityTargetStatusSafe(
+                 resolvedActionId,
+                 exact.Player));
         var exactIdentity = new TargetPressureActorIdentity(
             exact.Player.GameObjectId,
             exact.Player.EntityId);
@@ -4235,6 +4259,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
         var actionIgnoresGuard =
             CanSmartActionTargetGuard(resolvedActionId, action);
+        var isDirectCrowdControlUtility =
+            heldActionSelection &&
+            resolvedActionId == BardRepellingShotRules.RepellingShotActionId;
         var spatialChaseEnabled =
             !heldActionSelection &&
             token.SelectionMode == SmartTargetRedirectMode.CombatPriority &&
@@ -4294,7 +4321,13 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 canonicalEnemy,
                 action.EffectRange,
                 protectedActors,
-                actionIgnoresGuard);
+                actionIgnoresGuard,
+                allowDamageOnlyInvulnerabilityForCcUtility:
+                    isDirectCrowdControlUtility) &&
+                (!isDirectCrowdControlUtility ||
+                 IsExactCrowdControlUtilityTargetStatusSafe(
+                     resolvedActionId,
+                     enemy));
             int? freshTeamPressure = pressureTracker.TryGetFreshTeamTargetCount(
                 localActor,
                 actor,
@@ -4433,7 +4466,13 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                                       new CanonicalEnemy(intent.EnemySlot, currentEnemy),
                                       action.EffectRange,
                                       finalProtectedActors,
-                                      actionIgnoresGuard);
+                                      actionIgnoresGuard,
+                                      allowDamageOnlyInvulnerabilityForCcUtility:
+                                          isDirectCrowdControlUtility) &&
+                                  (!isDirectCrowdControlUtility ||
+                                   IsExactCrowdControlUtilityTargetStatusSafe(
+                                       resolvedActionId,
+                                       currentEnemy));
         var finalCandidate = selected.Selection with
         {
             Alive = IsLivePlayer(currentEnemy),
@@ -5731,7 +5770,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         CanonicalEnemy target,
         float effectRange,
         IReadOnlyList<SmartActionProtectedActor> protectedActors,
-        bool actionIgnoresGuard)
+        bool actionIgnoresGuard,
+        bool allowDamageOnlyInvulnerabilityForCcUtility = false)
         => IsSmartActionProtectionSafe(
             resolvedActionId,
             localPlayer,
@@ -5739,7 +5779,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             CreateSmartActionActorGeometry(target),
             effectRange,
             protectedActors,
-            actionIgnoresGuard);
+            actionIgnoresGuard,
+            allowDamageOnlyInvulnerabilityForCcUtility);
 
     private bool IsSmartActionProtectionSafe(
         uint resolvedActionId,
@@ -5748,8 +5789,19 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         SmartActionActorGeometry targetGeometry,
         float effectRange,
         IReadOnlyList<SmartActionProtectedActor> protectedActors,
-        bool actionIgnoresGuard)
+        bool actionIgnoresGuard,
+        bool allowDamageOnlyInvulnerabilityForCcUtility = false)
     {
+        if (allowDamageOnlyInvulnerabilityForCcUtility)
+        {
+            return attackShape == SmartActionAttackShape.DirectSingleTarget &&
+                   effectRange == 0f &&
+                   SmartActionProtectionRules
+                       .IsDirectCrowdControlUtilityTargetSafe(
+                           targetGeometry,
+                           protectedActors);
+        }
+
         if (SamuraiSmartActionCastRules.IsOgiNamikiriConeAction(resolvedActionId) &&
             samuraiSmartActionCastsMetadataVerified)
         {
@@ -5767,6 +5819,109 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             effectRange,
             protectedActors,
             actionIgnoresGuard);
+    }
+
+    private bool IsExactCrowdControlUtilityTargetStatusSafe(
+        uint resolvedActionId,
+        IPlayerCharacter target)
+    {
+        if (!ccImmunityBrake.VerifiedActionIds.Contains(resolvedActionId) ||
+            !CcImmunityBrakeActionCatalog.TryGet(
+                BardRepellingShotRules.BardJobId,
+                resolvedActionId,
+                out var definition) ||
+            !target.ClassJob.IsValid)
+        {
+            return false;
+        }
+
+        var targetJobId = target.ClassJob.RowId;
+        foreach (var status in target.StatusList)
+        {
+            if (!ccImmunityBrake.VerifiedStatusIds.Contains(status.StatusId))
+                continue;
+            if (CcImmunityBrakeActionCatalog.IsBlockerStatus(
+                    definition.BlockerFamily,
+                    status.StatusId,
+                    targetJobId))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private bool ShouldVetoExactAutomaticSmartActionAtFinalBoundary(
+        ActionType actionType,
+        uint actionId,
+        ulong targetId,
+        ActionManager.UseActionMode mode)
+    {
+        var scope = exactAutomaticActionBoundaryScope;
+        if (scope is null ||
+            !ReferenceEquals(scope.Owner, this) ||
+            !scope.Intent.RequiresSmartActionProtectionRecheck)
+        {
+            return false;
+        }
+
+        if (scope.Consumed ||
+            scope.Intent.ActionType != actionType ||
+            scope.Intent.RequestedActionId != actionId ||
+            scope.Intent.TargetId != targetId ||
+            scope.Intent.Mode != mode)
+        {
+            return true;
+        }
+
+        var context = ResolveContext();
+        if (context == SupportedPvPContext.CrystallineConflict)
+        {
+            return !TryValidateExactHeldSmartActionTarget(
+                actionId,
+                targetId,
+                expectedSlot: 0,
+                expectedTarget: default,
+                out _,
+                out _);
+        }
+
+        if (context != SupportedPvPContext.WolvesDen ||
+            !configuration.EnableWolvesDenTesting ||
+            actionId != BardRepellingShotRules.RepellingShotActionId)
+        {
+            return true;
+        }
+
+        var local = objectTable.LocalPlayer;
+        if (!DarkKnightWolvesDenCurrentTargetResolver.TryResolveExactCurrentHardTarget(
+                objectTable,
+                wolvesDenStrikingDummyMetadataVerified,
+                local,
+                out var currentTarget,
+                out var currentIdentity,
+                out _,
+                out _) ||
+            currentIdentity.GameObjectId != targetId)
+        {
+            return true;
+        }
+
+        // A verified dummy has no player protection semantics. A duel player
+        // receives the same latest-frame Chiten/Guard/CC-immunity proof as CC.
+        if (currentTarget is not IPlayerCharacter player) return false;
+        if (!smartActionProtectionStatuses.IsVerified ||
+            !IsExactCrowdControlUtilityTargetStatusSafe(actionId, player))
+        {
+            return true;
+        }
+
+        var protectionKind = SmartActionProtectionKind.None;
+        foreach (var status in player.StatusList)
+            protectionKind |= ClassifySmartActionProtectionStatus(status.StatusId);
+        return (protectionKind & ~SmartActionProtectionKind.Invulnerability) !=
+               SmartActionProtectionKind.None;
     }
 
     private static SmartActionActorGeometry CreateSmartActionActorGeometry(

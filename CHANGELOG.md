@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.44.0.2
+
+- Fixed Guard being swallowed by its own one-second repeat protection. An
+  uncertain request now passes through; repeat protection starts only after the
+  real Guard status is visible.
+- BRD Mannstopper still uses Smart Action target ranking, but now rejects
+  Chiten, Guard, Resilience/Purify protection, Meikyo Shisui, Paean, and other
+  reviewed CC immunity both while choosing and immediately before using it.
+- PLD and DRK damage-only invulnerability remains targetable by Mannstopper,
+  because those effects do not prevent its crowd control.
+- The CC Win Prediction panel remains visible during match preparation while
+  the exact 5v5 roster is loading. Live combat totals still start only after
+  combat begins.
+- Automated checks remain separate from live in-game confirmation.
+
 ## 0.44.0.1
 
 - Fixed `/smartaction` in Crystalline Conflict and Wolves' Den. A removed old

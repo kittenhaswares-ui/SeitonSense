@@ -360,6 +360,38 @@ internal static class SmartActionProtectionSelfTests
             "protection drift never reranks to another now-safe actor");
     }
 
+    public static void DirectCrowdControlUtilityAllowsOnlyDamageInvulnerability()
+    {
+        var target = Geometry(1);
+        True(
+            SmartActionProtectionRules.IsDirectCrowdControlUtilityTargetSafe(
+                target,
+                [Protected(target, SmartActionProtectionKind.Invulnerability)]),
+            "PLD or DRK damage-only invulnerability does not make a direct CC utility useless");
+
+        foreach (var blocker in new[]
+                 {
+                     SmartActionProtectionKind.Chiten,
+                     SmartActionProtectionKind.Guard,
+                     SmartActionProtectionKind.Covered,
+                     SmartActionProtectionKind.Invulnerability |
+                     SmartActionProtectionKind.Chiten,
+                 })
+        {
+            False(
+                SmartActionProtectionRules.IsDirectCrowdControlUtilityTargetSafe(
+                    target,
+                    [Protected(target, blocker)]),
+                $"direct CC utility remains blocked by {blocker}");
+        }
+
+        False(
+            SmartActionProtectionRules.IsDirectCrowdControlUtilityTargetSafe(
+                target,
+                null),
+            "an unknown protection snapshot remains unsafe");
+    }
+
     public static void GuardIgnoringActionsBypassOnlyGuard()
     {
         True(SmartActionGuardBypassRules.HasExactEnglishDescription(

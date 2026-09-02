@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.44.0.1";
+    private const string CurrentReleaseVersion = "0.44.0.2";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -462,11 +462,10 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Smart Action works again in CC and Wolves' Den, including harmful casts and no-target target choice.",
-                "Held helpers keep their chosen action and target briefly after key release, so Paean, Silent Nocturne, and Miracle get another safe chance.",
-                "Optional BRD Mannstopper fires near an enemy and may cancel only Powerful Shot.",
-                "CC Win Prediction appears during preparation; live match numbers begin only when fighting starts.",
-                "Old PvpStats import works from Wolves' Den while out of combat; nothing is uploaded.",
+                "Guard works normally again; repeat protection starts only after Guard is visibly active.",
+                "BRD Mannstopper avoids Chiten, Guard, Purify protection, Meikyo, and other real CC immunity.",
+                "Mannstopper may still target PLD or DRK damage-only invulnerability because their CC still works.",
+                "CC Win Prediction stays visible during preparation while the exact 5v5 roster loads.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

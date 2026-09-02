@@ -39,6 +39,10 @@ internal sealed record CrystallineConflictPredictionSnapshot(
 {
     internal static CrystallineConflictPredictionSnapshot Inactive(string status = "Waiting for CC") =>
         new(false, false, false, false, false, 0.5d, 0.5d, 0, 0, [], [], status);
+
+    internal static CrystallineConflictPredictionSnapshot Preparing(
+        string status = "Waiting for exact 5 + 5 roster") =>
+        new(true, false, false, false, false, 0.5d, 0.5d, 0, 0, [], [], status);
 }
 
 /// <summary>
@@ -167,7 +171,7 @@ internal sealed class CrystallineConflictPredictionService : IDisposable
                 {
                     Volatile.Write(
                         ref snapshot,
-                        CrystallineConflictPredictionSnapshot.Inactive("Waiting for exact 5 + 5 roster"));
+                        CrystallineConflictPredictionSnapshot.Preparing());
                     return;
                 }
 

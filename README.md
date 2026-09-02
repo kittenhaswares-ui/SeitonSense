@@ -3,7 +3,15 @@
 Seiton Sense is a local PvP awareness HUD with pressure tracking, nameplate
 cues, warnings, job helpers, Smart Action, and target highlights.
 
-Version 0.44.0.1 restores **Smart Action** target choice in Crystalline
+Version 0.44.0.2 fixes a Guard regression: the one-second repeat protection now
+starts only after Guard is visibly active, so an uncertain first attempt cannot
+block the retry that actually activates it. BRD **Mannstopper** keeps Smart
+Action ranking but avoids Chiten, Guard, Purify protection, Meikyo, Paean, and
+other real CC immunity. PLD and DRK damage-only invulnerability remains a valid
+Mannstopper target because it does not prevent CC. The CC prediction panel now
+stays visible during preparation while the exact 5v5 roster is still loading.
+
+Version 0.44.0.1 restored **Smart Action** target choice in Crystalline
 Conflict and Wolves' Den, including harmful casts. Held helpers keep only their
 already chosen action and target for the configured short retry window after
 key release, which gives Paean, Silent Nocturne, Miracle, and the other held
@@ -2593,7 +2601,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 634-test Core registry, eleven plugin self-tests,
+For the current source, the exact 636-test Core registry, twelve plugin self-tests,
 and source checks pin configuration schema 53, the shared monotonic response clock and framework
 epoch, true not-ready-to-ready wakeups, strict unchanged-queue critical recovery,
 the immutable release-independent tap-to-land buffer, active-Sprint repeat

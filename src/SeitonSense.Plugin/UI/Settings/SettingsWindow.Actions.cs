@@ -202,6 +202,9 @@ internal sealed partial class SettingsWindow
             "Default off and BRD only. Seiton chooses one exact reachable enemy with Smart Action, uses " +
             "Mannstopper without changing your visible target, and never breaks your own Guard.");
         ImGui.TextDisabled(
+            "It skips Chiten, Guard, Purify protection, Meikyo, Paean, and other real CC immunity. " +
+            "PLD and DRK damage-only invulnerability is allowed because it does not prevent crowd control.");
+        ImGui.TextDisabled(
             "If Powerful Shot is currently casting, this helper may cancel only that reviewed BRD basic shot, " +
             "then uses Mannstopper after the cast has actually ended. It works in CC and with the Wolves' Den " +
             "testing option; Den uses only your exact duel target or verified dummy.");

@@ -872,7 +872,7 @@ if ($normalizedNearAssistForIntegratedInput -notmatch 'TryConsumeCastedMacroRedi
 }
 
 # Pin all retained buffer/repeat/compatibility suites and the exact current
-# 634-test registry.
+# 636-test registry.
 $integratedCoreTestProgram = Read-RequiredSource (Join-Path $coreSelfTestRoot 'Program.cs') 'Integrated Core self-test registry'
 $smartActionBufferSelfTests = Read-RequiredSource $smartActionBufferSelfTestsPath 'Smart action-buffer self-tests'
 $logicalHotbarRepeatSelfTests = Read-RequiredSource $logicalHotbarRepeatSelfTestsPath 'Logical hotbar repeat self-tests'
@@ -896,11 +896,11 @@ Assert-Literals $smartActionBufferCompatibilitySelfTests @(
     'reActionOwnsExactAction: false)',
     'reActionOwnsExactAction: true)'
 ) 'Generic-buffer compatibility self-tests'
-if ($staticIntegratedTestCount -ne 593 -or
+if ($staticIntegratedTestCount -ne 595 -or
     $logicalRepeatTestCount -ne 31 -or
     $physicalLatchTestCount -ne 6 -or
     $repeatPolicyTestCount -ne 4 -or
-    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 634 -or
+    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 636 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches($smartActionBufferSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferCompatibilitySelfTests\.\w+').Count -ne 6 -or
@@ -910,7 +910,7 @@ if ($staticIntegratedTestCount -ne 593 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatPolicySelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartSprintSelfTests\.\w+').Count -ne 6 -or
     [regex]::Matches((Read-RequiredSource $smartSprintSelfTestsPath 'Smart Sprint self-tests'), '\bpublic static void\s+\w+\s*\(').Count -ne 6) {
-    throw 'Schema 53 must retain seven smart-buffer tests, six compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, six Smart Sprint tests, and the exact 634-test combined Core registry.'
+    throw 'Schema 53 must retain seven smart-buffer tests, six compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, six Smart Sprint tests, and the exact 636-test combined Core registry.'
 }
 
 # Pin the two schema-42 visual overlays and the fail-closed local map-result
@@ -937,8 +937,39 @@ $crystallineConflictMedicineKitRules = Read-RequiredSource $crystallineConflictM
 $crystallineConflictMedicineKitRenderer = Read-RequiredSource $crystallineConflictMedicineKitRendererPath 'Crystalline Conflict medicine-kit renderer'
 $crystallineConflictMedicineKitSelfTests = Read-RequiredSource $crystallineConflictMedicineKitSelfTestsPath 'Crystalline Conflict medicine-kit self-tests'
 $wolvesDenRotationWindow = Read-RequiredSource $wolvesDenRotationWindowPath 'Wolves Den rotation window'
+$normalizedCrystallineConflictPredictionService = $crystallineConflictPredictionService -replace '\s+', ' '
+$normalizedPluginPersistenceSelfTests = $pluginPersistenceSelfTests -replace '\s+', ' '
 $normalizedCrystallineConflictMedicineKitRules = $crystallineConflictMedicineKitRules -replace '\s+', ' '
 $normalizedCrystallineConflictMedicineKitRenderer = $crystallineConflictMedicineKitRenderer -replace '\s+', ' '
+
+Assert-Literals $crystallineConflictPredictionService @(
+    'internal static CrystallineConflictPredictionSnapshot Preparing(',
+    'string status = "Waiting for exact 5 + 5 roster") =>',
+    'new(true, false, false, false, false, 0.5d, 0.5d, 0, 0, [], [], status);',
+    'CrystallineConflictPredictionSnapshot.Preparing());'
+) 'Active incomplete CC preparation snapshot with no combat or live-total claims'
+if ($normalizedCrystallineConflictPredictionService -notmatch 'internal static CrystallineConflictPredictionSnapshot Preparing\( string status = "Waiting for exact 5 \+ 5 roster"\) => new\(true, false, false, false, false, 0\.5d, 0\.5d, 0, 0, \[\], \[\], status\);' -or
+    $normalizedCrystallineConflictPredictionService -notmatch 'if \(!TryFreezeRoster\(out roster\)\) \{ Volatile\.Write\( ref snapshot, CrystallineConflictPredictionSnapshot\.Preparing\(\)\); return; \}' -or
+    [regex]::Matches($crystallineConflictPredictionService, 'CrystallineConflictPredictionSnapshot\.Preparing\(\)').Count -ne 1) {
+    throw 'CC prediction must remain visibly active but incomplete while the exact preparation roster resolves, without claiming combat, final state, incomplete live totals, records, or fabricated players; the failed roster freeze must publish that preparation snapshot exactly once.'
+}
+
+Assert-Literals $pluginPersistenceSelfTests @(
+    '("CC prediction preparation snapshot stays visible without live totals", PredictionPreparationSnapshotStaysVisible),',
+    'static void PredictionPreparationSnapshotStaysVisible()',
+    'True(snapshot.IsActive, "preparation snapshot remains drawable");',
+    'False(snapshot.IsComplete, "roster is not claimed complete before exact 5 + 5 capture");',
+    'False(snapshot.HasCombatStarted, "preparation does not claim combat started");',
+    'False(snapshot.LiveTotalsIncomplete, "live combat totals remain closed during preparation");',
+    'Equal(0, snapshot.Allies.Length, "unresolved allies are not fabricated");',
+    'Equal(0, snapshot.Enemies.Length, "unresolved enemies are not fabricated");'
+) 'CC prediction preparation regression test and assertions'
+if ([regex]::Matches($pluginPersistenceSelfTests, '(?m)^\s*\("[^"]+",\s*\w+\),\s*$').Count -ne 12 -or
+    [regex]::Matches($pluginPersistenceSelfTests, '\("CC prediction preparation snapshot stays visible without live totals", PredictionPreparationSnapshotStaysVisible\),').Count -ne 1 -or
+    [regex]::Matches($pluginPersistenceSelfTests, 'static void PredictionPreparationSnapshotStaysVisible\(\)').Count -ne 1 -or
+    $normalizedPluginPersistenceSelfTests -notmatch 'static void PredictionPreparationSnapshotStaysVisible\(\) \{ var snapshot = CrystallineConflictPredictionSnapshot\.Preparing\(\); True\(snapshot\.IsActive, "preparation snapshot remains drawable"\); False\(snapshot\.IsComplete, "roster is not claimed complete before exact 5 \+ 5 capture"\); False\(snapshot\.HasCombatStarted, "preparation does not claim combat started"\); False\(snapshot\.LiveTotalsIncomplete, "live combat totals remain closed during preparation"\); Equal\(0, snapshot\.Allies\.Length, "unresolved allies are not fabricated"\); Equal\(0, snapshot\.Enemies\.Length, "unresolved enemies are not fabricated"\); \}') {
+    throw 'The exact twelve-test plugin registry must retain one CC preparation-snapshot regression test proving active/incomplete/pre-combat/no-live-total state and no fabricated roster rows.'
+}
 
 Assert-Literals $crystallineConflictMedicineKitRules @(
     'public const float MatchDurationSeconds = 300f;',
@@ -1882,6 +1913,8 @@ Assert-Literals $smartActionProtectionRules @(
     'NinjaSeitonProtectionStatusCatalog.UndeadRedemptionStatusId',
     'SmartActionAttackShape.DirectSingleTarget',
     'SmartActionAttackShape.TargetCenteredCircle',
+    'public static bool IsDirectCrowdControlUtilityTargetSafe(',
+    '~SmartActionProtectionKind.Invulnerability',
     '[Flags]',
     'Covered = 4,',
     'Invulnerability = 8,',
@@ -2174,14 +2207,17 @@ if ([regex]::Matches($normalizedSmartActionRuntime, 'SmartActionProtectionRules\
     $normalizedSmartActionRuntime -notmatch 'SmartActionProtectionRules\.ClassifyAttackShape\( action\.EffectRange, action\.CastType\)' -or
     [regex]::Matches($normalizedSmartActionRuntime, 'CanSmartActionTargetGuard\(resolvedActionId, action\)').Count -ne 4 -or
     [regex]::Matches($normalizedSmartActionRuntime, 'smartActionGuardBypassActions\.Contains\(resolvedActionId\)').Count -ne 1 -or
-    $normalizedSmartActionRuntime -notmatch 'var actionIgnoresGuard = CanSmartActionTargetGuard\(resolvedActionId, action\);.*?var protectionSafe = IsSmartActionProtectionSafe\( resolvedActionId, local, attackShape, canonicalEnemy, action\.EffectRange, protectedActors, actionIgnoresGuard\).*?var finalProtectionSafe = currentEnemy is not null && TryBuildSmartActionProtectionSnapshot\(.*?IsSmartActionProtectionSafe\( resolvedActionId, local, attackShape, new CanonicalEnemy\(intent\.EnemySlot, currentEnemy\), action\.EffectRange, finalProtectedActors, actionIgnoresGuard\)' -or
+    $normalizedSmartActionRuntime -notmatch 'var actionIgnoresGuard = CanSmartActionTargetGuard\(resolvedActionId, action\); var isDirectCrowdControlUtility = heldActionSelection && resolvedActionId == BardRepellingShotRules\.RepellingShotActionId;.*?var protectionSafe = IsSmartActionProtectionSafe\( resolvedActionId, local, attackShape, canonicalEnemy, action\.EffectRange, protectedActors, actionIgnoresGuard, allowDamageOnlyInvulnerabilityForCcUtility: isDirectCrowdControlUtility\) && \(!isDirectCrowdControlUtility \|\| IsExactCrowdControlUtilityTargetStatusSafe\( resolvedActionId, enemy\)\);.*?var finalProtectionSafe = currentEnemy is not null && TryBuildSmartActionProtectionSnapshot\(.*?IsSmartActionProtectionSafe\( resolvedActionId, local, attackShape, new CanonicalEnemy\(intent\.EnemySlot, currentEnemy\), action\.EffectRange, finalProtectedActors, actionIgnoresGuard, allowDamageOnlyInvulnerabilityForCcUtility: isDirectCrowdControlUtility\) && \(!isDirectCrowdControlUtility \|\| IsExactCrowdControlUtilityTargetStatusSafe\( resolvedActionId, currentEnemy\)\)' -or
     $normalizedSmartActionRuntime -notmatch 'private bool CanSmartActionTargetGuard\( uint resolvedActionId, GameAction action\) => !SmartActionMovementGuardBypassRules\.IsGuardBlockedCcMovement\(resolvedActionId\) && \(smartActionGuardBypassActions\.Contains\(resolvedActionId\) \|\| \(action\.RowId == resolvedActionId.*?SmartActionMovementGuardBypassRules\.AllowsGuardTarget\( action\.ClassJob\.RowId, resolvedActionId\).*?action\.ActionCategory\.RowId is 3 or 4.*?action\.AffectsPosition\)\);' -or
-    $normalizedSmartActionRuntime -notmatch 'private bool IsSmartActionProtectionSafe\(.*?SamuraiSmartActionCastRules\.IsOgiNamikiriConeAction\(resolvedActionId\) && samuraiSmartActionCastsMetadataVerified.*?SamuraiSmartActionCastRules\.IsOgiNamikiriProtectionSafe\( localPlayer\.Position, targetGeometry, effectRange, protectedActors, actionIgnoresGuard\).*?return SmartActionProtectionRules\.IsActionProtectionSafe\( attackShape, targetGeometry, effectRange, protectedActors, actionIgnoresGuard\);' -or
+    $normalizedSmartActionRuntime -notmatch 'private bool IsSmartActionProtectionSafe\( uint resolvedActionId, IPlayerCharacter localPlayer, SmartActionAttackShape attackShape, SmartActionActorGeometry targetGeometry, float effectRange, IReadOnlyList<SmartActionProtectedActor> protectedActors, bool actionIgnoresGuard, bool allowDamageOnlyInvulnerabilityForCcUtility = false\).*?if \(allowDamageOnlyInvulnerabilityForCcUtility\).*?IsDirectCrowdControlUtilityTargetSafe\( targetGeometry, protectedActors\);.*?SamuraiSmartActionCastRules\.IsOgiNamikiriConeAction\(resolvedActionId\) && samuraiSmartActionCastsMetadataVerified.*?SamuraiSmartActionCastRules\.IsOgiNamikiriProtectionSafe\( localPlayer\.Position, targetGeometry, effectRange, protectedActors, actionIgnoresGuard\).*?return SmartActionProtectionRules\.IsActionProtectionSafe\( attackShape, targetGeometry, effectRange, protectedActors, actionIgnoresGuard\);' -or
     $normalizedSmartActionRuntime -notmatch 'protectionKind \|= exactKind; continue;.*?protectionKind \|= exactKind;' -or
-    [regex]::Matches($normalizedSmartActionRuntime, 'ClassifySmartActionProtectionStatus\(status\.StatusId\)').Count -ne 2 -or
+    [regex]::Matches($normalizedSmartActionRuntime, 'ClassifySmartActionProtectionStatus\(status\.StatusId\)').Count -ne 3 -or
     $normalizedSmartActionRuntime -notmatch 'private SmartActionProtectionKind ClassifySmartActionProtectionStatus\( uint statusId\) => statusId == SmartActionProtectionRules\.ChitenStatusId \? SmartActionProtectionKind\.Chiten : smartActionProtectionStatuses\.Classify\(statusId\);' -or
     $normalizedSmartActionRuntime -notmatch '!chitenMetadataVerified && \(jobId == EnemyCombatConstants\.SamuraiJobId \|\| jobId == 0\) \? SmartActionProtectionKind\.Chiten' -or
     $normalizedSmartActionRuntime -notmatch 'if \(exactKind == SmartActionProtectionKind\.Chiten\).*?jobId != EnemyCombatConstants\.SamuraiJobId.*?!\(!chitenMetadataVerified && jobId == 0\).*?return false;' -or
+    $normalizedSmartActionRuntime -notmatch 'private bool IsExactCrowdControlUtilityTargetStatusSafe\( uint resolvedActionId, IPlayerCharacter target\).*?ccImmunityBrake\.VerifiedActionIds\.Contains\(resolvedActionId\).*?CcImmunityBrakeActionCatalog\.TryGet\( BardRepellingShotRules\.BardJobId, resolvedActionId, out var definition\).*?ccImmunityBrake\.VerifiedStatusIds\.Contains\(status\.StatusId\).*?CcImmunityBrakeActionCatalog\.IsBlockerStatus\( definition\.BlockerFamily, status\.StatusId, targetJobId\).*?return false;.*?return true;' -or
+    $normalizedSmartActionRuntime -notmatch 'if \(ShouldVetoExactAutomaticSmartActionAtFinalBoundary\( actionType, actionId, forwardedTargetId, mode\)\) \{ return false; \}.*?var exactAutomaticScope = exactAutomaticActionBoundaryScope;' -or
+    $normalizedSmartActionRuntime -notmatch 'private bool ShouldVetoExactAutomaticSmartActionAtFinalBoundary\(.*?scope\.Intent\.RequiresSmartActionProtectionRecheck.*?TryValidateExactHeldSmartActionTarget\( actionId, targetId, expectedSlot: 0, expectedTarget: default, out _, out _\).*?context != SupportedPvPContext\.WolvesDen.*?actionId != BardRepellingShotRules\.RepellingShotActionId.*?DarkKnightWolvesDenCurrentTargetResolver\.TryResolveExactCurrentHardTarget\(.*?IsExactCrowdControlUtilityTargetStatusSafe\(actionId, player\).*?protectionKind & ~SmartActionProtectionKind\.Invulnerability' -or
     $normalizedSmartActionRuntime -notmatch 'forwardedTargetId = TryResolveSmartTargetRedirect\( thisPtr, actionType, actionId, mode, targetId, smartToken, heldActionSelection: false, out var rewritten, out var smartWinnerSelected, out var selectedSlot, out var reason\);.*?useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId,' -or
     $normalizedSmartActionRuntime -notmatch 'private ulong TryResolveSmartTargetRedirect\(.*?bool heldActionSelection, out bool rewritten, out bool smartWinnerSelected,.*?smartWinnerSelected = true;.*?var frozenIntentStillValid = spatialChaseSelection.*?if \(!frozenIntentStillValid\).*?rewritten = true; selectedSlot = intent\.EnemySlot;.*?return intent\.Target\.GameObjectId;' -or
     $normalizedSmartActionRuntime -notmatch 'private bool TryEvaluateExactSmartActionTargetProtection\(.*?if \(context == SupportedPvPContext\.CrystallineConflict\).*?exactMatches\.Length != 1.*?IsSmartActionProtectionSafe\(.*?canonicalTargetId = target\.Player\.GameObjectId;.*?SmartActionContextRules\.CanInspectExactVisibleTargetTestFallback\( context, configuration\.EnableWolvesDenTesting, combatPriorityMode: true, attackShape\).*?TryResolveExactCurrentHardTarget\(.*?TryBuildWolvesDenSmartActionProtectionSnapshot\( localPlayer, wolvesTarget, targetGeometry, attackShape, protectionKind, out var wolvesProtectedActors\).*?IsSmartActionProtectionSafe\(' -or
@@ -2217,6 +2253,7 @@ foreach ($method in @(
     'DirectAndTargetCircleSafetyAreExact',
     'UnsupportedShapesAndInvalidGeometryFailClosed',
     'ProtectedCandidatesCannotWinOrReplaceFrozenIntent',
+    'DirectCrowdControlUtilityAllowsOnlyDamageInvulnerability',
     'GuardIgnoringActionsBypassOnlyGuard',
     'SnapshotCompletenessMatchesAttackGeometry'
 )) {
@@ -2231,9 +2268,9 @@ foreach ($method in @(
     Assert-Literals $smartActionSafetyLeaseSelfTests @("public static void $method()") "Smart Action fallback lease self-test $method"
     Assert-Literals $smartActionTestProgram @("SmartActionSafetyLeaseSelfTests.$method") "Smart Action fallback lease test registration $method"
 }
-if ([regex]::Matches($smartActionTestProgram, '\bSmartActionProtectionSelfTests\.\w+').Count -ne 7 -or
+if ([regex]::Matches($smartActionTestProgram, '\bSmartActionProtectionSelfTests\.\w+').Count -ne 8 -or
     [regex]::Matches($smartActionTestProgram, '\bSmartActionSafetyLeaseSelfTests\.\w+').Count -ne 3) {
-    throw 'All seven Smart Action protection tests and all three exact-fallback lease tests must be independently registered.'
+    throw 'All eight Smart Action protection tests and all three exact-fallback lease tests must be independently registered.'
 }
 foreach ($allowed in $allowedUnsafe) {
     if (-not (Test-Path -LiteralPath $allowed -PathType Leaf)) {
@@ -5146,8 +5183,8 @@ if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
     [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 11 -or
     [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 11 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 593) {
-    throw 'All four shared protection-end tests, all eleven SAM reactive tests, and the exact 593-test static Core registry before the appended repeat-policy suites must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 595) {
+    throw 'All four shared protection-end tests, all eleven SAM reactive tests, and the exact 595-test static Core registry before the appended repeat-policy suites must remain pinned.'
 }
 Assert-Literals $samuraiReactiveRuntimeRules @(
     'public static bool IsExactCurrentOwnSourceKuzushi(',
@@ -7106,15 +7143,16 @@ Assert-Literals $settingsActions @(
     "Auto-Guard's separate protection from other actions."
 ) 'Visible independent Guard repeat-protection setting and scope copy'
 if ($autoGuardProtectionRules -match '\b(?:UseAction|UseActionLocation|ActionManager|IPlayerCharacter|HookFromAddress|ITargetManager|TargetManager|SetTarget|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b' -or
-    $normalizedAutoGuardProtectionRules -notmatch 'public static bool ShouldBlock\(GuardRepeatProtectionObservation observation\) => observation\.RuntimeEnabled && observation\.IsSupportedPvpContext && observation\.ExactGuardRequest && observation\.ExactOwnGuardAttemptObserved && observation\.OwnGuardAttemptAtMilliseconds >= 0 && observation\.NowMilliseconds >= observation\.OwnGuardAttemptAtMilliseconds && observation\.NowMilliseconds - observation\.OwnGuardAttemptAtMilliseconds < ProtectionMilliseconds;' -or
+    $normalizedAutoGuardProtectionRules -notmatch 'public static bool ShouldBlock\(GuardRepeatProtectionObservation observation\) => observation\.RuntimeEnabled && observation\.IsSupportedPvpContext && observation\.ExactGuardRequest && observation\.ExactLocalGuardActive && observation\.ExactOwnGuardAttemptObserved && observation\.OwnGuardAttemptAtMilliseconds >= 0 && observation\.NowMilliseconds >= observation\.OwnGuardAttemptAtMilliseconds && observation\.NowMilliseconds - observation\.OwnGuardAttemptAtMilliseconds < ProtectionMilliseconds;' -or
     $normalizedAutoGuardProtectionRules -notmatch 'if \(!previous\.IsArmed\).*?if \(observation\.HardReset\).*?if \(observation\.NowMilliseconds < 0 \|\| observation\.NowMilliseconds < previous\.ConfirmedAtMilliseconds\).*?if \(!observation\.RuntimeEnabled\).*?if \(observation\.TerritoryId != previous\.TerritoryId\).*?if \(!observation\.LocalPlayerLive\).*?if \(observation\.LocalPlayer != previous\.LocalPlayer\).*?if \(observation\.NowMilliseconds >= previous\.MaximumExpiresAtMilliseconds\).*?if \(!observation\.ExactGuardActive\).*?if \(observation\.IsExplicitGuardReuse\) return Released\(AutoGuardProtectionDecisionReason\.ExplicitGuardReuse\);.*?observation\.ActionCanCancelGuard') {
-    throw 'Guard-repeat Core must block only exact own Guard reuse for 1000 ms from the accepted attempt, including the status-propagation gap, while Auto-Guard ownership remains pure and bounded.'
+    throw 'Guard-repeat Core must fail open for provisional or ambiguous attempts and block only exact own Guard reuse while the real Guard status is visibly active; Auto-Guard ownership remains pure and bounded.'
 }
 $autoGuardProtectionTestMethods = @(
     'AutoGuardProtectionOwnershipRequiresTheExactConfirmedAttempt',
     'AutoGuardProtectionStartsOnlyAfterExactStatus',
     'AutoGuardProtectionHasExplicitAndBoundedReleasePaths',
     'GuardRepeatProtectionToggleIsDefaultOnAndIndependent',
+    'UnconfirmedGuardAttemptCannotBlockImmediateRetry',
     'AutoGuardProtectionContextDriftAlwaysFailsOpen'
 )
 foreach ($method in $autoGuardProtectionTestMethods) {
@@ -12165,18 +12203,17 @@ $whatsNewWindow = Read-RequiredSource $whatsNewWindowPath 'What''s New window'
 $releaseNotesContentRules = Read-RequiredSource $releaseNotesContentRulesPath 'Release-note content rules'
 $releaseNotesContentSelfTests = Read-RequiredSource $releaseNotesContentSelfTestsPath 'Release-note content self-tests'
 Assert-Literals $projectFile @(
-    '<Version>0.44.0.1</Version>',
-    '<AssemblyVersion>0.44.0.1</AssemblyVersion>',
-    '<FileVersion>0.44.0.1</FileVersion>'
-) 'v0.44.0.1 project version'
+    '<Version>0.44.0.2</Version>',
+    '<AssemblyVersion>0.44.0.2</AssemblyVersion>',
+    '<FileVersion>0.44.0.2</FileVersion>'
+) 'v0.44.0.2 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.44.0.1";',
-    'Smart Action works again in CC and Wolves'' Den, including harmful casts and no-target target choice.',
-    'Held helpers keep their chosen action and target briefly after key release, so Paean, Silent Nocturne, and Miracle get another safe chance.',
-    'Optional BRD Mannstopper fires near an enemy and may cancel only Powerful Shot.',
-    'CC Win Prediction appears during preparation; live match numbers begin only when fighting starts.',
-    'Old PvpStats import works from Wolves'' Den while out of combat; nothing is uploaded.'
-) 'v0.44.0.1 version-acknowledged player-facing What''s New content'
+    'private const string CurrentReleaseVersion = "0.44.0.2";',
+    'Guard works normally again; repeat protection starts only after Guard is visibly active.',
+    'BRD Mannstopper avoids Chiten, Guard, Purify protection, Meikyo, and other real CC immunity.',
+    'Mannstopper may still target PLD or DRK damage-only invulnerability because their CC still works.',
+    'CC Win Prediction stays visible during preparation while the exact 5v5 roster loads.'
+) 'v0.44.0.2 version-acknowledged player-facing What''s New content'
 Assert-Literals $releaseNotesContentRules @(
     'public const int MaximumBulletCount = 5;',
     'if (bullets is null) return [];',
@@ -12229,24 +12266,23 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.44.0.1 plugin manifest metadata'
+) 'v0.44.0.2 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.44.0.1"',
-    'Fixed Smart Action in CC and Wolves'' Den',
-    'added optional BRD Mannstopper',
-    'shows CC prediction during preparation',
-    'repaired the local PvpStats import.',
-    'Nothing is uploaded.',
+    '"AssemblyVersion": "0.44.0.2"',
+    'Hotfix: Guard can activate normally again.',
+    'BRD Mannstopper now avoids Chiten and real CC immunity',
+    'allowing PLD/DRK damage-only invulnerability.',
+    'CC Win Prediction stays visible during preparation',
     'Automated checks are separate from live in-game confirmation.',
     '"IsHide": false',
     '"IsTestingExclusive": false',
     '"DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"',
     '"DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"',
     '"DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"'
-) 'v0.44.0.1 custom-repository metadata'
+) 'v0.44.0.2 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -12601,7 +12637,11 @@ Assert-Literals $normalizedReadme @(
     'release-independent tap-to-land wait',
     'protects active PvP Sprint from a second Sprint press by default',
     'adds the separate optional idle Smart Sprint.',
-    'For the current source, the exact 634-test Core registry, eleven plugin self-tests, and source checks pin configuration schema 53',
+    'Version 0.44.0.2 fixes a Guard regression',
+    'BRD **Mannstopper** keeps Smart Action ranking but avoids Chiten, Guard, Purify protection, Meikyo, Paean, and other real CC immunity.',
+    'PLD and DRK damage-only invulnerability remains a valid Mannstopper target',
+    'The CC prediction panel now stays visible during preparation while the exact 5v5 roster is still loading.',
+    'For the current source, the exact 636-test Core registry, twelve plugin self-tests, and source checks pin configuration schema 53',
     'the independent default-off automatic basic-shot cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
@@ -12616,8 +12656,13 @@ Assert-Literals $normalizedReadme @(
     'constructs fifteen reviewed request shapes across seventeen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.44.0.1 Smart Action, held-helper, preparation prediction, import, and retained safety history'
+) 'v0.44.0.2 Guard, Mannstopper, preparation prediction, and retained safety history'
 Assert-Literals $normalizedChangelog @(
+    '## 0.44.0.2',
+    'Fixed Guard being swallowed by its own one-second repeat protection.',
+    'BRD Mannstopper still uses Smart Action target ranking',
+    'PLD and DRK damage-only invulnerability remains targetable by Mannstopper',
+    'The CC Win Prediction panel remains visible during match preparation',
     '## 0.44.0.1',
     'Fixed `/smartaction` in Crystalline Conflict and Wolves'' Den.',
     'Added a default-off **BRD Mannstopper** helper.',
@@ -14443,4 +14488,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 53 and the exact 634-test Core registry. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, PLD Guardian, Recuperate, then Auto-Guard own priority in that order. Guardian requires exact Guard and Guardian metadata/readiness through the final boundary: <=20% is unconditional, <=40% needs fresh exact 2+ focus, and <=50% needs fresh exact 3+ focus. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-actor reservation from either a certified direct standard hotbar press, an exact lease/generation-backed /smartaction visible-<t> fallback, or a target-independent CC Smart Action S1-S5 winner; only the first two bind the visible hard target. Queue stays rejected. Release cannot cancel it; new action, context, Guard, CC, identity, protection, or exact-action/actor drift does, only a post-revalidated clean native range/LoS false may retry, accepted or ambiguous outcomes are terminal, and it never reranks or writes target/facing. /seitonfar remains reachable-only. Enabled Wolves Den Smart Action may resolve only FFXIV's native zero/default selected-target carrier through the exact current duel opponent or reviewed dummy, and every current damaging non-ground-target shape shares the same closed admission and final-protection path. Current-name semantic protection metadata tolerates removed historical duplicate rows while still requiring Guard, Covered, Hallowed Ground, and Undead Redemption. Metadata-verified Shield Smite and Chain Stratagem may select Guard; other primary protections remain candidate-local blockers and only incidental/global Chiten vetoes AoE. Every exact Smart Action-owned harmful non-ground-target PvP cast uses reachable S1-S5 ranking only in CC; in enabled Wolves Den it preserves the exact visible duel/dummy target through the same closed protection path. Exact Near Help-owned friendly PvP casts use one-shot current ally ranking after atomic exact-generation consumption, while Near Assist retains authored-target anti-spin. A Smart Action fallback transfers only an exactly consumed live token into the same bounded reservation. Auto-Zantetsuken uses an identity/context-bound 500-ms no-target collection from the first exact own-source Kuzushi, ranks the fresh live cluster only after maturity, and rechecks collection, frozen identity, current Kuzushi, protection, Bind, readiness, range, and line of sight at the final boundary. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not reset it, Guard/CC/cast/priority/native waits do not spend, and automatic Sprint/replay cannot rearm themselves. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."
+Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 53 and the exact 636-test Core registry. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, PLD Guardian, Recuperate, then Auto-Guard own priority in that order. Guardian requires exact Guard and Guardian metadata/readiness through the final boundary: <=20% is unconditional, <=40% needs fresh exact 2+ focus, and <=50% needs fresh exact 3+ focus. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-actor reservation from either a certified direct standard hotbar press, an exact lease/generation-backed /smartaction visible-<t> fallback, or a target-independent CC Smart Action S1-S5 winner; only the first two bind the visible hard target. Queue stays rejected. Release cannot cancel it; new action, context, Guard, CC, identity, protection, or exact-action/actor drift does, only a post-revalidated clean native range/LoS false may retry, accepted or ambiguous outcomes are terminal, and it never reranks or writes target/facing. /seitonfar remains reachable-only. Enabled Wolves Den Smart Action may resolve only FFXIV's native zero/default selected-target carrier through the exact current duel opponent or reviewed dummy, and every current damaging non-ground-target shape shares the same closed admission and final-protection path. Current-name semantic protection metadata tolerates removed historical duplicate rows while still requiring Guard, Covered, Hallowed Ground, and Undead Redemption. Metadata-verified Shield Smite and Chain Stratagem may select Guard; other primary protections remain candidate-local blockers and only incidental/global Chiten vetoes AoE. Every exact Smart Action-owned harmful non-ground-target PvP cast uses reachable S1-S5 ranking only in CC; in enabled Wolves Den it preserves the exact visible duel/dummy target through the same closed protection path. Exact Near Help-owned friendly PvP casts use one-shot current ally ranking after atomic exact-generation consumption, while Near Assist retains authored-target anti-spin. A Smart Action fallback transfers only an exactly consumed live token into the same bounded reservation. Auto-Zantetsuken uses an identity/context-bound 500-ms no-target collection from the first exact own-source Kuzushi, ranks the fresh live cluster only after maturity, and rechecks collection, frozen identity, current Kuzushi, protection, Bind, readiness, range, and line of sight at the final boundary. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not reset it, Guard/CC/cast/priority/native waits do not spend, and automatic Sprint/replay cannot rearm themselves. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."

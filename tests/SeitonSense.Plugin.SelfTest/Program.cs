@@ -8,6 +8,7 @@ using SeitonSense.Plugin.Services;
 
 var tests = new (string Name, Action Run)[]
 {
+    ("CC prediction preparation snapshot stays visible without live totals", PredictionPreparationSnapshotStaysVisible),
     ("PvpStats import cutoff keeps a five-minute no-overlap margin", ImportCutoffUsesFirstNativeEpoch),
     ("PvpStats import rejects every out-of-bound timestamp atomically", ImportBoundariesAreAtomic),
     ("PvpStats merge rejects a stale store generation", StaleGenerationCannotMerge),
@@ -20,6 +21,18 @@ var tests = new (string Name, Action Run)[]
     ("full imported player history evicts deterministically for one native match", FullImportStillAcceptsNativeMatch),
     ("repeated rejected Guard spam preserves the original attempt", RejectedGuardSpamRestoresOriginalAttempt),
 };
+
+static void PredictionPreparationSnapshotStaysVisible()
+{
+    var snapshot = CrystallineConflictPredictionSnapshot.Preparing();
+
+    True(snapshot.IsActive, "preparation snapshot remains drawable");
+    False(snapshot.IsComplete, "roster is not claimed complete before exact 5 + 5 capture");
+    False(snapshot.HasCombatStarted, "preparation does not claim combat started");
+    False(snapshot.LiveTotalsIncomplete, "live combat totals remain closed during preparation");
+    Equal(0, snapshot.Allies.Length, "unresolved allies are not fabricated");
+    Equal(0, snapshot.Enemies.Length, "unresolved enemies are not fabricated");
+}
 
 try
 {

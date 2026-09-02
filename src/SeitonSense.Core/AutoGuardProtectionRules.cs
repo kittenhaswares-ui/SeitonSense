@@ -27,10 +27,9 @@ public readonly record struct GuardRepeatProtectionObservation(
 
 /// <summary>
 /// Suppresses only an exact second local Guard request during the first second
-/// after the original request was accepted at the native boundary. The short
-/// protection starts before status propagation so a fast second press cannot
-/// cancel Guard during the network/UI gap. Other actions are deliberately
-/// outside this policy.
+/// after the original request crossed the native boundary and exact local
+/// Guard became visible. A provisional or ambiguous attempt always fails open;
+/// other actions are deliberately outside this policy.
 /// </summary>
 public static class GuardRepeatProtectionRules
 {
@@ -41,6 +40,7 @@ public static class GuardRepeatProtectionRules
         observation.RuntimeEnabled &&
         observation.IsSupportedPvpContext &&
         observation.ExactGuardRequest &&
+        observation.ExactLocalGuardActive &&
         observation.ExactOwnGuardAttemptObserved &&
         observation.OwnGuardAttemptAtMilliseconds >= 0 &&
         observation.NowMilliseconds >= observation.OwnGuardAttemptAtMilliseconds &&

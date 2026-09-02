@@ -423,7 +423,8 @@ internal sealed unsafe class BardRepellingShotProbe
                 ActionType.Action,
                 BardRepellingShotRules.RepellingShotActionId,
                 intent.Target.GameObjectId,
-                ActionManager.UseActionMode.None),
+                ActionManager.UseActionMode.None,
+                RequiresSmartActionProtectionRecheck: true),
             () =>
             {
                 try

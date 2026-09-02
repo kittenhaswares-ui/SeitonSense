@@ -127,6 +127,31 @@ public static class SmartActionProtectionRules
     }
 
     /// <summary>
+    /// A reviewed single-target crowd-control utility may still affect an
+    /// actor whose protection prevents only damage. Chiten, Guard, and Cover
+    /// remain blocking; PLD/DRK damage-only invulnerability does not. The
+    /// separate CC-immunity catalog remains authoritative for Resilience and
+    /// job-specific immunity such as Meikyo Shisui.
+    /// </summary>
+    public static bool IsDirectCrowdControlUtilityTargetSafe(
+        SmartActionActorGeometry target,
+        IReadOnlyList<SmartActionProtectedActor>? protectedActors)
+    {
+        if (!TryValidateInputs(target, protectedActors, out var actors)) return false;
+
+        foreach (var protectedActor in actors)
+        {
+            var blockingKind = protectedActor.Kind &
+                               ~SmartActionProtectionKind.Invulnerability;
+            if (blockingKind == SmartActionProtectionKind.None) continue;
+            if (SharesSlotOrEitherId(target, protectedActor.Geometry))
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// A target-centered circle may never select a protected primary actor.
     /// Among incidental actors, only Chiten is dangerous to the caller and
     /// therefore vetoes a candidate when the circle reaches its hitbox. Guard,

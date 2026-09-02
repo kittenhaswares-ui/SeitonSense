@@ -332,10 +332,10 @@ internal static class DefensiveUtilitySelfTests
             GuardRepeatProtectionRules.ShouldBlock(
                 exactRepeat with { ExactGuardRequest = false }),
             "a different action is never blocked by the repeat-only policy");
-        True(
+        False(
             GuardRepeatProtectionRules.ShouldBlock(
                 exactRepeat with { ExactLocalGuardActive = false }),
-            "an accepted native request is protected before Guard status propagates");
+            "Guard repeat protection fails open until exact Guard is active");
         False(
             GuardRepeatProtectionRules.ShouldBlock(
                 exactRepeat with { ExactOwnGuardAttemptObserved = false }),
@@ -420,6 +420,26 @@ internal static class DefensiveUtilitySelfTests
         True(
             ownedAutoGuard.ShouldBlockAction,
             "the separate automatic-Guard all-action protection remains active");
+    }
+
+    public static void UnconfirmedGuardAttemptCannotBlockImmediateRetry()
+    {
+        var immediateRetryAfterAmbiguousAttempt = new GuardRepeatProtectionObservation(
+            RuntimeEnabled: true,
+            IsSupportedPvpContext: true,
+            ExactGuardRequest: true,
+            ExactLocalGuardActive: false,
+            ExactOwnGuardAttemptObserved: true,
+            OwnGuardAttemptAtMilliseconds: 1_000,
+            NowMilliseconds: 1_001);
+
+        False(
+            GuardRepeatProtectionRules.ShouldBlock(immediateRetryAfterAmbiguousAttempt),
+            "an ambiguous or unconfirmed Guard attempt cannot suppress the immediate retry");
+        True(
+            GuardRepeatProtectionRules.ShouldBlock(
+                immediateRetryAfterAmbiguousAttempt with { ExactLocalGuardActive = true }),
+            "the same recent attempt blocks only after exact local Guard becomes active");
     }
 
     public static void AutoGuardProtectionContextDriftAlwaysFailsOpen()
