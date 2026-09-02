@@ -132,7 +132,7 @@ internal sealed class EmergencyPurifyProbe
             if (!TryGetTextInputState(out textInputActive)) textInputActive = true;
         }
         var frozenKeyStillDown = state.FrozenKeyCode > 0 &&
-                                 inputFrame.IsGameplayKeyPhysicallyDown(
+                                 inputFrame.IsFrozenGameplayKeyConsentValid(
                                      (VirtualKey)state.FrozenKeyCode);
 
         var actionStructurallyReady = false;
@@ -206,7 +206,7 @@ internal sealed class EmergencyPurifyProbe
         // Purify is waiting on a known local/native boundary. Lower helpers
         // cannot be useful while that CC remains the higher-priority episode.
         var exactConsentStillDown = state.FrozenKeyCode > 0 &&
-                                    inputFrame.IsGameplayKeyPhysicallyDown(
+                                    inputFrame.IsFrozenGameplayKeyConsentValid(
                                         (VirtualKey)state.FrozenKeyCode);
         var automaticStatusIntent =
             EmergencyPurifyBufferRules.IsAutomaticStatusTrigger(
@@ -447,7 +447,7 @@ internal sealed class EmergencyPurifyProbe
                     ninjaShukuchiHiddenStatuses)) ||
             (!automaticStatusTrigger &&
              (expectedKeyCode <= 0 ||
-              !inputFrame.IsGameplayKeyPhysicallyDown(
+              !inputFrame.IsFrozenGameplayKeyConsentValid(
                   (VirtualKey)expectedKeyCode))))
         {
             // No native UseAction boundary was crossed. Keep the exact CC
@@ -633,7 +633,7 @@ internal sealed class EmergencyPurifyProbe
             EmergencyPurifyBufferRules.IsAutomaticStatusTrigger(
                 currentState.FrozenInputTrigger);
         var physicalConsentValid = currentState.FrozenKeyCode > 0 &&
-                                   inputFrame.IsGameplayKeyPhysicallyDown(
+                                   inputFrame.IsFrozenGameplayKeyConsentValid(
                                        (VirtualKey)currentState.FrozenKeyCode);
         if (!configurationEnabled ||
             !isSupportedPvPContext ||

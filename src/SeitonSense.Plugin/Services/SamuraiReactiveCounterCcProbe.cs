@@ -2003,7 +2003,7 @@ internal sealed class SamuraiReactiveCounterCcProbe
         if (gameplayKeyToken <= 0) return false;
         var key = (VirtualKey)gameplayKeyToken;
         return IsExactVirtualKey(key) &&
-               inputFrame.IsGameplayKeyGenerationEligible(key);
+               inputFrame.IsFrozenGameplayKeyConsentValid(key);
     }
 
     private static bool IsExactVirtualKey(VirtualKey key) =>
@@ -2204,7 +2204,7 @@ internal sealed class SamuraiReactiveCounterCcProbe
 
         var frozenKey = (VirtualKey)frozenKeyCode;
         if (!IsExactVirtualKey(frozenKey) ||
-            !inputFrame.IsGameplayKeyGenerationEligible(frozenKey))
+            !inputFrame.IsFrozenGameplayKeyConsentValid(frozenKey))
         {
             return null;
         }

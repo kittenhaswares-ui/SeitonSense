@@ -1,5 +1,6 @@
 using Dalamud.Game.ClientState.Keys;
 using Dalamud.Plugin.Services;
+using SeitonSense.Core;
 
 namespace SeitonSense.Plugin.Services;
 
@@ -20,15 +21,26 @@ internal sealed class EmergencyActionInputFrame
 {
     private readonly GameInputContextProbe? probe;
     private readonly Action? onConsumed;
+    private readonly bool heldHelperReservationEnabled;
+    private readonly int heldHelperReservationWindowMilliseconds;
+    private readonly long observedAtMilliseconds;
 
     internal EmergencyActionInputFrame(
         GameInputContextSnapshot snapshot,
         GameInputContextProbe? probe,
-        Action? onConsumed = null)
+        Action? onConsumed = null,
+        bool heldHelperReservationEnabled = false,
+        int heldHelperReservationWindowMilliseconds =
+            HeldActionRetryRules.DefaultLatencyResponseWindowMilliseconds,
+        long observedAtMilliseconds = -1)
     {
         Snapshot = snapshot;
         this.probe = probe;
         this.onConsumed = onConsumed;
+        this.heldHelperReservationEnabled = heldHelperReservationEnabled;
+        this.heldHelperReservationWindowMilliseconds =
+            heldHelperReservationWindowMilliseconds;
+        this.observedAtMilliseconds = observedAtMilliseconds;
     }
 
     internal GameInputContextSnapshot Snapshot { get; }
@@ -69,6 +81,16 @@ internal sealed class EmergencyActionInputFrame
         Snapshot.ProbeSucceeded &&
         !Snapshot.IsTextInputActive &&
         probe?.IsGameplayKeyGenerationEligible(key) == true;
+
+    internal bool IsFrozenGameplayKeyConsentValid(VirtualKey key) =>
+        Snapshot.ProbeSucceeded &&
+        !Snapshot.IsTextInputActive &&
+        probe?.IsFrozenGameplayKeyConsentValid(
+            key,
+            heldHelperReservationEnabled,
+            heldHelperReservationWindowMilliseconds,
+            observedAtMilliseconds,
+            Snapshot.IsTextInputActive) == true;
 }
 
 /// <summary>
@@ -132,18 +154,29 @@ internal sealed class EmergencyActionInputCoordinator
         bool samuraiZantetsukenHeldEnabled = false,
         bool astrologianHarmonicOrbisHeldEnabled = false,
         bool redMageGuardEngageHeldEnabled = false,
-        bool smartSprintHeldEnabled = false)
+        bool smartSprintHeldEnabled = false,
+        bool heldHelperReservationEnabled = false,
+        int heldHelperReservationWindowMilliseconds =
+            HeldActionRetryRules.DefaultLatencyResponseWindowMilliseconds,
+        long nowMilliseconds = -1,
+        bool heldHelpersSuppressedByGuard = false)
     {
+        var observationMilliseconds = nowMilliseconds >= 0
+            ? nowMilliseconds
+            : Math.Max(0, Environment.TickCount64);
         if (!shouldObserve)
         {
             Reset();
             return new EmergencyActionInputFrame(
                 GameInputContextSnapshot.NotObserved,
                 null,
-                onFrameConsumed);
+                onFrameConsumed,
+                heldHelperReservationEnabled,
+                heldHelperReservationWindowMilliseconds,
+                observationMilliseconds);
         }
 
-        var input = probe.Observe();
+        var input = probe.Observe(observationMilliseconds);
         var heldOptionJustEnabled =
             (purifyHeldEnabled && !purifyHeldWasEnabled) ||
             (defensiveUtilityHeldEnabled && !defensiveUtilityHeldWasEnabled) ||
@@ -192,7 +225,10 @@ internal sealed class EmergencyActionInputCoordinator
         {
             // Preserve a same-frame down-edge as fresh intent, but never let the
             // held-level branch inherit a generation from before the opt-in.
-            probe.ConsumeHeldGameplayKeys();
+            probe.ConsumeHeldGameplayKeys(
+                input.FreshGameplayKeyPressed
+                    ? input.FreshGameplayKey
+                    : VirtualKey.NO_KEY);
             input = input with
             {
                 HeldGameplayKeyEligible = false,
@@ -202,7 +238,30 @@ internal sealed class EmergencyActionInputCoordinator
             };
         }
 
-        return new EmergencyActionInputFrame(input, probe, onFrameConsumed);
+        if (heldHelpersSuppressedByGuard)
+        {
+            // Guard is an exact held-intent boundary, not a temporary queue wait.
+            // Retire every physical generation without consuming the framework
+            // frame so automatic Purify/Recuperate remain independent.
+            probe.ConsumeHeldGameplayKeys();
+            input = input with
+            {
+                FreshGameplayKeyPressed = false,
+                FreshGameplayKey = VirtualKey.NO_KEY,
+                HeldGameplayKeyEligible = false,
+                HeldGameplayKey = VirtualKey.NO_KEY,
+                HeldMovementKeyEligible = false,
+                HeldMovementKey = VirtualKey.NO_KEY,
+            };
+        }
+
+        return new EmergencyActionInputFrame(
+            input,
+            probe,
+            onFrameConsumed,
+            heldHelperReservationEnabled,
+            heldHelperReservationWindowMilliseconds,
+            observationMilliseconds);
     }
 
     internal EmergencyActionInputFrame Observe(

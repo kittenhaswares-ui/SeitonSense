@@ -24,6 +24,7 @@ public enum HeldCastCancellationHelperKind : byte
     DarkKnightShadowbringer = 13,
     AstrologianHarmonicOrbis = 14,
     RedMageGuardEngage = 15,
+    BardRepellingShot = 16,
 }
 
 /// <summary>
@@ -53,14 +54,22 @@ public readonly record struct HeldCastCancellationRequest(
     public bool IsAutomaticRecovery =>
         IsAutomaticPurify || IsAutomaticRecuperate;
 
-    public bool RequiresFrozenKey => !IsAutomaticRecovery;
+    public bool IsAutomaticBardRepellingShot =>
+        HelperKind == HeldCastCancellationHelperKind.BardRepellingShot &&
+        HelperActionId == BardRepellingShotRules.RepellingShotActionId &&
+        FrozenKeyCode == 0;
+
+    public bool IsAutomaticKeyless =>
+        IsAutomaticRecovery || IsAutomaticBardRepellingShot;
+
+    public bool RequiresFrozenKey => !IsAutomaticKeyless;
 
     public bool IsValid =>
         HelperKind != HeldCastCancellationHelperKind.None &&
         HelperActionId != 0 &&
         LocalPlayer.IsValid &&
         Target.IsValid &&
-        (IsAutomaticRecovery || FrozenKeyCode > 0) &&
+        (IsAutomaticKeyless || FrozenKeyCode > 0) &&
         IntentEpochToken != 0;
 }
 
@@ -288,8 +297,8 @@ public static class HeldCastCancellationRules
             return HeldCastCancellationDecisionReason.ActionResourcesUnavailable;
         if (!observation.LocalPlayerIsCasting || observation.CastActionId == 0)
             return HeldCastCancellationDecisionReason.CastSignalIncomplete;
-        if (request.IsAutomaticRecovery &&
-            !AutomaticRecoveryCastIsAllowed(request, observation))
+        if (request.IsAutomaticKeyless &&
+            !AutomaticKeylessCastIsAllowed(request, observation))
         {
             return HeldCastCancellationDecisionReason
                 .AutomaticRecoveryCastNotAllowed;
@@ -312,19 +321,31 @@ public static class HeldCastCancellationRules
     /// mobile basic-shot casts. Every other automatic cast-cancel shape fails
     /// closed; physical held requests use their independent generic policy.
     /// </summary>
-    private static bool AutomaticRecoveryCastIsAllowed(
+    private static bool AutomaticKeylessCastIsAllowed(
         HeldCastCancellationRequest request,
         HeldCastCancellationObservation observation)
     {
         if (observation.CurrentLocalJobId == 0) return false;
 
-        return observation.AutomaticRecoveryBasicShotCancellationEnabled &&
-               observation.AutomaticRecoveryBasicShotMetadataVerified &&
-               AutomaticRecoveryShotCastRules
-                   .IsExactAllowedPairWithAdjustedIdentity(
-                       observation.CurrentLocalJobId,
-                       observation.CastActionId,
-                       observation.AdjustedCastActionId);
+        var exactReviewedBasicShot =
+            observation.AutomaticRecoveryBasicShotMetadataVerified &&
+            AutomaticRecoveryShotCastRules
+                .IsExactAllowedPairWithAdjustedIdentity(
+                    observation.CurrentLocalJobId,
+                    observation.CastActionId,
+                    observation.AdjustedCastActionId);
+        if (!exactReviewedBasicShot) return false;
+
+        if (request.IsAutomaticBardRepellingShot)
+        {
+            return observation.CurrentLocalJobId ==
+                   BardRepellingShotRules.BardJobId &&
+                   observation.CastActionId ==
+                   BardRepellingShotRules.PowerfulShotActionId;
+        }
+
+        return request.IsAutomaticRecovery &&
+               observation.AutomaticRecoveryBasicShotCancellationEnabled;
     }
 
     private static HeldCastCancellationDecision Observing(

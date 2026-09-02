@@ -229,6 +229,18 @@ internal static class EmergencyTeleportSelfTests
 
     public static void ValidHoldFreezesOneExactIntentAndBoundaryClaims()
     {
+        var noPhysicalDiscovery = EmergencyTeleportRules.Observe(
+            EmergencyTeleportState.Initial,
+            Observation(now: 999) with
+            {
+                HeldGameplayKeyEligible = false,
+                HeldGameplayKeyCode = 0,
+                FrozenKeyStillDown = true,
+            });
+        Equal(EmergencyTeleportDecisionKind.None, noPhysicalDiscovery.Kind, "release grace cannot discover an intent");
+        Equal(EmergencyTeleportDecisionReason.NoHeldGameplayKey, noPhysicalDiscovery.Reason, "discovery remains physical");
+        True(noPhysicalDiscovery.Intent is null, "release grace alone freezes no target");
+
         var waiting = EmergencyTeleportRules.Observe(
             EmergencyTeleportState.Initial,
             Observation(now: 1_000) with { NativeBoundaryReady = false });
@@ -244,10 +256,27 @@ internal static class EmergencyTeleportSelfTests
 
         var ready = EmergencyTeleportRules.Observe(
             waiting.NextState,
-            Observation(now: 1_001));
-        Equal(EmergencyTeleportDecisionKind.Dispatch, ready.Kind, "same frozen intent dispatches later");
+            Observation(now: 1_001) with
+            {
+                HeldGameplayKeyEligible = false,
+                HeldGameplayKeyCode = 0,
+                FrozenKeyStillDown = true,
+            });
+        Equal(EmergencyTeleportDecisionKind.Dispatch, ready.Kind, "release-reserved frozen intent dispatches later");
         Equal(FirstAlly, ready.Intent!.Value.Target, "target remains exact");
         True(ready.InputClaimed, "dispatch owns current frame");
+
+        var expiredRelease = EmergencyTeleportRules.Observe(
+            waiting.NextState,
+            Observation(now: 1_002) with
+            {
+                HeldGameplayKeyEligible = false,
+                HeldGameplayKeyCode = 0,
+                FrozenKeyStillDown = false,
+            });
+        Equal(EmergencyTeleportDecisionKind.None, expiredRelease.Kind, "expired release reservation cancels the intent");
+        Equal(EmergencyTeleportDecisionReason.ExactKeyReleased, expiredRelease.Reason, "expired release reason");
+        True(expiredRelease.Intent is null, "expired release clears exact target ownership");
 
         var higherPriority = EmergencyTeleportRules.Observe(
             waiting.NextState,
@@ -312,8 +341,13 @@ internal static class EmergencyTeleportSelfTests
 
         var committed = EmergencyTeleportRules.CommitNativeAttempt(
             decision.NextState,
-            Observation(now: 1_001));
-        True(committed.ShouldInvokeNative, "first exact commit permits one call");
+            Observation(now: 1_001) with
+            {
+                HeldGameplayKeyEligible = false,
+                HeldGameplayKeyCode = 0,
+                FrozenKeyStillDown = true,
+            });
+        True(committed.ShouldInvokeNative, "release-reserved exact commit permits one call");
         True(committed.NextState.EpisodeSpent, "commit spends before native call");
         Equal(FirstAlly, committed.Intent!.Value.Target, "commit returns only frozen target");
 
@@ -359,8 +393,13 @@ internal static class EmergencyTeleportSelfTests
         False(
             EmergencyTeleportRules.CommitNativeAttempt(
                 freshDispatch.NextState,
-                Observation(now: 2_001) with { HeldGameplayKeyCode = 0x41 }).ShouldInvokeNative,
-            "a different held key cannot satisfy the frozen intent");
+                Observation(now: 2_001) with
+                {
+                    HeldGameplayKeyEligible = false,
+                    HeldGameplayKeyCode = 0,
+                    FrozenKeyStillDown = false,
+                }).ShouldInvokeNative,
+            "invalid frozen-key consent cannot cross the native boundary");
 
         var rejectedFinalTarget = EmergencyTeleportRules.CommitNativeAttempt(
             freshDispatch.NextState,

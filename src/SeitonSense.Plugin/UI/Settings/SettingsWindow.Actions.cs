@@ -31,6 +31,10 @@ internal sealed partial class SettingsWindow
             changed |= DrawSmartRecuperateControls();
 
         ImGui.Separator();
+        if (ImGui.CollapsingHeader("BRD Mannstopper", ImGuiTreeNodeFlags.DefaultOpen))
+            changed |= DrawBardRepellingShotControls();
+
+        ImGui.Separator();
         if (ImGui.CollapsingHeader("Emergency Teleport", ImGuiTreeNodeFlags.DefaultOpen))
             changed |= DrawEmergencyTeleportControls();
 
@@ -187,6 +191,24 @@ internal sealed partial class SettingsWindow
         return changed;
     }
 
+    private bool DrawBardRepellingShotControls()
+    {
+        var changed = Checkbox(
+            "Use Mannstopper automatically when an enemy is within 10 yalms",
+            configuration.EnableBardRepellingShotProximityHelper,
+            value => configuration.EnableBardRepellingShotProximityHelper = value);
+        ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+        ImGui.TextDisabled(
+            "Default off and BRD only. Seiton chooses one exact reachable enemy with Smart Action, uses " +
+            "Mannstopper without changing your visible target, and never breaks your own Guard.");
+        ImGui.TextDisabled(
+            "If Powerful Shot is currently casting, this helper may cancel only that reviewed BRD basic shot, " +
+            "then uses Mannstopper after the cast has actually ended. It works in CC and with the Wolves' Den " +
+            "testing option; Den uses only your exact duel target or verified dummy.");
+        ImGui.PopTextWrapPos();
+        return changed;
+    }
+
     private bool DrawPressureEscapeSprintControls()
     {
         var changed = Checkbox(
@@ -289,6 +311,10 @@ internal sealed partial class SettingsWindow
             configuration.GuardOnStunPressure,
             value => configuration.GuardOnStunPressure = value);
         changed |= Checkbox(
+            "Ignore a second Guard press for 1 second (manual or automatic)",
+            configuration.ProtectOwnGuardFromRepeatPress,
+            value => configuration.ProtectOwnGuardFromRepeatPress = value);
+        changed |= Checkbox(
             "Show the Auto-Guard activation card",
             configuration.ShowAutoGuardActivationNotification,
             value => configuration.ShowAutoGuardActivationNotification = value);
@@ -310,9 +336,10 @@ internal sealed partial class SettingsWindow
             "Crystalline Conflict only and off by default. At 3+ enemies, Seiton can Purify a selected Stun and use " +
             "Guard after Resilience confirms the cleanse. The card, sound, and press protection start only after Guard " +
             "is visibly active. While it is active, Seiton blocks its other automatic actions so they cannot cancel it. " +
-            "For every own Guard, a repeated Guard press is ignored for one second; other actions are unaffected by that " +
-            "repeat-only safety. After one second you can end Guard normally. /panicshu remains an intentional emergency " +
-            "override for automatically protected Guard.");
+            "When the repeat-press option is on, a second Guard press is ignored for one second after every manual or " +
+            "automatic own Guard; other actions are unaffected by that repeat-only safety. Turning it off does not disable " +
+            "Auto-Guard's separate protection from other actions. After one second you can end Guard normally. /panicshu " +
+            "remains an intentional emergency override for automatically protected Guard.");
         ImGui.PopTextWrapPos();
         return changed;
     }

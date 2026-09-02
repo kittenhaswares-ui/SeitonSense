@@ -368,7 +368,7 @@ internal sealed unsafe class GunbreakerContinuationProbe
 
         var input = inputFrame.Snapshot;
         var frozenKeyStillDown = state.Intent is { IsValid: true } heldIntent &&
-                                 inputFrame.IsGameplayKeyPhysicallyDown(
+                                 inputFrame.IsFrozenGameplayKeyConsentValid(
                                      (VirtualKey)heldIntent.FrozenKeyCode);
         var currentIntentStillTracked = state.Intent is { IsValid: true } currentIntent &&
                                         GunbreakerContinuationRules.IsTrackedUnspentExposure(
@@ -458,6 +458,11 @@ internal sealed unsafe class GunbreakerContinuationProbe
 
         state = decision.NextState;
         var inputClaimed = decision.InputClaimed;
+        if (state.Intent is { IsValid: true } claimedIntent)
+        {
+            _ = inputFrame.IsFrozenGameplayKeyConsentValid(
+                (VirtualKey)claimedIntent.FrozenKeyCode);
+        }
         if (inputClaimed) inputFrame.Consume();
 
         var attempted = false;
@@ -626,7 +631,7 @@ internal sealed unsafe class GunbreakerContinuationProbe
 
                 var exactKey = (VirtualKey)intent.FrozenKeyCode;
                 var exactGenerationEligible =
-                    inputFrame.IsGameplayKeyGenerationEligible(exactKey);
+                    inputFrame.IsFrozenGameplayKeyConsentValid(exactKey);
                 if (adjustedActionId != intent.ActionId ||
                     observedProcStatusId != intent.ProcStatusId ||
                     !GunbreakerContinuationRules.CanUseFrozenIntent(
@@ -643,7 +648,7 @@ internal sealed unsafe class GunbreakerContinuationProbe
                         higherPriorityClaimed,
                         exposure,
                         actionLocallyReady,
-                        (int)inputFrame.Snapshot.HeldGameplayKey,
+                        intent.FrozenKeyCode,
                         exactGenerationEligible,
                         candidate.Value.Core))
                 {

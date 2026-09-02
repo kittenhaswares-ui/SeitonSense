@@ -191,7 +191,7 @@ internal sealed unsafe class SmartRecuperateProbe
         }
         var frozenKeyStillDown = state.Intent is
                                  { IsValid: true, IsAutomatic: false } frozen &&
-                                 inputFrame.IsGameplayKeyPhysicallyDown(
+                                 inputFrame.IsFrozenGameplayKeyConsentValid(
                                      (VirtualKey)frozen.FrozenKeyCode);
         var decision = SmartRecuperateRules.Observe(
             state,
@@ -229,6 +229,12 @@ internal sealed unsafe class SmartRecuperateProbe
         state = decision.NextState;
 
         var inputClaimed = decision.ShouldConsumeInputGeneration;
+        if (state.Intent is
+            { IsValid: true, IsAutomatic: false } claimedIntent)
+        {
+            _ = inputFrame.IsFrozenGameplayKeyConsentValid(
+                (VirtualKey)claimedIntent.FrozenKeyCode);
+        }
         if (inputClaimed) inputFrame.Consume();
 
         var castCancellationRequest = BuildCastCancellationRequest(
@@ -420,7 +426,7 @@ internal sealed unsafe class SmartRecuperateProbe
             currentLocal.GameObjectId,
             currentLocal.EntityId);
         var frozenKeyStillDown = intent.IsAutomatic ||
-                                 inputFrame.IsGameplayKeyPhysicallyDown(
+                                 inputFrame.IsFrozenGameplayKeyConsentValid(
                                      (VirtualKey)intent.FrozenKeyCode);
         var textInputActive = intent.IsAutomatic
             ? !TryGetTextInputState(out var currentTextInputActive) ||
@@ -535,7 +541,7 @@ internal sealed unsafe class SmartRecuperateProbe
                 maximumMp,
                 intent.IsAutomatic ? 0 : intent.FrozenKeyCode,
                 intent.IsAutomatic ||
-                inputFrame.IsGameplayKeyPhysicallyDown(
+                inputFrame.IsFrozenGameplayKeyConsentValid(
                     (VirtualKey)intent.FrozenKeyCode),
                 heldModeEnabled,
                 automaticModeEnabled))

@@ -136,6 +136,13 @@ internal sealed unsafe class EmergencyTeleportProbe
             hardReset);
         var decision = EmergencyTeleportRules.Observe(state, observation);
         state = decision.NextState;
+        if (state.Intent is { IsValid: true } frozenIntent)
+        {
+            // Register the exact Core-owned key while it is still physically
+            // held so a fast release can retain only this frozen intent.
+            _ = inputFrame.IsFrozenGameplayKeyConsentValid(
+                (VirtualKey)frozenIntent.FrozenKeyCode);
+        }
 
         var inputClaimed = decision.InputClaimed;
 
@@ -290,7 +297,7 @@ internal sealed unsafe class EmergencyTeleportProbe
             configuration.EmergencyTeleportMaximumNearbyEnemies);
         var frozenKeyCode = state.Intent?.FrozenKeyCode ?? 0;
         var frozenKeyStillDown = frozenKeyCode > 0 &&
-                                 inputFrame.IsGameplayKeyPhysicallyDown(
+                                 inputFrame.IsFrozenGameplayKeyConsentValid(
                                      (VirtualKey)frozenKeyCode);
         var shouldResolveCandidates = localPlayer is not null &&
                                       localIdentity.IsValid &&
@@ -424,7 +431,7 @@ internal sealed unsafe class EmergencyTeleportProbe
             !float.IsFinite(actionManager->AnimationLock) ||
             actionManager->AnimationLock < 0f ||
             actionManager->AnimationLock > MaximumCancellationAnimationLockSeconds ||
-            !inputFrame.IsGameplayKeyPhysicallyDown((VirtualKey)intent.FrozenKeyCode))
+            !inputFrame.IsFrozenGameplayKeyConsentValid((VirtualKey)intent.FrozenKeyCode))
         {
             return null;
         }

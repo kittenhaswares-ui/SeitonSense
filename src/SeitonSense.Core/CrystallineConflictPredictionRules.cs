@@ -82,6 +82,7 @@ public static class CrystallineConflictPredictionRules
     public const double MaximumStartProbability = 0.75d;
     public const double MinimumLiveProbability = 0.05d;
     public const double MaximumLiveProbability = 0.95d;
+
     public const double FullProgressDifferenceWeight = 0.25d;
     public const double PerNetDeathWeight = 0.025d;
 
@@ -91,6 +92,18 @@ public static class CrystallineConflictPredictionRules
     public const byte ParriedDamageEffectType = 6;
     public const byte LargeValueFlag = 0x40;
     public const byte AppliedToSourceFlag = 0x80;
+
+    /// <summary>
+    /// The complete roster is useful during the pre-match countdown, but
+    /// damage, healing, deaths, and native progress become live evidence only
+    /// after combat has actually started. A final scoreboard is authoritative
+    /// and closes the live-capture lane again.
+    /// </summary>
+    public static bool CanUseLiveMatchInputs(
+        bool exactRosterAvailable,
+        bool combatStarted,
+        bool finalResultObserved) =>
+        exactRosterAvailable && combatStarted && !finalResultObserved;
 
     /// <summary>
     /// Combines two complete five-player teams. A 0-0 record represents an

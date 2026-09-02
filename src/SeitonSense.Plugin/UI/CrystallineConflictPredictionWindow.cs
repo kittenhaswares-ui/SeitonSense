@@ -10,7 +10,8 @@ using SeitonSense.Plugin.Services;
 namespace SeitonSense.Plugin.UI;
 
 /// <summary>
-/// Movable in-match view for the deliberately playful, local-only CC estimate.
+/// Movable team-reveal and in-match view for the deliberately playful,
+/// local-only CC estimate.
 /// The service owns all capture and persistence; this window only presents its
 /// immutable snapshot.
 /// </summary>
@@ -133,7 +134,8 @@ internal sealed class CrystallineConflictPredictionWindow : Window
         float uiScale)
     {
         var start = NormalizeProbability(snapshot.StartWinChance);
-        var current = configuration.EnableDynamicCrystallineConflictPrediction
+        var current = configuration.EnableDynamicCrystallineConflictPrediction &&
+                      snapshot.HasCombatStarted
             ? NormalizeProbability(snapshot.CurrentWinChance)
             : start;
         var percent = (int)Math.Round(current * 100d, MidpointRounding.AwayFromZero);
@@ -152,7 +154,9 @@ internal sealed class CrystallineConflictPredictionWindow : Window
         ImGui.ProgressBar((float)current, new Vector2(width, 24f * uiScale), string.Empty);
         ImGui.PopStyleColor(2);
 
-        if (configuration.EnableDynamicCrystallineConflictPrediction && !snapshot.IsFinal)
+        if (configuration.EnableDynamicCrystallineConflictPrediction &&
+            snapshot.HasCombatStarted &&
+            !snapshot.IsFinal)
         {
             var startPercent = (int)Math.Round(start * 100d, MidpointRounding.AwayFromZero);
             ImGui.TextDisabled($"START {startPercent}%  \u00b7  LIVE {percent}%");

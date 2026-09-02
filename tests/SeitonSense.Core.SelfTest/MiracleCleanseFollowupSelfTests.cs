@@ -588,15 +588,27 @@ internal static class MiracleCleanseFollowupSelfTests
             frozenBehindPriority.NextState.GameplayKeyToken,
             "once release begins, the exact key is frozen while priority work runs");
 
-        var releasedFrozenKey = MiracleCleanseFollowupRules.Observe(
+        var releasedInsideReservation = MiracleCleanseFollowupRules.Observe(
             frozenBehindPriority.NextState,
             Observation(
                 null,
+                Candidate(strictTarget, reservationKey: 67, reservedKeyDown: true),
+                2_101,
+                higherPriority: true));
+        Equal(
+            66,
+            releasedInsideReservation.NextState.GameplayKeyToken,
+            "release-aware grace retains only the already-bound key and cannot substitute the reported key");
+
+        var releasedFrozenKey = MiracleCleanseFollowupRules.Observe(
+            releasedInsideReservation.NextState,
+            Observation(
+                null,
                 Candidate(strictTarget, reservationKey: 67, reservedKeyDown: false),
-                2_101));
+                2_102));
         Equal(MiracleCleanseFollowupCancelReason.ReservationKeyReleased,
             releasedFrozenKey.CancelReason,
-            "after release binding, letting go terminally cancels the exact intent");
+            "expired release-aware consent terminally cancels the exact intent");
     }
 
     internal static void PromotionKindLabelsConfirmationWithoutBroadeningStartRules()

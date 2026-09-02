@@ -45,7 +45,8 @@ internal sealed record PvPMetadataValidation(
     bool MonkHeldComboVerified,
     NinjaShukuchiHiddenStatusCatalog NinjaShukuchiHiddenStatuses,
     SmartActionGuardBypassCatalog SmartActionGuardBypassActions,
-    BackwardDashMetadataCatalog BackwardDashActions)
+    BackwardDashMetadataCatalog BackwardDashActions,
+    SmartActionProtectionStatusCatalog SmartActionProtectionStatuses)
 {
     public static PvPMetadataValidation None { get; } = new(
         false, false, false, false, false, false, false, false, false, false, false,
@@ -54,7 +55,8 @@ internal sealed record PvPMetadataValidation(
         false, false,
         NinjaShukuchiHiddenStatusCatalog.Empty,
         SmartActionGuardBypassCatalog.Empty,
-        BackwardDashMetadataCatalog.Empty);
+        BackwardDashMetadataCatalog.Empty,
+        SmartActionProtectionStatusCatalog.Empty);
 
     internal bool IsEmergencyTeleportVerified(uint jobId) => jobId switch
     {
@@ -207,44 +209,39 @@ internal static class PvPMetadataGuard
         // Smart Action depends only on these exact status meanings. Keep that
         // proof independent from NIN/Guard action costs, recasts, and other
         // balance metadata so an unrelated patch cannot disable safe targeting.
+        var smartActionProtectionStatuses = SmartActionProtectionStatusCatalog.Empty;
         var smartActionProtectionStatusesVerified = ValidateFeature(
             "Smart Action protection statuses",
             log,
             () =>
             {
                 var statuses = dataManager.GetExcelSheet<Status>(ClientLanguage.English);
-                return ValidateSeitonProtectionStatus(
-                           statuses,
-                           NinjaSeitonProtectionStatusCatalog.CoveredLegacyStatusId,
-                           "Covered") &&
-                       ValidateSeitonProtectionStatus(
-                           statuses,
-                           NinjaSeitonProtectionStatusCatalog.CoveredStatusId,
-                           "Covered") &&
-                       ValidateSeitonProtectionStatus(
-                           statuses,
-                           NinjaSeitonProtectionStatusCatalog.CoveredPvpStatusId,
-                           "Covered") &&
-                       ValidateSeitonProtectionStatus(
-                           statuses,
-                           NinjaSeitonProtectionStatusCatalog.CoveredPvpAlternateStatusId,
-                           "Covered") &&
-                       ValidateSeitonProtectionStatus(
-                           statuses,
-                           NinjaSeitonProtectionStatusCatalog.HallowedGroundStatusId,
-                           "Hallowed Ground") &&
-                       ValidateSeitonProtectionStatus(
-                           statuses,
-                           NinjaSeitonProtectionStatusCatalog.UndeadRedemptionStatusId,
-                           "Undead Redemption") &&
-                       ValidateNamedStatus(
-                           statuses,
-                           EnemyCombatConstants.GuardStatusId,
-                           "Guard") &&
-                       ValidateNamedStatus(
-                           statuses,
-                           EnemyCombatConstants.GuardStatusAlternateId,
-                           "Guard");
+                var definitions = new List<SmartActionProtectionStatusDefinition>();
+                foreach (var status in statuses)
+                {
+                    var semantic = status.Name.ToString() switch
+                    {
+                        "Guard" => SmartActionProtectionStatusSemantic.Guard,
+                        "Covered" => SmartActionProtectionStatusSemantic.Covered,
+                        "Hallowed Ground" =>
+                            SmartActionProtectionStatusSemantic.HallowedGround,
+                        "Undead Redemption" =>
+                            SmartActionProtectionStatusSemantic.UndeadRedemption,
+                        _ => (SmartActionProtectionStatusSemantic?)null,
+                    };
+                    if (semantic is { } exactSemantic)
+                    {
+                        definitions.Add(new SmartActionProtectionStatusDefinition(
+                            status.RowId,
+                            exactSemantic));
+                    }
+                }
+
+                var catalog = SmartActionProtectionStatusCatalog.Create(definitions);
+                if (!catalog.IsVerified) return false;
+
+                smartActionProtectionStatuses = catalog;
+                return true;
             });
 
         var smartActionGuardBypassActions = SmartActionGuardBypassCatalog.Empty;
@@ -958,26 +955,20 @@ internal static class PvPMetadataGuard
         var miracleOfNatureActionVerified = ValidateFeature("Miracle of Nature action", log, () =>
         {
             var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
-            var descriptions = dataManager.GetExcelSheet<ActionTransient>(ClientLanguage.English);
             var statuses = dataManager.GetExcelSheet<Status>(ClientLanguage.English);
             if (!actions.TryGetRow(EnemyCombatConstants.MiracleOfNatureActionId, out var action) ||
-                !descriptions.TryGetRow(EnemyCombatConstants.MiracleOfNatureActionId, out var transient) ||
                 !statuses.TryGetRow(EnemyCombatConstants.MiracleOfNatureStatusId, out var status))
             {
                 return false;
             }
 
-            var description = transient.Description.ToString();
-            return string.Equals(action.Name.ToString(), "Miracle of Nature", StringComparison.OrdinalIgnoreCase) &&
-                   action.Icon == EnemyCombatConstants.MiracleOfNatureActionIconId &&
-                   action.IsPvP &&
+            return action.IsPvP &&
                    action.IsPlayerAction &&
                    action.ClassJob.IsValid &&
                    action.ClassJob.RowId == EnemyCombatConstants.WhiteMageJobId &&
                    action.Range == EnemyCombatConstants.MiracleOfNatureRange &&
                    action.EffectRange == 0 &&
                    action.Cast100ms == 0 &&
-                   action.Recast100ms == EnemyCombatConstants.MiracleOfNatureRecast100ms &&
                    action.CanTargetHostile &&
                    !action.CanTargetSelf &&
                    !action.CanTargetParty &&
@@ -986,13 +977,6 @@ internal static class PvPMetadataGuard
                    !action.TargetArea &&
                    action.RequiresLineOfSight &&
                    !action.AffectsPosition &&
-                   description.Contains("Forcibly transforms target", StringComparison.OrdinalIgnoreCase) &&
-                   description.Contains(
-                       "preventing them from using actions other than Purify",
-                       StringComparison.OrdinalIgnoreCase) &&
-                   description.Contains(
-                       "nullifies status afflictions that can be removed by Purify",
-                       StringComparison.OrdinalIgnoreCase) &&
                    ValidatePurifiableStatus(
                        status,
                        "Miracle of Nature",
@@ -1005,16 +989,7 @@ internal static class PvPMetadataGuard
         var silentNocturneVerified = ValidateFeature("Silent Nocturne", log, () =>
         {
             var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
-            var descriptions = dataManager.GetExcelSheet<ActionTransient>(ClientLanguage.English);
             return actions.TryGetRow(EnemyCombatConstants.SilentNocturneActionId, out var action) &&
-                   descriptions.TryGetRow(
-                       EnemyCombatConstants.SilentNocturneActionId,
-                       out var transient) &&
-                   string.Equals(
-                       action.Name.ToString(),
-                       "Silent Nocturne",
-                       StringComparison.Ordinal) &&
-                   action.Icon == EnemyCombatConstants.SilentNocturneActionIconId &&
                    action.IsPvP &&
                    action.IsPlayerAction &&
                    action.ClassJob.IsValid &&
@@ -1023,7 +998,6 @@ internal static class PvPMetadataGuard
                    action.EffectRange == 0 &&
                    action.CastType == 1 &&
                    action.Cast100ms == 0 &&
-                   action.Recast100ms == EnemyCombatConstants.SilentNocturneRecast100ms &&
                    action.CanTargetHostile &&
                    !action.CanTargetSelf &&
                    !action.CanTargetParty &&
@@ -1031,10 +1005,7 @@ internal static class PvPMetadataGuard
                    !action.CanTargetAlliance &&
                    !action.TargetArea &&
                    action.RequiresLineOfSight &&
-                   !action.AffectsPosition &&
-                   transient.Description.ToString().Contains(
-                       "Silences target.",
-                       StringComparison.Ordinal);
+                   !action.AffectsPosition;
         });
 
         var panicShukuchiVerified = ValidateFeature("Panic Shukuchi", log, () =>
@@ -1713,7 +1684,8 @@ internal static class PvPMetadataGuard
             monkHeldComboVerified,
             ninjaShukuchiHiddenStatuses,
             smartActionGuardBypassActions,
-            backwardDashActions);
+            backwardDashActions,
+            smartActionProtectionStatuses);
 
         log.Information(
             "Seiton Sense metadata: Seiton={Seiton}, ViperSerpentTail={ViperSerpentTail}, " +
@@ -2092,12 +2064,11 @@ internal static class PvPMetadataGuard
     private static bool ValidatePurifiableStatus(
         Status status,
         string expectedName,
-        uint expectedIcon,
+        uint _,
         bool expectMovementLock,
         bool expectActionLock,
         bool expectTransfiguration) =>
         status.Name.ToString() == expectedName &&
-        status.Icon == expectedIcon &&
         status.StatusCategory == 2 &&
         status.CanDispel &&
         !status.IsPermanent &&

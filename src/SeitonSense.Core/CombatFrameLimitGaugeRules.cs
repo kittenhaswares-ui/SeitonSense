@@ -83,8 +83,10 @@ public readonly record struct CombatFrameLimitGaugeCalibrationDiagnostics(
 /// <summary>
 /// Calibrates the small CC party-list LB layer against the local player's exact
 /// native LimitBreakController units. Remote values remain unavailable until the
-/// current HUD instance has demonstrated zero, full, and two separated partial
-/// fills. No elapsed-time or job recharge model is involved.
+/// current HUD instance has demonstrated zero and two separated partial fills.
+/// Those three exact controller matches prove both the empty-fill convention and
+/// the rendered scale without depending on a one-frame full gauge that can be
+/// consumed between HUD samples. No elapsed-time or job recharge model is involved.
 /// </summary>
 public sealed class CombatFrameLimitGaugeCalibrator
 {
@@ -281,9 +283,7 @@ public sealed class CombatFrameLimitGaugeCalibrator
 
     private bool HasCompleteProof()
     {
-        if (maximumUnits == 0 ||
-            !points.ContainsKey(0) ||
-            !points.ContainsKey(maximumUnits))
+        if (maximumUnits == 0 || !points.ContainsKey(0))
         {
             return false;
         }

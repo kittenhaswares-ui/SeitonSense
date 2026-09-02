@@ -75,6 +75,9 @@ internal static class PressureEscapeSelfTests
             SprintLocallyReady: true);
 
         True(PressureEscapeRules.CanDispatchSprint(valid), "all exact gates allow one Sprint intent");
+        True(PressureEscapeRules.CanFreezeSprintIntent(
+                valid with { SprintLocallyReady = false }),
+            "cooldown wait may freeze one exact movement-key intent");
         False(PressureEscapeRules.CanDispatchSprint(valid with { PressureKnown = false }), "unknown pressure blocks");
         False(PressureEscapeRules.CanDispatchSprint(valid with { DirectEnemyCount = 2 }), "two targets block");
         False(PressureEscapeRules.CanDispatchSprint(valid with { GuardSuppressed = true }), "Guard blocks");

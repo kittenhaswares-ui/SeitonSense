@@ -120,6 +120,31 @@ internal static class CrystallineConflictPredictionSelfTests
 
     public static void LivePredictionUsesOnlyKnownBoundedSignals()
     {
+        False(
+            CrystallineConflictPredictionRules.CanUseLiveMatchInputs(
+                exactRosterAvailable: true,
+                combatStarted: false,
+                finalResultObserved: false),
+            "an exact preparation roster publishes only the opening estimate");
+        True(
+            CrystallineConflictPredictionRules.CanUseLiveMatchInputs(
+                exactRosterAvailable: true,
+                combatStarted: true,
+                finalResultObserved: false),
+            "live inputs open at the first exact combat-start observation");
+        False(
+            CrystallineConflictPredictionRules.CanUseLiveMatchInputs(
+                exactRosterAvailable: false,
+                combatStarted: true,
+                finalResultObserved: false),
+            "combat cannot create a prediction without the exact roster");
+        False(
+            CrystallineConflictPredictionRules.CanUseLiveMatchInputs(
+                exactRosterAvailable: true,
+                combatStarted: true,
+                finalResultObserved: true),
+            "the final scoreboard closes live capture");
+
         True(
             CrystallineConflictPredictionRules.TryCalculateStartPrediction(Team(), Team(), out var opening),
             "neutral opening");

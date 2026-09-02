@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.44.0.0";
+    private const string CurrentReleaseVersion = "0.44.0.1";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -239,7 +239,7 @@ public sealed class Plugin : IDalamudPlugin
             tracker,
             smartWardensPaean,
             ccImmunityBrake,
-            metadata.SmartActionProtectionStatusesVerified,
+            metadata.SmartActionProtectionStatuses,
             metadata.SmartActionGuardBypassActions,
             samuraiReactiveMetadata.SmartActionCastsVerified,
             samuraiReactiveMetadata.ChitenVerified,
@@ -400,6 +400,7 @@ public sealed class Plugin : IDalamudPlugin
             partyList,
             framework,
             dutyState,
+            condition,
             crystallineConflictMapStatistics,
             machinistLimitBreakCapture.PredictionCaptureBuffer,
             log);
@@ -461,11 +462,11 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "New CC Win Prediction panel: a playful local estimate using saved W/L from both teams.",
-                "Switch between allies and enemies to see W/L plus this match's deaths, damage, healing, and crystal time.",
-                "Optional one-time PvpStats import reads old CC history locally without changing its database.",
-                "Guard cannot be cancelled by pressing Guard again during its first second.",
-                "No gameplay or player history is uploaded.",
+                "Smart Action works again in CC and Wolves' Den, including harmful casts and no-target target choice.",
+                "Held helpers keep their chosen action and target briefly after key release, so Paean, Silent Nocturne, and Miracle get another safe chance.",
+                "Optional BRD Mannstopper fires near an enemy and may cancel only Powerful Shot.",
+                "CC Win Prediction appears during preparation; live match numbers begin only when fighting starts.",
+                "Old PvpStats import works from Wolves' Den while out of combat; nothing is uploaded.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

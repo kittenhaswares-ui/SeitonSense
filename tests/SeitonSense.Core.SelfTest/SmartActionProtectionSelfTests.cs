@@ -41,6 +41,73 @@ internal static class SmartActionProtectionSelfTests
             "unknown enum values fail closed");
     }
 
+    public static void CurrentStatusCatalogSurvivesHistoricalRowRemoval()
+    {
+        var currentRows = new[]
+        {
+            new SmartActionProtectionStatusDefinition(
+                50_001,
+                SmartActionProtectionStatusSemantic.Guard),
+            new SmartActionProtectionStatusDefinition(
+                50_002,
+                SmartActionProtectionStatusSemantic.Covered),
+            new SmartActionProtectionStatusDefinition(
+                50_003,
+                SmartActionProtectionStatusSemantic.HallowedGround),
+            new SmartActionProtectionStatusDefinition(
+                50_004,
+                SmartActionProtectionStatusSemantic.UndeadRedemption),
+            new SmartActionProtectionStatusDefinition(
+                50_005,
+                SmartActionProtectionStatusSemantic.Covered),
+        };
+        var catalog = SmartActionProtectionStatusCatalog.Create(currentRows);
+
+        True(catalog.IsVerified,
+            "one current row for every exact protection meaning verifies the catalog");
+        Equal(5, catalog.Count,
+            "duplicate current meanings retain every exact current row");
+        Equal(SmartActionProtectionKind.Guard, catalog.Classify(50_001),
+            "a moved Guard row keeps Guard semantics");
+        Equal(SmartActionProtectionKind.Covered, catalog.Classify(50_002),
+            "a moved Covered row keeps Covered semantics");
+        Equal(SmartActionProtectionKind.Invulnerability, catalog.Classify(50_003),
+            "a moved Hallowed Ground row keeps invulnerability semantics");
+        Equal(SmartActionProtectionKind.Invulnerability, catalog.Classify(50_004),
+            "a moved Undead Redemption row keeps invulnerability semantics");
+        Equal(SmartActionProtectionKind.None,
+            catalog.Classify(NinjaSeitonProtectionStatusCatalog.CoveredLegacyStatusId),
+            "an absent historical duplicate is not required or invented");
+
+        foreach (var missingSemantic in
+                 Enum.GetValues<SmartActionProtectionStatusSemantic>())
+        {
+            False(
+                SmartActionProtectionStatusCatalog.Create(
+                    currentRows.Where(row => row.Semantic != missingSemantic))
+                    .IsVerified,
+                $"missing current {missingSemantic} meaning fails closed");
+        }
+
+        False(
+            SmartActionProtectionStatusCatalog.Create(
+                currentRows.Append(new SmartActionProtectionStatusDefinition(
+                    50_001,
+                    SmartActionProtectionStatusSemantic.Covered)))
+                .IsVerified,
+            "one row cannot acquire conflicting protection meanings");
+        foreach (var invalidId in new[] { 0u, 0xE0000000u, uint.MaxValue })
+        {
+            False(
+                SmartActionProtectionStatusCatalog.Create(
+                    currentRows.Append(new SmartActionProtectionStatusDefinition(
+                        invalidId,
+                        SmartActionProtectionStatusSemantic.Guard)))
+                    .IsVerified,
+                $"invalid status ID {invalidId:X} fails closed");
+        }
+    }
+
     public static void DirectAndTargetCircleSafetyAreExact()
     {
         var target = Geometry(1, x: 0f);

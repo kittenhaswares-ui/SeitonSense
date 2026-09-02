@@ -15,9 +15,10 @@ internal sealed record CcImmunityBrakeMetadataValidation(
 }
 
 /// <summary>
-/// Pins the numeric CC-brake allowlist to the current English game metadata.
-/// Any missing or changed row disables only that action/status; runtime then
-/// passes the user's incoming action through unchanged.
+/// Pins the numeric CC-brake allowlist to stable action/status semantics.
+/// Cosmetic icon, recast-balance, and English-description changes cannot
+/// globally disable a reviewed action; identity, job, targeting, range, cast,
+/// position, and blocker-category semantics still fail closed.
 /// </summary>
 internal static class CcImmunityBrakeMetadataGuard
 {
@@ -88,7 +89,6 @@ internal static class CcImmunityBrakeMetadataGuard
         HashSet<uint> verified)
     {
         var actions = dataManager.GetExcelSheet<GameAction>(ClientLanguage.English);
-        var descriptions = dataManager.GetExcelSheet<ActionTransient>(ClientLanguage.English);
         foreach (var definition in CcImmunityBrakeActionCatalog.Definitions)
         {
             var expected = ActionExpectations.FirstOrDefault(item => item.ActionId == definition.ActionId);
@@ -97,8 +97,7 @@ internal static class CcImmunityBrakeMetadataGuard
                                    string.Equals(expected.Name, definition.DisplayName.Replace(" (Double Cast)", string.Empty), StringComparison.Ordinal);
             var valid = validExpectation &&
                         actions.TryGetRow(definition.ActionId, out var action) &&
-                        descriptions.TryGetRow(definition.ActionId, out var transient) &&
-                        ValidateAction(action, transient, expected!);
+                        ValidateAction(action, expected!);
             if (valid)
             {
                 verified.Add(definition.ActionId);
@@ -124,13 +123,9 @@ internal static class CcImmunityBrakeMetadataGuard
             var valid = expected is not null &&
                         statuses.TryGetRow(statusId, out var status) &&
                         string.Equals(status.Name.ExtractText(), expected.Name, StringComparison.Ordinal) &&
-                        status.Icon == expected.IconId &&
                         status.StatusCategory == 1 &&
                         !status.CanDispel &&
-                        !status.IsPermanent &&
-                        status.Description.ExtractText().Contains(
-                            expected.DescriptionFragment,
-                            StringComparison.Ordinal);
+                        !status.IsPermanent;
             if (valid)
             {
                 verified.Add(statusId);
@@ -145,11 +140,8 @@ internal static class CcImmunityBrakeMetadataGuard
 
     private static bool ValidateAction(
         GameAction action,
-        ActionTransient transient,
         ActionExpectation expected) =>
         action.RowId == expected.ActionId &&
-        string.Equals(action.Name.ExtractText(), expected.Name, StringComparison.Ordinal) &&
-        action.Icon == expected.IconId &&
         action.ClassJob.IsValid &&
         action.ClassJob.RowId == expected.JobId &&
         action.IsPvP &&
@@ -159,11 +151,7 @@ internal static class CcImmunityBrakeMetadataGuard
         action.Range == expected.Range &&
         action.EffectRange == expected.EffectRange &&
         action.CastType == expected.CastType &&
-        action.Recast100ms == expected.Recast100ms &&
-        action.AffectsPosition == expected.AffectsPosition &&
-        transient.Description.ExtractText().Contains(
-            expected.DescriptionFragment,
-            StringComparison.Ordinal);
+        action.AffectsPosition == expected.AffectsPosition;
 
     private static HashSet<uint> RequiredStatusIds() =>
         Enum.GetValues<CcImmunityBrakeBlockerFamily>()

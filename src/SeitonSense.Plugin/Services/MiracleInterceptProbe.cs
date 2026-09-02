@@ -653,7 +653,7 @@ internal sealed class MiracleInterceptProbe
             ? (VirtualKey)threat.GameplayKeyToken
             : VirtualKey.NO_KEY;
         if (!IsExactVirtualKey(triggerKey) ||
-            !inputFrame.IsGameplayKeyGenerationEligible(triggerKey))
+            !inputFrame.IsFrozenGameplayKeyConsentValid(triggerKey))
         {
             Interlocked.Increment(ref rejectedThreatCount);
             lastOpportunity = input.IsTextInputActive
@@ -718,7 +718,7 @@ internal sealed class MiracleInterceptProbe
         {
             var reservedKey = (VirtualKey)threat.GameplayKeyToken;
             if (!IsExactVirtualKey(reservedKey) ||
-                !inputFrame.IsGameplayKeyGenerationEligible(reservedKey))
+                !inputFrame.IsFrozenGameplayKeyConsentValid(reservedKey))
             {
                 Interlocked.Increment(ref rejectedThreatCount);
                 lastOpportunity = $"{threat.Kind}: exact held key released before Raiju became executable";
@@ -914,7 +914,7 @@ internal sealed class MiracleInterceptProbe
         var revalidatedInput = !input.IsTextInputActive &&
             IsExactVirtualKey(triggerKey) &&
             threat.GameplayKeyToken == (int)triggerKey &&
-            inputFrame.IsGameplayKeyGenerationEligible(triggerKey);
+            inputFrame.IsFrozenGameplayKeyConsentValid(triggerKey);
         var revalidatedInsideWindow =
             revalidationNow >= threat.ObservedAtMilliseconds &&
             revalidationNow - threat.ObservedAtMilliseconds < ThreatLifetime(threat);
@@ -1565,11 +1565,14 @@ internal sealed class MiracleInterceptProbe
                 {
                     ResilienceRemainingMilliseconds = resilienceRemainingMilliseconds,
                     ReservationGameplayKeyToken = episodeGameplayKeyToken,
-                    ReservedGameplayKeyPhysicallyDown = IsReservedGameplayKeyPhysicallyDown(
+                    ReservedGameplayKeyPhysicallyDown =
                         previous.GameplayKeyToken > 0
-                            ? previous.GameplayKeyToken
-                            : episodeGameplayKeyToken,
-                        inputFrame),
+                            ? IsReservedGameplayKeyPhysicallyDown(
+                                previous.GameplayKeyToken,
+                                inputFrame)
+                            : IsGameplayKeyGenerationEligible(
+                                episodeGameplayKeyToken,
+                                inputFrame),
                     CounterActionReachable = IsCounterActionReachable(
                         localPlayer,
                         player),
@@ -1625,6 +1628,18 @@ internal sealed class MiracleInterceptProbe
             cleanseFollowupStates.Remove(enemySlot);
         else
             cleanseFollowupStates[enemySlot] = decision.NextState;
+
+        // Discovery may inspect only a currently eligible physical generation.
+        // Once Core binds that generation to this exact actor/action, register
+        // frozen ownership so only that intent may survive a later key release.
+        var boundGameplayKeyToken = decision.PromotionIntent?.GameplayKeyToken ??
+                                    decision.NextState.GameplayKeyToken;
+        if (boundGameplayKeyToken > 0)
+        {
+            _ = IsReservedGameplayKeyPhysicallyDown(
+                boundGameplayKeyToken,
+                inputFrame);
+        }
 
         if (signalWasNew && decision.NextState.ObservedSignals.Contains(signalKey))
         {
@@ -1763,6 +1778,9 @@ internal sealed class MiracleInterceptProbe
                         decision.NextState.ExpectedProtectionEndAtMilliseconds,
                     ScheduledSafeImpactLeadMilliseconds = predictiveLeadMilliseconds,
                 };
+                _ = IsReservedGameplayKeyPhysicallyDown(
+                    predictiveThreat.GameplayKeyToken,
+                    inputFrame);
                 return new MiracleFollowupPromotion(
                     predictiveThreat,
                     predictiveRank);
@@ -1886,6 +1904,21 @@ internal sealed class MiracleInterceptProbe
             });
         guardFollowupState = decision.NextState;
 
+        // Guard discovery is physical-only. Register release-aware ownership
+        // only after Core has frozen one exact actor/key (or promoted it).
+        var boundGuardGameplayKeyTokens = guardFollowupState.Actors
+            .Where(static actor => actor.GameplayKeyToken > 0)
+            .Select(static actor => actor.GameplayKeyToken)
+            .Append(decision.PromotionIntent?.GameplayKeyToken ?? 0)
+            .Where(static token => token > 0)
+            .Distinct();
+        foreach (var boundGameplayKeyToken in boundGuardGameplayKeyTokens)
+        {
+            _ = IsReservedGameplayKeyPhysicallyDown(
+                boundGameplayKeyToken,
+                inputFrame);
+        }
+
         if (decision.NewGuardEpisodeCount > 0 ||
             decision.NewReleaseOpportunityCount > 0 ||
             decision.ExpiredOpportunityCount > 0 ||
@@ -1963,7 +1996,7 @@ internal sealed class MiracleInterceptProbe
         if (!decision.ShouldPromote &&
             !higherPriorityClaimed &&
             episodeGameplayKeyToken > 0 &&
-            IsReservedGameplayKeyPhysicallyDown(
+            IsGameplayKeyGenerationEligible(
                 episodeGameplayKeyToken,
                 inputFrame))
         {
@@ -2083,6 +2116,9 @@ internal sealed class MiracleInterceptProbe
                     ScheduledSafeImpactLeadMilliseconds =
                         selected.SafeLeadMilliseconds,
                 };
+                _ = IsReservedGameplayKeyPhysicallyDown(
+                    predictiveThreat.GameplayKeyToken,
+                    inputFrame);
                 return new MiracleFollowupPromotion(
                     predictiveThreat,
                     predictiveRank);
@@ -2444,10 +2480,9 @@ internal sealed class MiracleInterceptProbe
                 .Where(actor => actor.Target == target)
                 .Take(2)
                 .ToArray();
-            var ownedGameplayKeyToken = previousActor.Length == 1 &&
-                                        previousActor[0].GameplayKeyToken > 0
+            var ownedGameplayKeyToken = previousActor.Length == 1
                 ? previousActor[0].GameplayKeyToken
-                : episodeGameplayKeyToken;
+                : 0;
             var teamTargetCount = 0;
             var teamTargetCountKnown = live &&
                 TryGetFreshTeamTargetCount(
@@ -2474,9 +2509,13 @@ internal sealed class MiracleInterceptProbe
                 MaximumMp = live ? enemy.MaxMp : 0,
                 GuardRemainingMilliseconds = live ? guardRemainingMilliseconds : 0,
                 ReservationGameplayKeyToken = episodeGameplayKeyToken,
-                ReservedGameplayKeyPhysicallyDown = IsReservedGameplayKeyPhysicallyDown(
-                    ownedGameplayKeyToken,
-                    inputFrame),
+                ReservedGameplayKeyPhysicallyDown = ownedGameplayKeyToken > 0
+                    ? IsReservedGameplayKeyPhysicallyDown(
+                        ownedGameplayKeyToken,
+                        inputFrame)
+                    : IsGameplayKeyGenerationEligible(
+                        episodeGameplayKeyToken,
+                        inputFrame),
                 CounterActionReachable = live && IsCounterActionReachable(
                     localPlayer,
                     player!),
@@ -2504,10 +2543,9 @@ internal sealed class MiracleInterceptProbe
             .Where(actor => actor.Target == target)
             .Take(2)
             .ToArray();
-        var ownedGameplayKeyToken = previousActor.Length == 1 &&
-                                    previousActor[0].GameplayKeyToken > 0
+        var ownedGameplayKeyToken = previousActor.Length == 1
             ? previousActor[0].GameplayKeyToken
-            : episodeGameplayKeyToken;
+            : 0;
         var guardCount = CountActiveGuardStatuses(
             player,
             out var guardRemainingMilliseconds);
@@ -2530,9 +2568,13 @@ internal sealed class MiracleInterceptProbe
                 MaximumMp = hasTrustedMp ? player.MaxMp : 0,
                 GuardRemainingMilliseconds = guardRemainingMilliseconds,
                 ReservationGameplayKeyToken = episodeGameplayKeyToken,
-                ReservedGameplayKeyPhysicallyDown = IsReservedGameplayKeyPhysicallyDown(
-                    ownedGameplayKeyToken,
-                    inputFrame),
+                ReservedGameplayKeyPhysicallyDown = ownedGameplayKeyToken > 0
+                    ? IsReservedGameplayKeyPhysicallyDown(
+                        ownedGameplayKeyToken,
+                        inputFrame)
+                    : IsGameplayKeyGenerationEligible(
+                        episodeGameplayKeyToken,
+                        inputFrame),
                 CounterActionReachable = IsCounterActionReachable(
                     localPlayer,
                     player),
@@ -3037,7 +3079,18 @@ internal sealed class MiracleInterceptProbe
     {
         if (gameplayKeyToken <= 0) return false;
         var key = (VirtualKey)gameplayKeyToken;
-        return IsExactVirtualKey(key) && inputFrame.IsGameplayKeyGenerationEligible(key);
+        return IsExactVirtualKey(key) &&
+               inputFrame.IsFrozenGameplayKeyConsentValid(key);
+    }
+
+    private static bool IsGameplayKeyGenerationEligible(
+        int gameplayKeyToken,
+        EmergencyActionInputFrame inputFrame)
+    {
+        if (gameplayKeyToken <= 0) return false;
+        var key = (VirtualKey)gameplayKeyToken;
+        return IsExactVirtualKey(key) &&
+               inputFrame.IsGameplayKeyGenerationEligible(key);
     }
 
     private bool TryGetLatchedProtectionEndKey(out VirtualKey key)
@@ -3666,7 +3719,7 @@ internal sealed class MiracleInterceptProbe
             !IsLivePlayer(target) ||
             !IsExactVirtualKey(frozenKey) ||
             threat.GameplayKeyToken != (int)frozenKey ||
-            !inputFrame.IsGameplayKeyGenerationEligible(frozenKey) ||
+            !inputFrame.IsFrozenGameplayKeyConsentValid(frozenKey) ||
             threat.CounterActionId == 0)
         {
             return null;

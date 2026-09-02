@@ -252,7 +252,7 @@ internal sealed class ScholarCriticalStrategyProbe
             var exactRetryContext = finalContextReady &&
                                     input.ProbeSucceeded &&
                                     !input.IsTextInputActive &&
-                                    inputFrame.IsGameplayKeyPhysicallyDown(retry.HeldKey) &&
+                                    inputFrame.IsFrozenGameplayKeyConsentValid(retry.HeldKey) &&
                                     finalCandidate is { } exactCandidate &&
                                     ScholarCriticalStrategyRules.CanUseExactIntent(
                                         retry.Intent,
@@ -320,6 +320,7 @@ internal sealed class ScholarCriticalStrategyProbe
                 acceptedHold.OwnsHold ? acceptedHold.CurrentReadyEpochToken : 0,
                 NextIntentEpochToken(),
                 HeldActionRetryState.Initial);
+            _ = inputFrame.IsFrozenGameplayKeyConsentValid(heldKey);
             inputClaimed = true;
             inputFrame.Consume();
             var outcome = TryUseCriticalStrategyOnce(

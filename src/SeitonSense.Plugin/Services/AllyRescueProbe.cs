@@ -76,14 +76,10 @@ internal sealed class AllyRescueProbe
 {
     internal const uint WardensPaeanActionId = 29400;
     internal const uint AquaveilActionId = 29227;
-    internal const uint WardensPaeanIconId = 9628;
-    internal const uint AquaveilIconId = 9607;
 
     private const uint BardJobId = 23;
     private const uint WhiteMageJobId = 24;
     private const int ExpectedRange = 30;
-    private const ushort WardensPaeanRecast100ms = 240;
-    private const ushort AquaveilRecast100ms = 180;
     private const long StatusRefreshToleranceMilliseconds = 250;
 
     private readonly IObjectTable objectTable;
@@ -122,18 +118,12 @@ internal sealed class AllyRescueProbe
             dataManager,
             WardensPaeanActionId,
             "The Warden's Paean",
-            WardensPaeanIconId,
-            BardJobId,
-            WardensPaeanRecast100ms,
-            "Removes");
+            BardJobId);
         aquaveilMetadataVerified = ValidateRescueActionMetadata(
             dataManager,
             AquaveilActionId,
             "Aquaveil",
-            AquaveilIconId,
-            WhiteMageJobId,
-            AquaveilRecast100ms,
-            "Nullifies");
+            WhiteMageJobId);
 
         if (!wardensPaeanMetadataVerified || !aquaveilMetadataVerified)
         {
@@ -208,7 +198,7 @@ internal sealed class AllyRescueProbe
             : VirtualKey.NO_KEY;
         var trackedKeyPhysicallyDown =
             IsExactVirtualKeyToken(state.GameplayKeyToken) &&
-            inputFrame.IsGameplayKeyPhysicallyDown((VirtualKey)state.GameplayKeyToken);
+            inputFrame.IsFrozenGameplayKeyConsentValid((VirtualKey)state.GameplayKeyToken);
         var decision = AllyRescueBufferRules.Observe(
             state,
             new AllyRescueBufferObservation(
@@ -237,6 +227,11 @@ internal sealed class AllyRescueProbe
         // Commit and claim this framework frame before validation/native dispatch.
         // A rejected native request retains only this exact actor/status/key lease.
         state = decision.NextState;
+        var trackedFrozenConsentValid =
+            state.Phase == AllyRescueBufferPhase.Buffered &&
+            IsExactVirtualKeyToken(state.GameplayKeyToken) &&
+            inputFrame.IsFrozenGameplayKeyConsentValid(
+                (VirtualKey)state.GameplayKeyToken);
         var exactLeaseCanProgress = state.TrackedIntent is { } claimedIntent &&
                                     candidates.Any(candidate =>
                                         candidate.Intent == claimedIntent &&
@@ -245,10 +240,7 @@ internal sealed class AllyRescueProbe
                            !input.IsTextInputActive &&
                            structurallyReady &&
                            exactLeaseCanProgress &&
-                           state.Phase == AllyRescueBufferPhase.Buffered &&
-                           IsExactVirtualKeyToken(state.GameplayKeyToken) &&
-                           inputFrame.IsGameplayKeyPhysicallyDown(
-                               (VirtualKey)state.GameplayKeyToken);
+                           trackedFrozenConsentValid;
         if (inputClaimed) inputFrame.Consume();
 
         var castCancellationRequest = BuildCastCancellationRequest(
@@ -748,7 +740,7 @@ internal sealed class AllyRescueProbe
             state.Phase != AllyRescueBufferPhase.Buffered ||
             state.TrackedIntent is not { IsValid: true } intent ||
             !IsExactVirtualKeyToken(state.GameplayKeyToken) ||
-            !inputFrame.IsGameplayKeyPhysicallyDown(
+            !inputFrame.IsFrozenGameplayKeyConsentValid(
                 (VirtualKey)state.GameplayKeyToken) ||
             !HasValidNativeIdentity(localPlayer) ||
             !TryRevalidateCandidate(
@@ -903,25 +895,15 @@ internal sealed class AllyRescueProbe
         IDataManager dataManager,
         uint actionId,
         string expectedName,
-        uint expectedIconId,
-        uint expectedJobId,
-        ushort expectedRecast100ms,
-        string expectedCleanseVerb)
+        uint expectedJobId)
     {
         try
         {
             var actions = dataManager.GetExcelSheet<GameAction>(ClientLanguage.English);
-            var descriptions = dataManager.GetExcelSheet<ActionTransient>(ClientLanguage.English);
             return actions.TryGetRow(actionId, out var action) &&
-                   descriptions.TryGetRow(actionId, out var transient) &&
                    IsExpectedFriendlyRescueAction(
                        action,
-                       transient,
-                       expectedName,
-                       expectedIconId,
-                       expectedJobId,
-                       expectedRecast100ms,
-                       expectedCleanseVerb);
+                       expectedJobId);
         }
         catch (Exception exception)
         {
@@ -936,37 +918,22 @@ internal sealed class AllyRescueProbe
 
     private static bool IsExpectedFriendlyRescueAction(
         GameAction action,
-        ActionTransient transient,
-        string expectedName,
-        uint expectedIconId,
-        uint expectedJobId,
-        ushort expectedRecast100ms,
-        string expectedCleanseVerb)
+        uint expectedJobId)
     {
-        var description = transient.Description.ToString();
-        return string.Equals(
-                   action.Name.ToString(),
-                   expectedName,
-                   StringComparison.OrdinalIgnoreCase) &&
-        action.Icon == expectedIconId &&
-        action.IsPvP &&
+        return action.IsPvP &&
         action.IsPlayerAction &&
         action.ClassJob.IsValid &&
         action.ClassJob.RowId == expectedJobId &&
         action.Range == ExpectedRange &&
         action.EffectRange == 0 &&
         action.Cast100ms == 0 &&
-        action.Recast100ms == expectedRecast100ms &&
         action.CanTargetSelf &&
         action.CanTargetParty &&
         !action.CanTargetAlly &&
         !action.CanTargetAlliance &&
         !action.CanTargetHostile &&
         !action.TargetArea &&
-        action.RequiresLineOfSight &&
-        description.Contains(expectedCleanseVerb, StringComparison.OrdinalIgnoreCase) &&
-        description.Contains("status affliction", StringComparison.OrdinalIgnoreCase) &&
-        description.Contains("Purify", StringComparison.OrdinalIgnoreCase);
+        action.RequiresLineOfSight;
     }
 
     private static bool IsLivePlayer(IPlayerCharacter? player) =>

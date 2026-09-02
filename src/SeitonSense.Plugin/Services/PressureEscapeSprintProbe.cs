@@ -238,7 +238,7 @@ internal sealed class PressureEscapeSprintProbe
                                     localIdentity == frozen.LocalPlayer &&
                                     input.ProbeSucceeded &&
                                     !input.IsTextInputActive &&
-                                    inputFrame.IsGameplayKeyPhysicallyDown(frozen.HeldKey) &&
+                                    inputFrame.IsFrozenGameplayKeyConsentValid(frozen.HeldKey) &&
                                     warningDecision.HighPressure &&
                                     warningEpisodeToken == frozen.WarningEpisodeToken &&
                                     !guardSuppressed &&
@@ -304,19 +304,24 @@ internal sealed class PressureEscapeSprintProbe
             }
         }
         else if (terminalSprintKey == VirtualKey.NO_KEY &&
-                 PressureEscapeRules.CanDispatchSprint(sprintObservation))
+                 PressureEscapeRules.CanFreezeSprintIntent(sprintObservation))
         {
-            inputClaimed = true;
-            inputFrame.Consume();
             var initialIntent = new FrozenSprintRetry(
                 localIdentity,
                 clientState.TerritoryType,
                 warningEpisodeToken,
                 heldMovementKey,
                 HeldActionRetryState.Initial);
-            if (!sprintNearQueueable)
+            _ = inputFrame.IsFrozenGameplayKeyConsentValid(heldMovementKey);
+            frozenSprintRetry = initialIntent;
+            if (!sprintActionSpecificReady)
             {
-                frozenSprintRetry = initialIntent;
+                lastEvent = "Frozen Sprint waiting for cooldown/resources";
+            }
+            else if (!sprintNearQueueable)
+            {
+                inputClaimed = true;
+                inputFrame.Consume();
                 castCancellationRequest = CreateCastCancellationRequest(
                     localPlayer!,
                     initialIntent,
@@ -327,6 +332,8 @@ internal sealed class PressureEscapeSprintProbe
             }
             else
             {
+                inputClaimed = true;
+                inputFrame.Consume();
                 var outcome = TryUseSprintOnce(
                     initialIntent.LocalPlayer,
                     initialIntent.TerritoryId,

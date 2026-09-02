@@ -1,3 +1,4 @@
+using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.ClientState.Party;
@@ -25,6 +26,7 @@ internal sealed record CrystallineConflictPredictionPlayerSnapshot(
 internal sealed record CrystallineConflictPredictionSnapshot(
     bool IsActive,
     bool IsComplete,
+    bool HasCombatStarted,
     bool IsFinal,
     bool LiveTotalsIncomplete,
     double StartWinChance,
@@ -36,7 +38,7 @@ internal sealed record CrystallineConflictPredictionSnapshot(
     string Status)
 {
     internal static CrystallineConflictPredictionSnapshot Inactive(string status = "Waiting for CC") =>
-        new(false, false, false, true, 0.5d, 0.5d, 0, 0, [], [], status);
+        new(false, false, false, false, false, 0.5d, 0.5d, 0, 0, [], [], status);
 }
 
 /// <summary>
@@ -56,6 +58,7 @@ internal sealed class CrystallineConflictPredictionService : IDisposable
     private readonly IPartyList partyList;
     private readonly IFramework framework;
     private readonly IDutyState dutyState;
+    private readonly ICondition condition;
     private readonly CrystallineConflictMapStatisticsService mapStatistics;
     private readonly CrystallineConflictPredictionCaptureBuffer captureBuffer;
     private readonly IPluginLog log;
@@ -67,6 +70,7 @@ internal sealed class CrystallineConflictPredictionService : IDisposable
     private uint activeTerritoryId;
     private CrystallineConflictStartPrediction openingPrediction;
     private bool hasOpeningPrediction;
+    private bool combatStarted;
     private bool finalResultObserved;
     private bool started;
     private bool disposed;
@@ -79,6 +83,7 @@ internal sealed class CrystallineConflictPredictionService : IDisposable
         IPartyList partyList,
         IFramework framework,
         IDutyState dutyState,
+        ICondition condition,
         CrystallineConflictMapStatisticsService mapStatistics,
         CrystallineConflictPredictionCaptureBuffer captureBuffer,
         IPluginLog log)
@@ -90,6 +95,7 @@ internal sealed class CrystallineConflictPredictionService : IDisposable
         this.partyList = partyList;
         this.framework = framework;
         this.dutyState = dutyState;
+        this.condition = condition;
         this.mapStatistics = mapStatistics;
         this.captureBuffer = captureBuffer;
         this.log = log;
@@ -167,11 +173,27 @@ internal sealed class CrystallineConflictPredictionService : IDisposable
 
                 matchGeneration = matchGeneration == long.MaxValue ? 1 : matchGeneration + 1;
                 finalResultObserved = false;
-                captureBuffer.SetEnabled(true);
             }
 
-            DrainObservedEffects();
-            UpdateDeaths();
+            // The exact roster is useful as soon as team reveal completes.
+            // Live counters remain closed until the first combat frame, then
+            // stay open for the rest of this match even if the flag flickers.
+            combatStarted |= condition[ConditionFlag.InCombat];
+            var liveInputsEnabled =
+                CrystallineConflictPredictionRules.CanUseLiveMatchInputs(
+                    exactRosterAvailable: roster is not null,
+                    combatStarted,
+                    finalResultObserved);
+            captureBuffer.SetEnabled(liveInputsEnabled);
+            if (liveInputsEnabled)
+            {
+                DrainObservedEffects();
+                UpdateDeaths();
+            }
+            else
+            {
+                captureBuffer.Clear();
+            }
             PublishSnapshot();
         }
         catch (Exception exception)
@@ -486,7 +508,12 @@ internal sealed class CrystallineConflictPredictionService : IDisposable
         var ownProgress = 0;
         var enemyProgress = 0;
         var local = objectTable.LocalPlayer;
-        if (!finalResultObserved && local is not null)
+        var liveInputsEnabled =
+            CrystallineConflictPredictionRules.CanUseLiveMatchInputs(
+                exactRosterAvailable: true,
+                combatStarted,
+                finalResultObserved);
+        if (liveInputsEnabled && local is not null)
         {
             hasProgress = CrystallineConflictPredictionDirectorReader.TryReadTeamProgress(
                 local.EntityId,
@@ -495,6 +522,7 @@ internal sealed class CrystallineConflictPredictionService : IDisposable
         }
 
         if (configuration.EnableDynamicCrystallineConflictPrediction &&
+            liveInputsEnabled &&
             CrystallineConflictPredictionRules.TryApplyLiveAdjustment(
                 opening,
                 new CrystallineConflictLivePredictionObservation(
@@ -512,8 +540,9 @@ internal sealed class CrystallineConflictPredictionService : IDisposable
         var next = new CrystallineConflictPredictionSnapshot(
             true,
             true,
+            combatStarted,
             finalResultObserved,
-            !finalResultObserved,
+            liveInputsEnabled,
             opening.OwnTeamWinProbability,
             currentChance,
             opening.KnownOwnPlayers,
@@ -522,7 +551,7 @@ internal sealed class CrystallineConflictPredictionService : IDisposable
             enemies.Select((player, index) => ToSnapshot(player, enemyRecords[index])).ToArray(),
             finalResultObserved
                 ? "FINAL SCOREBOARD"
-                : hasProgress
+                : combatStarted
                     ? "LOCAL LIVE ESTIMATE"
                     : "LOCAL START ESTIMATE");
         Volatile.Write(ref snapshot, next);
@@ -572,6 +601,7 @@ internal sealed class CrystallineConflictPredictionService : IDisposable
         activeTerritoryId = clientState.TerritoryType;
         openingPrediction = default;
         hasOpeningPrediction = false;
+        combatStarted = false;
         finalResultObserved = false;
         Volatile.Write(ref snapshot, CrystallineConflictPredictionSnapshot.Inactive(status));
     }

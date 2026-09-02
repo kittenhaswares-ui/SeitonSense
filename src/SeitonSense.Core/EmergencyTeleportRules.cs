@@ -112,6 +112,7 @@ public readonly record struct EmergencyTeleportObservation(
     bool IsTextInputActive,
     bool HeldGameplayKeyEligible,
     int HeldGameplayKeyCode,
+    // Exact frozen-key consent, including any adapter-managed release grace.
     bool FrozenKeyStillDown,
     uint ResolvedActionId,
     bool ActionLocallyReady,
@@ -521,8 +522,6 @@ public static class EmergencyTeleportRules
             observation.HigherPriorityClaimed ||
             !observation.InputProbeSucceeded ||
             observation.IsTextInputActive ||
-            !observation.HeldGameplayKeyEligible ||
-            observation.HeldGameplayKeyCode != intent.FrozenKeyCode ||
             !observation.FrozenKeyStillDown ||
             !IsExactJobAction(observation.LocalJobId, observation.ResolvedActionId) ||
             observation.ResolvedActionId != intent.ActionId ||

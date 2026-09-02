@@ -361,7 +361,7 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
              currentIntent.TerritoryId != clientState.TerritoryType ||
              currentIntent.LocalPlayer != localIdentity ||
              currentIntent.LocalAddress != exactLocal?.Address ||
-             !inputFrame.IsGameplayKeyPhysicallyDown(currentIntent.HeldKey)))
+             !inputFrame.IsFrozenGameplayKeyConsentValid(currentIntent.HeldKey)))
         {
             ClearEpisode();
             lastEvent = "Frozen AST heal cancelled by context, identity, Guard, or held-key drift";
@@ -516,6 +516,7 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
                     heldKey,
                     NextIntentEpochToken(),
                     nowMilliseconds);
+                _ = inputFrame.IsFrozenGameplayKeyConsentValid(heldKey);
                 phase = AstrologianHarmonicOrbisProbePhase.BaseBuffered;
                 retry = HeldActionRetryState.Initial;
                 phaseExpiresAtMilliseconds = SaturatingAdd(

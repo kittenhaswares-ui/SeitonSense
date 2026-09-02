@@ -46,7 +46,8 @@ internal static class SmartWardensPaeanTargetSelfTests
                 complete,
                 LocalPlayer),
             "exact five-member view");
-        False(HasComplete(complete[..4]), "missing party member");
+        True(HasComplete(complete[..4]), "stable exact partial party view");
+        False(HasComplete(complete[..1]), "self-only view has no ally");
         False(HasComplete(null), "missing view");
 
         var duplicateSlot = complete.ToArray();
@@ -179,9 +180,9 @@ internal static class SmartWardensPaeanTargetSelfTests
         Vanilla(
             valid with { CompleteExactPartyView = false },
             SmartWardensPaeanDecisionReason.IncompleteExactPartyView);
-        Vanilla(
+        Redirect(
             valid with { Candidates = valid.Candidates!.Take(4).ToArray() },
-            SmartWardensPaeanDecisionReason.IncompleteExactPartyView);
+            "stable exact partial party view");
 
         var belowThreshold = Candidates();
         belowThreshold[1] = belowThreshold[1] with

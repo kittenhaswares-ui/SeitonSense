@@ -665,7 +665,7 @@ internal sealed class DefensiveUtilityProbe
                                     currentIdentity == frozenGuardian.LocalPlayer &&
                                     input.ProbeSucceeded &&
                                     !input.IsTextInputActive &&
-                                    inputFrame.IsGameplayKeyPhysicallyDown(frozenGuardian.HeldKey) &&
+                                    inputFrame.IsFrozenGameplayKeyConsentValid(frozenGuardian.HeldKey) &&
                                     !guardActive &&
                                     IsPaladin(localPlayer!) &&
                                     DefensiveUtilityRules.IsGuardianCandidate(exactCandidate);
@@ -779,6 +779,7 @@ internal sealed class DefensiveUtilityProbe
                     selectedKey,
                     NextFrozenIntentEpochToken(),
                     HeldActionRetryState.Initial);
+                _ = inputFrame.IsFrozenGameplayKeyConsentValid(selectedKey);
                 if (!IsNativeBoundaryNearQueueable(localPlayer!))
                 {
                     frozenGuardianRetry = frozen;

@@ -49,6 +49,7 @@ internal sealed class PersonalStatusService : IDisposable
     private readonly RedMageGuardEngageProbe redMageGuardEngage;
     private readonly DefensiveUtilityProbe defensiveUtility;
     private readonly SmartRecuperateProbe smartRecuperate;
+    private readonly BardRepellingShotProbe bardRepellingShot;
     private readonly EmergencyTeleportProbe emergencyTeleport;
     private readonly PressureEscapeSprintProbe pressureEscapeSprint;
     private readonly SmartSprintProbe smartSprint;
@@ -164,6 +165,12 @@ internal sealed class PersonalStatusService : IDisposable
             dutyState,
             configuration,
             nearAssist,
+            log);
+        bardRepellingShot = new BardRepellingShotProbe(
+            clientState,
+            objectTable,
+            nearAssist,
+            automaticRecoveryShotCastMetadata,
             log);
         pressureEscapeSprint = new PressureEscapeSprintProbe(
             clientState,
@@ -293,6 +300,8 @@ internal sealed class PersonalStatusService : IDisposable
     internal AutoGuardProtectionDiagnostics AutoGuardProtectionDiagnostics =>
         nearAssist.AutoGuardProtectionDiagnostics;
     internal SmartRecuperateProbeSnapshot SmartRecuperateDiagnostics => smartRecuperate.Snapshot;
+    internal BardRepellingShotProbeSnapshot BardRepellingShotDiagnostics =>
+        bardRepellingShot.Snapshot;
     internal AstrologianHarmonicOrbisProbeSnapshot AstrologianHarmonicOrbisDiagnostics =>
         astrologianHarmonicOrbis.Snapshot;
     internal bool AstrologianHarmonicOrbisMetadataVerified =>
@@ -442,6 +451,7 @@ internal sealed class PersonalStatusService : IDisposable
             redMageGuardEngage.FailClosed();
             defensiveUtility.FailClosed(now, exception);
             smartRecuperate.FailClosed();
+            bardRepellingShot.Reset();
             emergencyTeleport.FailClosed();
             pressureEscapeSprint.FailClosed(now, exception);
             smartSprint.FailClosed(now, exception);
@@ -494,6 +504,7 @@ internal sealed class PersonalStatusService : IDisposable
             redMageGuardEngage.Reset();
             defensiveUtility.Reset();
             smartRecuperate.Reset();
+            bardRepellingShot.Reset();
             emergencyTeleport.Reset();
             pressureEscapeSprint.Reset();
             smartSprint.Reset();
@@ -776,6 +787,11 @@ internal sealed class PersonalStatusService : IDisposable
             configuration.EnableAutomaticRecuperate &&
             isSupportedPvPContext &&
             metadata.RecuperateVerified;
+        var bardRepellingShotConfigurationEnabled =
+            configuration.Enabled &&
+            configuration.EnableBardRepellingShotProximityHelper &&
+            isSupportedPvPContext &&
+            localJobId == BardRepellingShotRules.BardJobId;
         var allyRescueHeldInputEnabled = configuration.Enabled &&
                                          configuration.ExperimentalAllyRescueOnNextKey &&
                                          configuration.AllyRescueOnHeldGameplayKey &&
@@ -935,11 +951,17 @@ internal sealed class PersonalStatusService : IDisposable
             gunbreakerContinuationHeldEnabled: gunbreakerContinuationHeldInputEnabled,
             darkKnightShadowbringerHeldEnabled: darkKnightShadowbringerHeldInputEnabled,
             monkHeldComboEnabled: monkHeldComboInputEnabled,
-             samuraiCounterCcHeldEnabled: samuraiCounterCcHeldInputEnabled,
-             samuraiZantetsukenHeldEnabled: false,
-             astrologianHarmonicOrbisHeldEnabled: astrologianHarmonicOrbisHeldInputEnabled,
-             redMageGuardEngageHeldEnabled: redMageGuardEngageHeldInputEnabled,
-             smartSprintHeldEnabled: smartSprintHeldInputEnabled);
+            samuraiCounterCcHeldEnabled: samuraiCounterCcHeldInputEnabled,
+            samuraiZantetsukenHeldEnabled: false,
+            astrologianHarmonicOrbisHeldEnabled: astrologianHarmonicOrbisHeldInputEnabled,
+            redMageGuardEngageHeldEnabled: redMageGuardEngageHeldInputEnabled,
+            smartSprintHeldEnabled: smartSprintHeldInputEnabled,
+            heldHelperReservationEnabled:
+                configuration.EnablePvpLatencyResponseHelper,
+            heldHelperReservationWindowMilliseconds:
+                configuration.PvpLatencyResponseWindowMilliseconds,
+            nowMilliseconds: now,
+            heldHelpersSuppressedByGuard: guardActive);
         var purify = emergencyPurify.Observe(
             localPlayer,
             isSupportedPvPContext,
@@ -1048,6 +1070,23 @@ internal sealed class PersonalStatusService : IDisposable
         var immediateDefenseClaimedPriority = immediateRecoveryClaimedPriority ||
                                               defensiveUtilityClaimedPriority;
         ObserveAutoGuardFeedback(guardDefense.AutoGuardPopup);
+        // BRD Mannstopper is an automatic proximity escape immediately below
+        // self recovery. It freezes one Smart Action actor; while Powerful Shot
+        // is the only blocker it asks the central coordinator to cancel that
+        // exact cast, then dispatches on a later clear-cast frame.
+        now = Environment.TickCount64;
+        var bardRepelling = bardRepellingShot.Observe(
+            localPlayer,
+            context,
+            bardRepellingShotConfigurationEnabled,
+            nearAssist.VerifiedCcBrakeActionIds.Contains(
+                BardRepellingShotRules.RepellingShotActionId),
+            metadata.WolvesDenStrikingDummyVerified,
+            guardActive,
+            immediateDefenseClaimedPriority || emergencyInputFrame.IsConsumed,
+            now,
+            hardReset);
+        immediateDefenseClaimedPriority |= bardRepelling.InputClaimed;
         // AST's held Near Help lane is immediately below self recovery. It freezes one
         // exact <=60% party member and may reserve only its accepted base
         // Orbis' exact same-target Double Cast form for a later framework frame.
@@ -1505,6 +1544,9 @@ internal sealed class PersonalStatusService : IDisposable
                 guardDefense.InputClaimed,
                 guardDefense.CastCancellationRequest) ??
             ClaimedCastCancellationRequest(
+                bardRepelling.InputClaimed,
+                bardRepelling.CastCancellationRequest) ??
+            ClaimedCastCancellationRequest(
                 astrologianOrbis.InputClaimed,
                 astrologianOrbis.CastCancellationRequest) ??
             ClaimedCastCancellationRequest(
@@ -1551,6 +1593,8 @@ internal sealed class PersonalStatusService : IDisposable
              {
                  { IsAutomaticRecovery: true } =>
                      configuration.AllowAutomaticRecoveryToCancelBasicShotCasts,
+                 { IsAutomaticBardRepellingShot: true } =>
+                     configuration.EnableBardRepellingShotProximityHelper,
                  { RequiresFrozenKey: true } =>
                      configuration.AllowHeldHelpersToCancelOwnCast,
                  _ => false,
@@ -1938,6 +1982,7 @@ internal sealed class PersonalStatusService : IDisposable
         redMageGuardEngage.Reset();
         defensiveUtility.Reset();
         smartRecuperate.Reset();
+        bardRepellingShot.Reset();
         emergencyTeleport.Reset();
         pressureEscapeSprint.Reset();
         smartSprint.Reset();

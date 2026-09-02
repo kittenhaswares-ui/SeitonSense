@@ -150,6 +150,8 @@ $clientActionAttemptBoundaryPath = Join-Path $pluginServicesRoot 'ClientActionAt
 $clientActionAttemptOutcomePath = Join-Path $coreRoot 'ClientActionAttemptOutcome.cs'
 $heldActionRetryRulesPath = Join-Path $coreRoot 'HeldActionRetryRules.cs'
 $heldActionRetrySelfTestsPath = Join-Path $coreSelfTestRoot 'HeldActionRetrySelfTests.cs'
+$heldHelperReservationRulesPath = Join-Path $coreRoot 'HeldHelperReservationRules.cs'
+$heldHelperReservationSelfTestsPath = Join-Path $coreSelfTestRoot 'HeldHelperReservationSelfTests.cs'
 $adaptiveResponseTimeRulesPath = Join-Path $coreRoot 'AdaptiveResponseTimeRules.cs'
 $adaptiveResponseTimeSelfTestsPath = Join-Path $coreSelfTestRoot 'AdaptiveResponseTimeSelfTests.cs'
 $heldChaseBufferRulesPath = Join-Path $coreRoot 'HeldChaseBufferRules.cs'
@@ -157,6 +159,9 @@ $heldChaseBufferSelfTestsPath = Join-Path $coreSelfTestRoot 'HeldChaseBufferSelf
 $smartSprintRulesPath = Join-Path $coreRoot 'SmartSprintRules.cs'
 $smartSprintSelfTestsPath = Join-Path $coreSelfTestRoot 'SmartSprintSelfTests.cs'
 $smartSprintProbePath = Join-Path $pluginServicesRoot 'SmartSprintProbe.cs'
+$bardRepellingShotRulesPath = Join-Path $coreRoot 'BardRepellingShotRules.cs'
+$bardRepellingShotSelfTestsPath = Join-Path $coreSelfTestRoot 'BardRepellingShotSelfTests.cs'
+$bardRepellingShotProbePath = Join-Path $pluginServicesRoot 'BardRepellingShotProbe.cs'
 $seitonResponseClockPath = Join-Path $pluginServicesRoot 'SeitonResponseClock.cs'
 $criticalUtilityCoordinationRulesPath = Join-Path $coreRoot 'CriticalUtilityCoordinationRules.cs'
 $criticalUtilityCoordinationServicePath = Join-Path $pluginServicesRoot 'CriticalUtilityCoordinationService.cs'
@@ -265,6 +270,7 @@ $smartTargetSelectionRulesPath = Join-Path $coreRoot 'SmartTargetSelectionRules.
 $smartTargetFarthestSelectionRulesPath = Join-Path $coreRoot 'SmartTargetFarthestSelectionRules.cs'
 $smartTargetSelectionSelfTestsPath = Join-Path $coreSelfTestRoot 'SmartTargetSelectionSelfTests.cs'
 $smartActionProtectionRulesPath = Join-Path $coreRoot 'SmartActionProtectionRules.cs'
+$smartActionProtectionStatusCatalogPath = Join-Path $coreRoot 'SmartActionProtectionStatusCatalog.cs'
 $smartActionGuardBypassRulesPath = Join-Path $coreRoot 'SmartActionGuardBypassRules.cs'
 $smartActionMovementGuardBypassRulesPath = Join-Path $coreRoot 'SmartActionMovementGuardBypassRules.cs'
 $smartActionSafetyLeaseRulesPath = Join-Path $coreRoot 'SmartActionSafetyLeaseRules.cs'
@@ -386,6 +392,7 @@ $allowedUnsafe = @(
     $strictWolvesDenDummyResolverPath,
     $smartWardensPaeanServicePath,
     $heldCastCancellationServicePath,
+    $bardRepellingShotProbePath,
     $isolationAwarenessPath,
     $autoEnemyFocusMarkPath,
     $reviewedPvpCommandDispatcherPath,
@@ -865,7 +872,7 @@ if ($normalizedNearAssistForIntegratedInput -notmatch 'TryConsumeCastedMacroRedi
 }
 
 # Pin all retained buffer/repeat/compatibility suites and the exact current
-# 624-test registry.
+# 634-test registry.
 $integratedCoreTestProgram = Read-RequiredSource (Join-Path $coreSelfTestRoot 'Program.cs') 'Integrated Core self-test registry'
 $smartActionBufferSelfTests = Read-RequiredSource $smartActionBufferSelfTestsPath 'Smart action-buffer self-tests'
 $logicalHotbarRepeatSelfTests = Read-RequiredSource $logicalHotbarRepeatSelfTestsPath 'Logical hotbar repeat self-tests'
@@ -889,11 +896,11 @@ Assert-Literals $smartActionBufferCompatibilitySelfTests @(
     'reActionOwnsExactAction: false)',
     'reActionOwnsExactAction: true)'
 ) 'Generic-buffer compatibility self-tests'
-if ($staticIntegratedTestCount -ne 583 -or
+if ($staticIntegratedTestCount -ne 593 -or
     $logicalRepeatTestCount -ne 31 -or
     $physicalLatchTestCount -ne 6 -or
     $repeatPolicyTestCount -ne 4 -or
-    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 624 -or
+    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 634 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches($smartActionBufferSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferCompatibilitySelfTests\.\w+').Count -ne 6 -or
@@ -903,7 +910,7 @@ if ($staticIntegratedTestCount -ne 583 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatPolicySelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartSprintSelfTests\.\w+').Count -ne 6 -or
     [regex]::Matches((Read-RequiredSource $smartSprintSelfTestsPath 'Smart Sprint self-tests'), '\bpublic static void\s+\w+\s*\(').Count -ne 6) {
-    throw 'Schema 51 must retain seven smart-buffer tests, six compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, six Smart Sprint tests, and the exact 624-test combined Core registry.'
+    throw 'Schema 53 must retain seven smart-buffer tests, six compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, six Smart Sprint tests, and the exact 634-test combined Core registry.'
 }
 
 # Pin the two schema-42 visual overlays and the fail-closed local map-result
@@ -1746,8 +1753,8 @@ if ($smartTabConfiguration -notmatch '(?m)^\s*public bool EnableSmartTabTargetin
     [regex]::Matches($smartTabConfiguration, '\bEnableSmartActionMacro\s*=\s*EnableNearAssistMacro\s*;').Count -ne 1 -or
     [regex]::Matches($smartTabConfiguration, '\bEnableSmartActionMacro\s*=\s*false\s*;').Count -ne 1 -or
     $normalizedSmartTabConfiguration -notmatch 'if \(Version < 33\) \{.*?EnableSmartTabTargeting = false; EnableSmartActionMacro = EnableNearAssistMacro; \}' -or
-    $normalizedSmartTabConfiguration -notmatch 'Version = 51;') {
-    throw 'Schema 51 must preserve the schema-33 Smart Tab migration, keep Smart Tab false for upgrades/fresh/reset, and migrate only the prior explicit macro-helper choice to separate default-off Smart Action.'
+    $normalizedSmartTabConfiguration -notmatch 'Version = 53;') {
+    throw 'Schema 53 must preserve the schema-33 Smart Tab migration, keep Smart Tab false for upgrades/fresh/reset, and migrate only the prior explicit macro-helper choice to separate default-off Smart Action.'
 }
 
 $normalizedNearAssistForSmartAction = (Read-RequiredSource $nearAssistPath 'Smart Action shared redirector') -replace '\s+', ' '
@@ -1759,6 +1766,8 @@ Assert-Literals $smartActionContextRules @(
     'context == SupportedPvPContext.WolvesDen && wolvesDenTestingEnabled;',
     'public static bool CanUseSmartTargetRanking(',
     'context == SupportedPvPContext.CrystallineConflict;',
+    'public const ulong NativeSelectedTargetSentinel = 0xE0000000UL;',
+    'public static bool IsNativeSelectedTargetCarrier(ulong targetId)',
     'public static bool CanUseExactVisibleTargetTestFallback(',
     'combatPriorityMode;',
     'public static bool CanInspectExactVisibleTargetTestFallback(',
@@ -1785,15 +1794,16 @@ foreach ($test in @(
     'WolvesDenRequiresItsExactTestOptIn',
     'WolvesDenUsesOnlyCombatPriorityVisibleTargetFallback',
     'WolvesDenVisibleTargetShapeEligibilityIsExact',
-    'NativeSelectedTargetCarrierRequiresResolvedHardTarget'
+    'NativeSelectedTargetCarrierRequiresResolvedHardTarget',
+    'WolvesDenCastsKeepTheExactSelectedTargetFallback'
 )) {
     Assert-Literals $smartActionContextSelfTests @("public static void $test()") "Smart Action context self-test $test"
     if ([regex]::Matches($smartTabTestProgram, [regex]::Escape("SmartActionContextSelfTests.$test")).Count -ne 1) {
         throw "Smart Action context self-test must be registered exactly once: $test"
     }
 }
-if ([regex]::Matches($smartActionContextSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 4) {
-    throw 'Exactly four Smart Action context regressions must remain implemented.'
+if ([regex]::Matches($smartActionContextSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 5) {
+    throw 'Exactly five Smart Action context regressions must remain implemented.'
 }
 $smartActionArmMethod = [regex]::Match(
     $normalizedNearAssistForSmartAction,
@@ -1848,6 +1858,7 @@ $smartTargetSelectionRules = Read-RequiredSource $smartTargetSelectionRulesPath 
 $smartTargetFarthestSelectionRules = Read-RequiredSource $smartTargetFarthestSelectionRulesPath 'Seiton Far target selection rules'
 $smartTargetSelectionSelfTests = Read-RequiredSource $smartTargetSelectionSelfTestsPath 'Smart Action target selection self-tests'
 $smartActionProtectionRules = Read-RequiredSource $smartActionProtectionRulesPath 'Smart Action protected-target rules'
+$smartActionProtectionStatusCatalog = Read-RequiredSource $smartActionProtectionStatusCatalogPath 'Smart Action current protection-status catalog'
 $smartActionGuardBypassRules = Read-RequiredSource $smartActionGuardBypassRulesPath 'Smart Action Guard-bypass metadata rules'
 $smartActionMovementGuardBypassRules = Read-RequiredSource $smartActionMovementGuardBypassRulesPath 'Smart Action movement Guard-target rules'
 $normalizedSmartActionMovementGuardBypassRules = $smartActionMovementGuardBypassRules -replace '\s+', ' '
@@ -2092,7 +2103,7 @@ Assert-Literals $samuraiReactiveMetadataGuard @(
     'SmartActionCastsVerified'
 ) 'Reviewed SAM cast metadata pins and conservative visible-target fallback'
 Assert-Literals $pluginSource @(
-    'metadata.SmartActionProtectionStatusesVerified,',
+    'metadata.SmartActionProtectionStatuses,',
     'metadata.SmartActionGuardBypassActions,',
     'samuraiReactiveMetadata.SmartActionCastsVerified,',
     'samuraiReactiveMetadata.ChitenVerified,'
@@ -2101,16 +2112,28 @@ $smartActionStatusMetadataGuard = Read-RequiredSource (
     Join-Path $pluginServicesRoot 'SeitonMetadataGuard.cs') 'Smart Action status-only metadata guard'
 Assert-Literals $smartActionStatusMetadataGuard @(
     'bool SmartActionProtectionStatusesVerified',
+    'SmartActionProtectionStatusCatalog SmartActionProtectionStatuses',
     '"Smart Action protection statuses"',
-    'NinjaSeitonProtectionStatusCatalog.CoveredLegacyStatusId',
-    'NinjaSeitonProtectionStatusCatalog.CoveredStatusId',
-    'NinjaSeitonProtectionStatusCatalog.CoveredPvpStatusId',
-    'NinjaSeitonProtectionStatusCatalog.CoveredPvpAlternateStatusId',
-    'NinjaSeitonProtectionStatusCatalog.HallowedGroundStatusId',
-    'NinjaSeitonProtectionStatusCatalog.UndeadRedemptionStatusId',
-    'EnemyCombatConstants.GuardStatusId',
-    'EnemyCombatConstants.GuardStatusAlternateId'
-) 'Independent Smart Action protection-status metadata proof'
+    'var smartActionProtectionStatuses = SmartActionProtectionStatusCatalog.Empty;',
+    '"Guard" => SmartActionProtectionStatusSemantic.Guard,',
+    '"Covered" => SmartActionProtectionStatusSemantic.Covered,',
+    '"Hallowed Ground" =>',
+    '"Undead Redemption" =>',
+    'SmartActionProtectionStatusCatalog.Create(definitions)',
+    'if (!catalog.IsVerified) return false;',
+    'smartActionProtectionStatuses = catalog;'
+) 'Independent current Smart Action protection-status catalog discovery'
+Assert-Literals $smartActionProtectionStatusCatalog @(
+    'public enum SmartActionProtectionStatusSemantic : byte',
+    'public sealed class SmartActionProtectionStatusCatalog',
+    'public static SmartActionProtectionStatusCatalog Empty',
+    'public bool IsVerified { get; }',
+    'public SmartActionProtectionKind Classify(uint statusId)',
+    'GetValues<SmartActionProtectionStatusSemantic>()',
+    '.All(meanings.Contains)',
+    'if (existingSemantic != definition.Semantic) return Empty;',
+    'statusId is not 0 and not 0xE0000000u and not uint.MaxValue;'
+) 'Current protection meanings require complete unambiguous status identities'
 Assert-Literals $smartActionStatusMetadataGuard @(
     'SmartActionGuardBypassCatalog SmartActionGuardBypassActions',
     'var smartActionGuardBypassActions = SmartActionGuardBypassCatalog.Empty;',
@@ -2131,19 +2154,20 @@ Assert-Literals $smartActionStatusMetadataGuard @(
 $normalizedSmartActionStatusMetadataGuard = $smartActionStatusMetadataGuard -replace '\s+', ' '
 $smartActionStatusOnlyBlock = [regex]::Match(
     $normalizedSmartActionStatusMetadataGuard,
-    'var smartActionProtectionStatusesVerified = ValidateFeature\( "Smart Action protection statuses", log, \(\) => \{.*?\}\);')
+    'var smartActionProtectionStatuses = SmartActionProtectionStatusCatalog\.Empty; var smartActionProtectionStatusesVerified = ValidateFeature\( "Smart Action protection statuses", log, \(\) => \{.*?\}\);')
 if (!$smartActionStatusOnlyBlock.Success -or
     $smartActionStatusOnlyBlock.Value -notmatch 'GetExcelSheet<Status>\(ClientLanguage\.English\)' -or
     $smartActionStatusOnlyBlock.Value -match '\b(?:ActionSheet|ActionTransient|seitonVerified|guardVerified|Recast|Cost)\b' -or
+    $smartActionStatusOnlyBlock.Value -notmatch 'foreach \(var status in statuses\).*?SmartActionProtectionStatusCatalog\.Create\(definitions\).*?catalog\.IsVerified' -or
     $normalizedSmartActionStatusMetadataGuard -notmatch 'new PvPMetadataValidation\( seitonVerified, viperSerpentTailVerified, wolvesDenStrikingDummyVerified, guardVerified, smartActionProtectionStatusesVerified, guardianVerified,') {
     throw 'Smart Action protection metadata must remain a status-only proof wired independently between Guard and Guardian validation fields.'
 }
-if ($smartActionProtectionRules -match '\b(?:ActionManager|IPlayerCharacter|StatusList|ObjectTable|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b' -or
+if (($smartActionProtectionRules + $smartActionProtectionStatusCatalog) -match '\b(?:ActionManager|IPlayerCharacter|StatusList|ObjectTable|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b' -or
     $smartActionSafetyLeaseRules -match '\b(?:ActionManager|IPlayerCharacter|StatusList|ObjectTable|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b') {
     throw 'Smart Action protection and exact-fallback lease policy must remain pure value-only Core code.'
 }
 if ([regex]::Matches($normalizedSmartActionRuntime, 'SmartActionProtectionRules\.IsActionProtectionSafe\(').Count -ne 1 -or
-    $normalizedSmartActionRuntime -notmatch 'if \(!smartActionProtectionMetadataVerified\).*?canonicalEnemies = \[\]; protectedActors = \[\]; return false;' -or
+    $normalizedSmartActionRuntime -notmatch 'if \(!smartActionProtectionStatuses\.IsVerified\).*?canonicalEnemies = \[\]; protectedActors = \[\]; return false;' -or
     $normalizedSmartActionRuntime -notmatch 'var occupiedActorIdentities = new HashSet<\(ulong GameObjectId, uint EntityId\)>\(\);.*?!occupiedActorIdentities\.Add\(\(enemy\.GameObjectId, enemy\.EntityId\)\).*?if \(!SmartActionProtectionRules\.RequiresCompleteHostileSnapshot\(attackShape\)\) \{ canonicalEnemies = enemies\.ToArray\(\); protectedActors = protections\.ToArray\(\); return true; \}.*?foreach \(var player in objectTable\.PlayerObjects\.OfType<IPlayerCharacter>\(\)\).*?var accountedFor = occupiedActorIdentities\.Contains\( \(player\.GameObjectId, player\.EntityId\)\); if \(accountedFor\) continue;.*?var couldCarryChiten = jobId is 0 or EnemyCombatConstants\.SamuraiJobId \|\| player\.StatusList\.Any\(status => status\.StatusId == SmartActionProtectionRules\.ChitenStatusId\); if \(!couldCarryChiten\) continue;.*?return false;' -or
     $normalizedSmartActionRuntime -notmatch 'var protectionSafe = IsSmartActionProtectionSafe\(.*?CallerProvenProtectionSafe: protectionSafe' -or
     $normalizedSmartActionRuntime -notmatch 'var finalProtectionSafe = currentEnemy is not null && TryBuildSmartActionProtectionSnapshot\(.*?CallerProvenProtectionSafe = finalProtectionSafe' -or
@@ -2154,6 +2178,8 @@ if ([regex]::Matches($normalizedSmartActionRuntime, 'SmartActionProtectionRules\
     $normalizedSmartActionRuntime -notmatch 'private bool CanSmartActionTargetGuard\( uint resolvedActionId, GameAction action\) => !SmartActionMovementGuardBypassRules\.IsGuardBlockedCcMovement\(resolvedActionId\) && \(smartActionGuardBypassActions\.Contains\(resolvedActionId\) \|\| \(action\.RowId == resolvedActionId.*?SmartActionMovementGuardBypassRules\.AllowsGuardTarget\( action\.ClassJob\.RowId, resolvedActionId\).*?action\.ActionCategory\.RowId is 3 or 4.*?action\.AffectsPosition\)\);' -or
     $normalizedSmartActionRuntime -notmatch 'private bool IsSmartActionProtectionSafe\(.*?SamuraiSmartActionCastRules\.IsOgiNamikiriConeAction\(resolvedActionId\) && samuraiSmartActionCastsMetadataVerified.*?SamuraiSmartActionCastRules\.IsOgiNamikiriProtectionSafe\( localPlayer\.Position, targetGeometry, effectRange, protectedActors, actionIgnoresGuard\).*?return SmartActionProtectionRules\.IsActionProtectionSafe\( attackShape, targetGeometry, effectRange, protectedActors, actionIgnoresGuard\);' -or
     $normalizedSmartActionRuntime -notmatch 'protectionKind \|= exactKind; continue;.*?protectionKind \|= exactKind;' -or
+    [regex]::Matches($normalizedSmartActionRuntime, 'ClassifySmartActionProtectionStatus\(status\.StatusId\)').Count -ne 2 -or
+    $normalizedSmartActionRuntime -notmatch 'private SmartActionProtectionKind ClassifySmartActionProtectionStatus\( uint statusId\) => statusId == SmartActionProtectionRules\.ChitenStatusId \? SmartActionProtectionKind\.Chiten : smartActionProtectionStatuses\.Classify\(statusId\);' -or
     $normalizedSmartActionRuntime -notmatch '!chitenMetadataVerified && \(jobId == EnemyCombatConstants\.SamuraiJobId \|\| jobId == 0\) \? SmartActionProtectionKind\.Chiten' -or
     $normalizedSmartActionRuntime -notmatch 'if \(exactKind == SmartActionProtectionKind\.Chiten\).*?jobId != EnemyCombatConstants\.SamuraiJobId.*?!\(!chitenMetadataVerified && jobId == 0\).*?return false;' -or
     $normalizedSmartActionRuntime -notmatch 'forwardedTargetId = TryResolveSmartTargetRedirect\( thisPtr, actionType, actionId, mode, targetId, smartToken, heldActionSelection: false, out var rewritten, out var smartWinnerSelected, out var selectedSlot, out var reason\);.*?useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId,' -or
@@ -2172,7 +2198,8 @@ if ($normalizedSmartActionRuntime -notmatch 'var inspectedSmartActionTargetId = 
     $normalizedSmartActionRuntime -notmatch 'if \(!recognizedMode \|\| !IsSupportedActionType\(actionType\)\).*?if \(!potentiallyExactAction\).*?SmartActionSafetyInspectionOutcome\.NotApplicable;.*?Blocked exact Smart Action fallback: invocation mode drifted.*?SmartActionSafetyInspectionOutcome\.Unsafe;' -or
     $normalizedSmartActionRuntime -notmatch 'if \(clientAccepted && \(handlingSmartTarget \|\| smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe\)\).*?ClearSmartActionSafetyLease\(\);' -or
     $normalizedSmartActionRuntime -notmatch 'if \(!bypassRedirect && \(handlingSmartTarget \|\| smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe\)\).*?smartActionSafetyInspection = InspectSmartActionSafetyLease\( thisPtr, actionType, actionId, forwardedTargetId, mode, out var finalSmartActionTargetId\);.*?if \(smartActionSafetyInspection != SmartActionSafetyInspectionOutcome\.Safe\) return false;.*?forwardedTargetId = finalSmartActionTargetId; \}.*?var localGuardBoundary = ObserveExactLocalGuardActivationAttempt\( thisPtr, actionType, actionId\);.*?clientAccepted = useActionHook!\.Original\(' -or
-    $normalizedSmartActionRuntime -notmatch 'var effectiveTargetId = incomingTargetId is 0 or InvalidObjectId \? GetNativeHardTargetId\(local\) : incomingTargetId; if \(!TryEvaluateExactSmartActionTargetProtection\( resolvedActionId, local, action, effectiveTargetId, out var exactCanonicalTargetId, out var targetLabel\)\).*?canonicalTargetId = exactCanonicalTargetId;' -or
+    $normalizedSmartActionRuntime -notmatch 'var effectiveTargetId = SmartActionContextRules \.IsNativeSelectedTargetCarrier\(incomingTargetId\) \? GetNativeHardTargetId\(local\) : incomingTargetId; if \(!TryEvaluateExactSmartActionTargetProtection\( resolvedActionId, local, action, effectiveTargetId, out var exactCanonicalTargetId, out var targetLabel\)\).*?canonicalTargetId = exactCanonicalTargetId;' -or
+    $normalizedSmartActionRuntime -notmatch 'private static bool IsNetworkObjectId\(ulong objectId\) => objectId is not 0 and not InvalidObjectId and not ulong\.MaxValue;' -or
     $normalizedSmartActionRuntime -notmatch 'if \(!heldActionSelection\) \{ ArmSmartActionSafetyLease\( token, localActor, actionType, actionId, resolvedActionId, now\); \}.*?if \(resolvedActionId == 0\).*?TryGetExactResolvedPvpActionMetadata' -or
     $normalizedSmartActionRuntime -notmatch 'if \(Environment\.TickCount64 >= candidate\.ExpiresAtMilliseconds\).*?armedSmartTarget = null;.*?ownershipChanged = false;.*?Expired before exact Smart Action claim.*?return false;' -or
     $normalizedSmartActionRuntime -notmatch 'SmartActionSafetyLeaseRules\.Arm\( token\.TerritoryId, localPlayer, \(uint\)actionType, rawActionId, resolvedActionId, nowMilliseconds, nowMilliseconds \+ SmartActionSafetyLeaseRules\.DefaultLifetimeMilliseconds\);' -or
@@ -2186,6 +2213,7 @@ if ($normalizedSmartActionRuntime -notmatch 'var inspectedSmartActionTargetId = 
 }
 foreach ($method in @(
     'ExactProtectionStatusKindsArePinned',
+    'CurrentStatusCatalogSurvivesHistoricalRowRemoval',
     'DirectAndTargetCircleSafetyAreExact',
     'UnsupportedShapesAndInvalidGeometryFailClosed',
     'ProtectedCandidatesCannotWinOrReplaceFrozenIntent',
@@ -2203,9 +2231,9 @@ foreach ($method in @(
     Assert-Literals $smartActionSafetyLeaseSelfTests @("public static void $method()") "Smart Action fallback lease self-test $method"
     Assert-Literals $smartActionTestProgram @("SmartActionSafetyLeaseSelfTests.$method") "Smart Action fallback lease test registration $method"
 }
-if ([regex]::Matches($smartActionTestProgram, '\bSmartActionProtectionSelfTests\.\w+').Count -ne 6 -or
+if ([regex]::Matches($smartActionTestProgram, '\bSmartActionProtectionSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches($smartActionTestProgram, '\bSmartActionSafetyLeaseSelfTests\.\w+').Count -ne 3) {
-    throw 'All six Smart Action protection tests and all three exact-fallback lease tests must be independently registered.'
+    throw 'All seven Smart Action protection tests and all three exact-fallback lease tests must be independently registered.'
 }
 foreach ($allowed in $allowedUnsafe) {
     if (-not (Test-Path -LiteralPath $allowed -PathType Leaf)) {
@@ -3276,6 +3304,7 @@ if ([regex]::Matches($ninjaGuardShukuchiSelfTests, '(?m)^\s*public static void \
 # boundary, one exact default-off SCH Critical Strategy boundary, one exact
 # Eukrasia-triggered SGE Smart Kardia boundary, one exact self-only Smart
 # Recuperate boundary, one exact default-off idle Smart Sprint boundary, one
+# exact default-off BRD Mannstopper proximity boundary,
 # exact default-off VPR Serpent's Tail follow-up, one
 # exact default-off Emergency Teleport boundary,
 # exact default-off Monk Earth's Reply, held Monk combo, GNB Continuation, held
@@ -3287,7 +3316,7 @@ if ([regex]::Matches($ninjaGuardShukuchiSelfTests, '(?m)^\s*public static void \
 $actionMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b(UseAction|UseActionLocation|ExecuteAction|SendAction)\s*\(')
 $unexpectedAction = @($actionMatches | Where-Object {
     $reviewedActionBoundary =
-        $_.Path -in @($purifyProbePath, $astrologianHarmonicOrbisProbePath, $redMageGuardEngageProbePath, $defensiveUtilityProbePath, $pressureEscapeSprintProbePath, $smartSprintProbePath, $allyRescueProbePath, $miracleInterceptProbePath, $ninjaSeitonProbePath, $viperSerpentTailProbePath, $scholarCriticalStrategyProbePath, $smartKardiaProbePath, $smartRecuperateProbePath, $emergencyTeleportProbePath, $monkEarthReplyProbePath, $darkKnightPlungeProbePath, $gunbreakerContinuationProbePath, $darkKnightShadowbringerProbePath, $monkHeldComboProbePath, $samuraiReactiveCounterCcProbePath, $panicShukuchiServicePath, $nearAssistPath, $integratedInputRuntimePath) -and
+        $_.Path -in @($purifyProbePath, $astrologianHarmonicOrbisProbePath, $redMageGuardEngageProbePath, $defensiveUtilityProbePath, $pressureEscapeSprintProbePath, $smartSprintProbePath, $bardRepellingShotProbePath, $allyRescueProbePath, $miracleInterceptProbePath, $ninjaSeitonProbePath, $viperSerpentTailProbePath, $scholarCriticalStrategyProbePath, $smartKardiaProbePath, $smartRecuperateProbePath, $emergencyTeleportProbePath, $monkEarthReplyProbePath, $darkKnightPlungeProbePath, $gunbreakerContinuationProbePath, $darkKnightShadowbringerProbePath, $monkHeldComboProbePath, $samuraiReactiveCounterCcProbePath, $panicShukuchiServicePath, $nearAssistPath, $integratedInputRuntimePath) -and
         $_.Line -match '\bUseAction\b'
     $reviewedPanicLocationBoundary =
         $_.Path -in @($panicShukuchiServicePath, $ninjaGuardShukuchiProbePath) -and
@@ -4089,8 +4118,8 @@ if ([regex]::Matches($smartRecuperateProbe, '\bNinjaShukuchiStealthGate\.IsActiv
     [regex]::Matches($smartRecuperateProbe, '\bNinjaShukuchiStealthGate\.ShouldSuppressAutomaticRecovery\s*\(').Count -ne 3) {
     throw 'Recuperate must check exact Hidden at observation, cast-cancel construction, and final dispatch for both held and automatic consent.'
 }
-if ($normalizedSmartRecuperateProbe -notmatch 'var inputClaimed = decision\.ShouldConsumeInputGeneration; if \(inputClaimed\) inputFrame\.Consume\(\);.*?if \(decision\.ShouldDispatch && decision\.Intent is \{ \} intent\).*?TryUseRecuperate' -or
-    $normalizedSmartRecuperateProbe -notmatch 'private HeldCastCancellationRequest\? BuildCastCancellationRequest\(.*?currentState\.Intent is not \{ IsValid: true \} intent \|\| \(intent\.IsAutomatic && \(!automaticRecoveryBasicShotCancellationEnabled \|\| !automaticRecoveryBasicShotMetadataVerified\)\).*?\(intent\.IsAutomatic && !HasExactAutomaticRecoveryBasicShotCastBoundary\(localPlayer\)\).*?SmartRecuperateRules\.CanUseFrozenIntent\(.*?intent\.IsAutomatic \? 0 : intent\.FrozenKeyCode, intent\.IsAutomatic \|\| inputFrame\.IsGameplayKeyPhysicallyDown\( \(VirtualKey\)intent\.FrozenKeyCode\).*?return new HeldCastCancellationRequest\(' -or
+if ($normalizedSmartRecuperateProbe -notmatch 'var inputClaimed = decision\.ShouldConsumeInputGeneration; if \(state\.Intent is \{ IsValid: true, IsAutomatic: false \} claimedIntent\).*?inputFrame\.IsFrozenGameplayKeyConsentValid\( \(VirtualKey\)claimedIntent\.FrozenKeyCode\);.*?if \(inputClaimed\) inputFrame\.Consume\(\);.*?if \(decision\.ShouldDispatch && decision\.Intent is \{ \} intent\).*?TryUseRecuperate' -or
+    $normalizedSmartRecuperateProbe -notmatch 'private HeldCastCancellationRequest\? BuildCastCancellationRequest\(.*?currentState\.Intent is not \{ IsValid: true \} intent \|\| \(intent\.IsAutomatic && \(!automaticRecoveryBasicShotCancellationEnabled \|\| !automaticRecoveryBasicShotMetadataVerified\)\).*?\(intent\.IsAutomatic && !HasExactAutomaticRecoveryBasicShotCastBoundary\(localPlayer\)\).*?SmartRecuperateRules\.CanUseFrozenIntent\(.*?intent\.IsAutomatic \? 0 : intent\.FrozenKeyCode, intent\.IsAutomatic \|\| inputFrame\.IsFrozenGameplayKeyConsentValid\( \(VirtualKey\)intent\.FrozenKeyCode\).*?return new HeldCastCancellationRequest\(' -or
     $normalizedSmartRecuperateProbe -notmatch 'if \(effectiveAutomaticModeEnabled\).*?inputProbeSucceeded = TryGetTextInputState\(out textInputActive\);.*?if \(!inputProbeSucceeded\) textInputActive = true;' -or
     $normalizedSmartRecuperateProbe -notmatch 'var textInputActive = intent\.IsAutomatic \? !TryGetTextInputState\(out var currentTextInputActive\) \|\| currentTextInputActive : inputFrame\.Snapshot\.IsTextInputActive;' -or
     $normalizedSmartRecuperateRules -notmatch 'Context is SupportedPvPContext\.CrystallineConflict or SupportedPvPContext\.WolvesDen' -or
@@ -4350,7 +4379,7 @@ if ([regex]::Matches($viperSerpentTailProbe, '\bUseAction\s*\(').Count -ne 1 -or
     $normalizedViperSerpentTailProbe -notmatch 'private static bool TryResolveExactWolvesDenCurrentHardTarget\(.*?StrictWolvesDenStrikingDummyResolver\.TryResolveExactCurrentHardTarget\(.*?ViperSerpentTailRules\.IsEligibleWolvesDenCurrentTarget\( isPlayerCharacter: false, hostileFlag: false, exactVerifiedStrikingDummy: true\).*?var nativeTargetId = GetNativeHardTargetId\(localPlayer\);.*?objectTable\.SearchById\(nativeTargetId\).*?objectTable\.SearchByEntityId\(\(uint\)nativeTargetId\).*?ViperSerpentTailRules\.IsEligibleWolvesDenCurrentTarget\( isPlayerCharacter: true, hostileFlag, exactVerifiedStrikingDummy: false\).*?ActorIdMatches\(nativeTargetId, candidate!\).*?!IsLivePlayer\(candidate\).*?!candidate!\.IsTargetable.*?GetNativeHardTargetId\(localPlayer\) != nativeTargetId.*?\(candidate\.StatusFlags & StatusFlags\.Hostile\) == 0.*?identity = new TargetPressureActorIdentity\( candidate\.GameObjectId, candidate\.EntityId\);' -or
     $normalizedViperSerpentTailProbe -notmatch 'actionManager->GetActionStatus\( ActionType\.Action, actionId, expectedTarget\.GameObjectId, checkRecastActive: true, checkCastingActive: true\) == 0' -or
     $normalizedViperSerpentTailProbe -notmatch 'targetStatusBefore = actionManager->GetActionStatus\( ActionType\.Action, intent\.ActionId, intent\.Target\.GameObjectId, checkRecastActive: true, checkCastingActive: true\);.*?carrierBefore = actionManager->GetAdjustedActionId\( ViperSerpentTailRules\.CarrierActionId\); before = ClientActionAttemptBoundary\.Capture\( actionManager, intent\.ActionId\); if \(carrierBefore != intent\.ActionId \|\| !before\.IsExactActionReady\(intent\.ActionId\) \|\| targetStatusBefore != 0\)' -or
-    $normalizedViperSerpentTailProbe -notmatch 'var clientAccepted = nearAssist\.RunWithoutRedirect\(\(\) =>.*?ViperSerpentTailRules\.CanUseFrozenIntent\(.*?exposure, actionLocallyReady, \(int\)inputFrame\.Snapshot\.HeldGameplayKey, exactGenerationEligible, candidate\.Value\.Core\).*?attemptedAtBoundary = true; var accepted = actionManager->UseAction\( ActionType\.Action, intent\.ActionId, intent\.Target\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\); after = ClientActionAttemptBoundary\.Capture\( actionManager, intent\.ActionId\); carrierAfter = actionManager->GetAdjustedActionId\( ViperSerpentTailRules\.CarrierActionId\); targetStatusAfter = actionManager->GetActionStatus\( ActionType\.Action, intent\.ActionId, intent\.Target\.GameObjectId, checkRecastActive: true, checkCastingActive: true\); return accepted; \}\);' -or
+    $normalizedViperSerpentTailProbe -notmatch 'var clientAccepted = nearAssist\.RunWithoutRedirect\(\(\) =>.*?ViperSerpentTailRules\.CanUseFrozenIntent\(.*?exposure, actionLocallyReady, intent\.FrozenKeyCode, exactGenerationEligible, candidate\.Value\.Core\).*?attemptedAtBoundary = true; var accepted = actionManager->UseAction\( ActionType\.Action, intent\.ActionId, intent\.Target\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\); after = ClientActionAttemptBoundary\.Capture\( actionManager, intent\.ActionId\); carrierAfter = actionManager->GetAdjustedActionId\( ViperSerpentTailRules\.CarrierActionId\); targetStatusAfter = actionManager->GetActionStatus\( ActionType\.Action, intent\.ActionId, intent\.Target\.GameObjectId, checkRecastActive: true, checkCastingActive: true\); return accepted; \}\);' -or
     $normalizedViperSerpentTailProbe -notmatch 'return ViperSerpentTailRules\.ClassifyFollowUpBoundary\( clientAccepted, intent\.ActionId, targetStatusBefore, targetStatusAfter, carrierBefore, carrierAfter, before, after\);' -or
     $normalizedViperSerpentTailProbe -notmatch 'if \(completion\.SpendExposure\).*?exposure = ViperSerpentTailRules\.MarkCarrierExposureSpent\( exposure, intent\.ExposureGeneration, intent\.ActionId\)' -or
     $normalizedViperSerpentTailProbe -notmatch 'if \(completion\.Terminal && HeldActionRetryRules\.ShouldLatchHeldKeyUntilRelease\( completion\.Disposition\)\).*?terminalHeldKey = \(VirtualKey\)intent\.FrozenKeyCode;' -or
@@ -4463,6 +4492,8 @@ Assert-Literals $emergencyTeleportRules @(
     '!seenGameObjectIds.Add(candidate.Actor.GameObjectId)',
     '!seenEntityIds.Add(candidate.Actor.EntityId)',
     'public static EmergencyTeleportAttemptCommit CommitNativeAttempt(',
+    '// Exact frozen-key consent, including any adapter-managed release grace.',
+    '!observation.FrozenKeyStillDown',
     'EpisodeSpent = true,',
     'Intent = null,',
     'LastNativeOutcome = ClientActionAttemptOutcome.NotInvoked,',
@@ -4488,16 +4519,29 @@ Assert-Literals $emergencyTeleportProbe @(
     'checkRecastActive: true,',
     'checkCastingActive: checkCastingActive) == 0',
     'if (!seenGameObjectIds.Add(ally.GameObjectId) ||',
-    '!seenEntityIds.Add(ally.EntityId)) return [];'
+    '!seenEntityIds.Add(ally.EntityId)) return [];',
+    '_ = inputFrame.IsFrozenGameplayKeyConsentValid(',
+    'inputFrame.IsFrozenGameplayKeyConsentValid('
 ) 'Emergency Teleport final commit, target-specific readiness, duplicate roster, and shared-frame ordering'
 if ([regex]::Matches($emergencyTeleportProbe, '\bUseAction\s*\(').Count -ne 1 -or
     [regex]::Matches($emergencyTeleportProbe, '\bUseActionLocation\s*\(').Count -ne 0 -or
     [regex]::Matches($emergencyTeleportProbe, '\binputFrame\.Consume\s*\(').Count -ne 1 -or
+    [regex]::Matches($emergencyTeleportProbe, '\binputFrame\.IsFrozenGameplayKeyConsentValid\s*\(').Count -ne 3 -or
     [regex]::Matches($emergencyTeleportProbe, 'actionManager->GetActionStatus\s*\(\s*ActionType\.Action\s*,\s*actionId\s*,\s*ally\.GameObjectId\s*,\s*checkRecastActive:\s*true\s*,\s*checkCastingActive:\s*checkCastingActive\s*\)').Count -ne 1 -or
     $normalizedEmergencyTeleportProbe -notmatch 'if \(decision\.ShouldDispatch\).*?TryCommitAndUseOnce\(.*?if \(inputClaimed\) inputFrame\.Consume\(\);' -or
     $normalizedEmergencyTeleportProbe -notmatch 'var commit = EmergencyTeleportRules\.CommitNativeAttempt\(state, finalObservation\); state = commit\.NextState;.*?if \(!commit\.ShouldInvokeNative.*?return ClientActionAttemptOutcome\.NotInvoked;.*?var before = ClientActionAttemptBoundary\.Capture\(actionManager, intent\.ActionId\); attempted = true; var accepted = nearAssist\.RunWithoutRedirect\(\(\) => actionManager->UseAction\( ActionType\.Action, intent\.ActionId, intent\.Target\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\)\);' -or
     $emergencyTeleportProbe -match '\b(?:ITargetManager|TargetManager|SetTarget|UseActionLocation|AlternateAction|AlternateTarget|FallbackAction|FallbackTarget|RetryAction|RetryDispatch|QueuedAction|QueueAction|PendingDispatch|BufferedDispatch)\b|\.(?:Target|FocusTarget|SoftTarget|MouseOverTarget|MouseOverNameplateTarget|GPoseTarget)\s*=(?!=|>)') {
     throw 'Emergency Teleport must store the terminal commit before one exact direct-GOID UseAction, then consume the shared frame, with no retry, fallback, target mutation, or second native action path.'
+}
+$emergencyTeleportFrozenValidation = [regex]::Match(
+    $normalizedEmergencyTeleportRules,
+    'public static bool CanUseFrozenIntent\((?<Body>.*?)public static EmergencyTeleportAttemptCommit CommitNativeAttempt\(')
+if (-not $emergencyTeleportFrozenValidation.Success -or
+    $emergencyTeleportFrozenValidation.Groups['Body'].Value -notmatch 'observation\.HigherPriorityClaimed.*?!observation\.InputProbeSucceeded.*?observation\.IsTextInputActive.*?!observation\.FrozenKeyStillDown.*?observation\.ResolvedActionId != intent\.ActionId.*?TryFindFrozenCandidateIndex' -or
+    $emergencyTeleportFrozenValidation.Groups['Body'].Value -match 'observation\.(?:HeldGameplayKeyEligible|HeldGameplayKeyCode)' -or
+    $normalizedEmergencyTeleportProbe -notmatch 'state = decision\.NextState; if \(state\.Intent is \{ IsValid: true \} frozenIntent\).*?inputFrame\.IsFrozenGameplayKeyConsentValid\( \(VirtualKey\)frozenIntent\.FrozenKeyCode\)' -or
+    $normalizedEmergencyTeleportProbe -notmatch 'var frozenKeyCode = state\.Intent\?\.FrozenKeyCode \?\? 0; var frozenKeyStillDown = frozenKeyCode > 0 && inputFrame\.IsFrozenGameplayKeyConsentValid\( \(VirtualKey\)frozenKeyCode\);') {
+    throw 'Emergency Teleport must register one exact Core-owned key, preserve only that frozen intent through release grace, and never use release grace for discovery or key substitution.'
 }
 $emergencyTeleportTestMethods = @(
     'ExactJobActionMappingAndDefaultsArePinned',
@@ -5102,8 +5146,8 @@ if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
     [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 11 -or
     [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 11 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 583) {
-    throw 'All four shared protection-end tests, all eleven SAM reactive tests, and the exact 583-test static Core registry before the appended repeat-policy suites must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 593) {
+    throw 'All four shared protection-end tests, all eleven SAM reactive tests, and the exact 593-test static Core registry before the appended repeat-policy suites must remain pinned.'
 }
 Assert-Literals $samuraiReactiveRuntimeRules @(
     'public static bool IsExactCurrentOwnSourceKuzushi(',
@@ -5160,7 +5204,8 @@ Assert-Literals $samuraiReactiveSelfTests @(
 Assert-Literals $samuraiZantetsukenJobsUi @(
     'Your first exact Kuzushi starts a 0.5-second ',
     'collection window without locking a target. Seiton then checks the current marked enemies and uses ',
-    'Purify and the SAM Soten → Mineuchi counter come first without restarting collection. After the 0.5 ',
+    'Purify and the SAM Soten ',
+    ' Mineuchi counter come first without restarting collection. After the 0.5 ',
     'seconds, Seiton freezes one target while waiting for casts or animation lock and checks Kuzushi again '
 ) 'Auto-Zantetsuken 0.5-second collection and post-delay freeze settings copy'
 if ($normalizedSamuraiReactiveProbe -notmatch 'private static int CountOwnSourceKuzushi\(.*?if \(localEntityId is 0 or 0xE0000000 or uint\.MaxValue\) return -1;.*?status\.StatusId != SamuraiZantetsukenRules\.KuzushiStatusId \|\| status\.SourceId != localEntityId.*?continue;.*?SamuraiZantetsukenRules\.IsExactCurrentOwnSourceKuzushi\( status\.StatusId, status\.SourceId, status\.RemainingTime, localEntityId\).*?return -1;.*?count\+\+; if \(count > 1\) return -1;.*?return count;') {
@@ -5383,7 +5428,8 @@ Assert-Literals $miracleCleanseFollowupSelfTests @(
     'release is remembered even when no key exists on its first frame',
     'a current held key can be acquired inside the original release window',
     'once release begins, the exact key is frozen while priority work runs',
-    'after release binding, letting go terminally cancels the exact intent'
+    'release-aware grace retains only the already-bound key and cannot substitute the reported key',
+    'expired release-aware consent terminally cancels the exact intent'
 ) 'Focused post-Purify rank, action-level sentinel, release-time key binding, reachability, advisory timing, and bounded episode coverage'
 Assert-Literals $miracleGuardFollowupSelfTests @(
     'absence without prior exact presence cannot arm',
@@ -5423,7 +5469,8 @@ Assert-Literals $miracleGuardFollowupSelfTests @(
     'Guard end without a key opens but cannot dispatch the release opportunity',
     'a current key may bind inside the original release window',
     'once Guard has ended, the exact key is frozen through priority waits',
-    'releasing the frozen key cancels this exact opportunity',
+    'release-aware grace retains only the bound Guard-end key without substitution',
+    'expired release-aware consent cancels this exact opportunity',
     'one exact release freezes immediately even while range is transient',
     'ranking freezes the strongest exact release before range/line-of-sight dispatcher wait'
 ) 'Focused post-Guard actor-first memory, release-time key binding, rank-before-reachability, advisory timing, early release, identity, expiry, and confirmation coverage'
@@ -5712,11 +5759,12 @@ Assert-Literals $heldCastCancellationForAstrologian @(
     'finalOwnGuardActiveOrPropagating',
     'HeldCastCancellationHelperKind.Purify or',
     'HeldCastCancellationHelperKind.SmartRecuperate',
+    'AutomaticKeylessCastBoundaryStillValid(',
     'DefensiveUtilityProbe.HasActiveGuard(localPlayer)',
     'Native cast cancellation vetoed by a fresh exact own-Guard check'
 ) 'Recovery-priority exact Guard and lower-helper propagated-Guard veto immediately before held cast cancellation'
 if ($normalizedHeldCastCancellationForAstrologian -notmatch 'HeldCastCancellationService\( IPluginLog log, Func<TargetPressureActorIdentity, bool> finalOwnGuardActiveOrPropagating, AutomaticRecoveryShotCastMetadataValidation automaticRecoveryShotCastMetadata\).*?this\.finalOwnGuardActiveOrPropagating = finalOwnGuardActiveOrPropagating \?\? throw new ArgumentNullException' -or
-    $normalizedHeldCastCancellationForAstrologian -notmatch 'if \(decision\.ShouldInvokeNative\).*?request!\.Value\.HelperKind is HeldCastCancellationHelperKind\.Purify or HeldCastCancellationHelperKind\.SmartRecuperate \? DefensiveUtilityProbe\.HasActiveGuard\(localPlayer\) : finalOwnGuardActiveOrPropagating\( request\.Value\.LocalPlayer\).*?HeldCastCancellationNativeStatus\.BlockedByOwnGuard;.*?else if \(!AutomaticRecoveryCastBoundaryStillValid\(.*?BlockedByAutomaticRecoveryCastBoundary.*?else.*?uiState->Hotbar\.CancelCast\(\);.*?HeldCastCancellationNativeStatus\.Requested;' -or
+    $normalizedHeldCastCancellationForAstrologian -notmatch 'if \(decision\.ShouldInvokeNative\).*?request!\.Value\.HelperKind is HeldCastCancellationHelperKind\.Purify or HeldCastCancellationHelperKind\.SmartRecuperate \? DefensiveUtilityProbe\.HasActiveGuard\(localPlayer\) : finalOwnGuardActiveOrPropagating\( request\.Value\.LocalPlayer\).*?HeldCastCancellationNativeStatus\.BlockedByOwnGuard;.*?else if \(!AutomaticKeylessCastBoundaryStillValid\(.*?BlockedByAutomaticRecoveryCastBoundary.*?else.*?uiState->Hotbar\.CancelCast\(\);.*?HeldCastCancellationNativeStatus\.Requested;' -or
     [regex]::Matches($heldCastCancellationForAstrologian, '\bCancelCast\s*\(').Count -ne 1) {
     throw 'Held cast cancellation must give Purify/Recuperate priority over a provisional Guard latch, retain propagated-Guard protection for lower helpers, and call the sole native CancelCast boundary only after its fresh veto passes.'
 }
@@ -5741,7 +5789,7 @@ $emergencyInputCoordinator = Read-RequiredSource $emergencyInputCoordinatorPath 
 $normalizedEmergencyInputCoordinator = $emergencyInputCoordinator -replace '\s+', ' '
 Assert-Literals $emergencyInputCoordinator @(
     'new GameInputContextProbe(keyState)',
-    'probe.Observe()',
+    'probe.Observe(observationMilliseconds)',
     'probe.ConsumeHeldGameplayKeys()',
     'FreshGameplayKeyPressed',
     'HeldGameplayKeyEligible',
@@ -5788,6 +5836,7 @@ Assert-Literals $emergencyInputCoordinator @(
     'samuraiZantetsukenHeldWasEnabled',
     'IsGameplayKeyPhysicallyDown(VirtualKey key)',
     'IsGameplayKeyGenerationEligible(VirtualKey key)',
+    'IsFrozenGameplayKeyConsentValid(VirtualKey key)',
     'HeldMovementKey = Dalamud.Game.ClientState.Keys.VirtualKey.NO_KEY',
     'heldOptionJustEnabled',
     'probe.Reset()'
@@ -5795,7 +5844,8 @@ Assert-Literals $emergencyInputCoordinator @(
 if ($normalizedEmergencyInputCoordinator -notmatch 'internal bool FreshGameplayKeyPressed => !IsConsumed && Snapshot\.ProbeSucceeded && Snapshot\.FreshGameplayKeyPressed;' -or
     $normalizedEmergencyInputCoordinator -notmatch 'internal bool HeldGameplayKeyEligible => !IsConsumed && Snapshot\.ProbeSucceeded && Snapshot\.HeldGameplayKeyEligible;' -or
     $normalizedEmergencyInputCoordinator -notmatch 'internal bool IsGameplayKeyPhysicallyDown\(VirtualKey key\) => Snapshot\.ProbeSucceeded && probe\?\.IsGameplayKeyPhysicallyDown\(key\) == true;' -or
-    $normalizedEmergencyInputCoordinator -notmatch 'internal bool IsGameplayKeyGenerationEligible\(VirtualKey key\) => Snapshot\.ProbeSucceeded && !Snapshot\.IsTextInputActive && probe\?\.IsGameplayKeyGenerationEligible\(key\) == true;') {
+    $normalizedEmergencyInputCoordinator -notmatch 'internal bool IsGameplayKeyGenerationEligible\(VirtualKey key\) => Snapshot\.ProbeSucceeded && !Snapshot\.IsTextInputActive && probe\?\.IsGameplayKeyGenerationEligible\(key\) == true;' -or
+    $normalizedEmergencyInputCoordinator -notmatch 'internal bool IsFrozenGameplayKeyConsentValid\(VirtualKey key\) => Snapshot\.ProbeSucceeded && !Snapshot\.IsTextInputActive && probe\?\.IsFrozenGameplayKeyConsentValid\(') {
     throw 'The shared frame must expose fresh/held gameplay keys only while that exact generation remains unconsumed, retain a separate physical-level observation, and revalidate exact generation eligibility with text input closed.'
 }
 if ($emergencyInputCoordinator -match '\bsmartKardiaHeld(?:Enabled|WasEnabled)\b') {
@@ -5814,6 +5864,9 @@ $administrativeRetireMethod = [regex]::Match(
 $enableEdgeMethod = [regex]::Match(
     $normalizedEmergencyInputCoordinator,
     'if \(heldOptionJustEnabled\) \{(?<Body>.*?)\} return new EmergencyActionInputFrame')
+$guardSuppressionMethod = [regex]::Match(
+    $normalizedEmergencyInputCoordinator,
+    'if \(heldHelpersSuppressedByGuard\) \{(?<Body>.*?)\} return new EmergencyActionInputFrame')
 if (-not $frameConsumeMethod.Success -or
     $frameConsumeMethod.Groups['Body'].Value -notmatch 'if \(IsConsumed\) return; IsConsumed = true;' -or
     $frameConsumeMethod.Groups['Body'].Value -match '\bprobe\b|ConsumeHeldGameplayKeys' -or
@@ -5821,10 +5874,13 @@ if (-not $frameConsumeMethod.Success -or
     $administrativeRetireMethod.Groups['Body'].Value -notmatch 'probe\?\.ConsumeHeldGameplayKeys\(\); IsConsumed = true;' -or
     $administrativeRetireMethod.Groups['Body'].Value -match 'onConsumed' -or
     -not $enableEdgeMethod.Success -or
-    $enableEdgeMethod.Groups['Body'].Value -notmatch 'probe\.ConsumeHeldGameplayKeys\(\)' -or
+    $enableEdgeMethod.Groups['Body'].Value -notmatch 'probe\.ConsumeHeldGameplayKeys\( input\.FreshGameplayKeyPressed \? input\.FreshGameplayKey : VirtualKey\.NO_KEY\)' -or
+    -not $guardSuppressionMethod.Success -or
+    $guardSuppressionMethod.Groups['Body'].Value -notmatch 'probe\.ConsumeHeldGameplayKeys\(\);.*?FreshGameplayKeyPressed = false.*?HeldGameplayKeyEligible = false.*?HeldMovementKeyEligible = false' -or
+    $guardSuppressionMethod.Groups['Body'].Value -match '\bonFrameConsumed\b|\bIsConsumed\b|(?<!HeldGameplayKeys)Consume\(\)' -or
     $normalizedEmergencyInputCoordinator -notmatch '\(smartRecuperateHeldEnabled && !smartRecuperateHeldWasEnabled\).*?\(astrologianHarmonicOrbisHeldEnabled && !astrologianHarmonicOrbisHeldWasEnabled\).*?\(redMageGuardEngageHeldEnabled && !redMageGuardEngageHeldWasEnabled\).*?\(emergencyTeleportHeldEnabled && !emergencyTeleportHeldWasEnabled\).*?\(smartSprintHeldEnabled && !smartSprintHeldWasEnabled\).*?\(ninjaSeitonHeldEnabled && !ninjaSeitonHeldWasEnabled\).*?\(viperSerpentTailHeldEnabled && !viperSerpentTailHeldWasEnabled\).*?\(gunbreakerContinuationHeldEnabled && !gunbreakerContinuationHeldWasEnabled\).*?\(darkKnightShadowbringerHeldEnabled && !darkKnightShadowbringerHeldWasEnabled\).*?\(monkHeldComboEnabled && !monkHeldComboWasEnabled\).*?\(samuraiCounterCcHeldEnabled && !samuraiCounterCcHeldWasEnabled\).*?\(samuraiZantetsukenHeldEnabled && !samuraiZantetsukenHeldWasEnabled\).*?smartRecuperateHeldWasEnabled = smartRecuperateHeldEnabled;.*?astrologianHarmonicOrbisHeldWasEnabled = astrologianHarmonicOrbisHeldEnabled;.*?redMageGuardEngageHeldWasEnabled = redMageGuardEngageHeldEnabled;.*?emergencyTeleportHeldWasEnabled = emergencyTeleportHeldEnabled;.*?smartSprintHeldWasEnabled = smartSprintHeldEnabled;.*?ninjaSeitonHeldWasEnabled = ninjaSeitonHeldEnabled;.*?viperSerpentTailHeldWasEnabled = viperSerpentTailHeldEnabled;.*?gunbreakerContinuationHeldWasEnabled = gunbreakerContinuationHeldEnabled;.*?darkKnightShadowbringerHeldWasEnabled = darkKnightShadowbringerHeldEnabled;.*?monkHeldComboWasEnabled = monkHeldComboEnabled;.*?samuraiCounterCcHeldWasEnabled = samuraiCounterCcHeldEnabled;.*?samuraiZantetsukenHeldWasEnabled = samuraiZantetsukenHeldEnabled;.*?if \(heldOptionJustEnabled\)' -or
     [regex]::Matches($emergencyInputCoordinator, '(?m)^\s*private bool \w+(?:Held)?WasEnabled;\s*$').Count -ne 21) {
-    throw 'Shared action consumption must stay frame-local. Administrative retirement must invalidate held generations without publishing an action claim; ordinary generation priming remains limited to one of exactly twenty-one held-option enable edges.'
+    throw 'Shared action consumption must stay frame-local. Administrative retirement and live own-Guard suppression must invalidate held generations without publishing an action claim; ordinary generation priming remains limited to one of exactly twenty-one held-option enable edges.'
 }
 
 # Stable physical held-key ownership is shared by every physical-hold helper.
@@ -5859,6 +5915,10 @@ Assert-Literals $stableInputProbe @(
     'selectedHeldGameplayKey = heldKey;',
     'selectedHeldMovementKey = heldMovementKey;',
     'internal bool IsGameplayKeyGenerationEligible(VirtualKey key)',
+    'internal bool IsFrozenGameplayKeyConsentValid(',
+    'HeldHelperReservationRules.CanObserveExactFrozenOwnership(',
+    'InvalidateFrozenOwnershipAndReservations();',
+    'frozenOwnershipRetiredUntilRelease[index]',
     'generation.IsEligible',
     '!generation.IsConsumed'
 ) 'Runtime stable held-key selection and retention'
@@ -5870,7 +5930,7 @@ $stableInputReset = [regex]::Match(
     'internal void Reset\(\) \{(?<Body>.*?)\} internal void ConsumeHeldGameplayKeys')
 $stableInputConsume = [regex]::Match(
     $normalizedStableInputProbe,
-    'internal void ConsumeHeldGameplayKeys\(\) \{(?<Body>.*?)\} /// <summary>')
+    'internal void ConsumeHeldGameplayKeys\([^)]*\) \{(?<Body>.*?)\} /// <summary>')
 foreach ($method in @($stableInputReset, $stableInputConsume)) {
     if (-not $method.Success -or
         $method.Groups['Body'].Value -notmatch 'selectedHeldGameplayKey = VirtualKey\.NO_KEY;' -or
@@ -5942,6 +6002,8 @@ Assert-Literals $heldCastCancellationRules @(
     'PressureEscapeSprint = 12,',
     'DarkKnightShadowbringer = 13,',
     'AstrologianHarmonicOrbis = 14,',
+    'RedMageGuardEngage = 15,',
+    'BardRepellingShot = 16,',
     'HeldCastCancellationRequest(',
     'TargetPressureActorIdentity LocalPlayer,',
     'TargetPressureActorIdentity Target,',
@@ -5956,12 +6018,17 @@ Assert-Literals $heldCastCancellationRules @(
     'HelperActionId == HeldCastCancellationRules.AutomaticRecuperateActionId &&',
     'public bool IsAutomaticRecovery =>',
     'IsAutomaticPurify || IsAutomaticRecuperate;',
-    'public bool RequiresFrozenKey => !IsAutomaticRecovery;',
+    'public bool IsAutomaticBardRepellingShot =>',
+    'HelperKind == HeldCastCancellationHelperKind.BardRepellingShot &&',
+    'HelperActionId == BardRepellingShotRules.RepellingShotActionId &&',
+    'public bool IsAutomaticKeyless =>',
+    'IsAutomaticRecovery || IsAutomaticBardRepellingShot;',
+    'public bool RequiresFrozenKey => !IsAutomaticKeyless;',
     'public const uint AutomaticPurifyActionId = 29_056;',
     'public const uint AutomaticRecuperateActionId = 29_711;',
     'LocalPlayer.IsValid',
     'Target.IsValid',
-    '(IsAutomaticRecovery || FrozenKeyCode > 0)',
+    '(IsAutomaticKeyless || FrozenKeyCode > 0)',
     'IntentEpochToken != 0',
     'public const float MaximumCancellationAnimationLockSeconds = 0.050f;',
     'HeldCastCancellationDecisionReason.CastSignalChangedWithoutClear',
@@ -5971,11 +6038,11 @@ Assert-Literals $heldCastCancellationRules @(
     'next = next with { CancellationRequested = true };'
 ) 'Exact cast cancellation request, keyless automatic recovery identities, exact basic-shot gate, and once-per-cast state'
 if ($normalizedHeldCastCancellationRules -notmatch 'var anyCastSignal = observation\.LocalPlayerIsCasting \|\| observation\.CastActionId != 0; if \(!anyCastSignal\).*?CastEpochActive = false, CancellationRequested = false, CastSignalMismatch = false, ObservedCastActionId = 0, ObservedLocalPlayer = default, LocalPlayerIdentityMismatch = false,' -or
-    $normalizedHeldCastCancellationRules -notmatch 'public bool IsAutomaticPurify => HelperKind == HeldCastCancellationHelperKind\.Purify && HelperActionId == HeldCastCancellationRules\.AutomaticPurifyActionId && FrozenKeyCode == 0; public bool IsAutomaticRecuperate => HelperKind == HeldCastCancellationHelperKind\.SmartRecuperate && HelperActionId == HeldCastCancellationRules\.AutomaticRecuperateActionId && FrozenKeyCode == 0; public bool IsAutomaticRecovery => IsAutomaticPurify \|\| IsAutomaticRecuperate; public bool RequiresFrozenKey => !IsAutomaticRecovery; public bool IsValid =>.*?\(IsAutomaticRecovery \|\| FrozenKeyCode > 0\)' -or
+    $normalizedHeldCastCancellationRules -notmatch 'public bool IsAutomaticPurify => HelperKind == HeldCastCancellationHelperKind\.Purify && HelperActionId == HeldCastCancellationRules\.AutomaticPurifyActionId && FrozenKeyCode == 0; public bool IsAutomaticRecuperate => HelperKind == HeldCastCancellationHelperKind\.SmartRecuperate && HelperActionId == HeldCastCancellationRules\.AutomaticRecuperateActionId && FrozenKeyCode == 0; public bool IsAutomaticRecovery => IsAutomaticPurify \|\| IsAutomaticRecuperate; public bool IsAutomaticBardRepellingShot => HelperKind == HeldCastCancellationHelperKind\.BardRepellingShot && HelperActionId == BardRepellingShotRules\.RepellingShotActionId && FrozenKeyCode == 0; public bool IsAutomaticKeyless => IsAutomaticRecovery \|\| IsAutomaticBardRepellingShot; public bool RequiresFrozenKey => !IsAutomaticKeyless; public bool IsValid =>.*?\(IsAutomaticKeyless \|\| FrozenKeyCode > 0\)' -or
     $normalizedHeldCastCancellationRules -notmatch 'else if \(state\.ObservedCastActionId != 0 && observation\.CastActionId != 0 && state\.ObservedCastActionId != observation\.CastActionId\).*?CastSignalMismatch = true' -or
     $normalizedHeldCastCancellationRules -notmatch 'else if \(next\.ObservedLocalPlayer != observation\.CurrentLocalPlayer\).*?LocalPlayerIdentityMismatch = true' -or
     $normalizedHeldCastCancellationRules -notmatch 'if \(next\.CancellationRequested\) return Waiting\(next, HeldCastCancellationDecisionReason\.AlreadyRequested\);.*?if \(next\.CastSignalMismatch\).*?CastSignalChangedWithoutClear.*?if \(next\.LocalPlayerIdentityMismatch\).*?LocalPlayerChanged' -or
-    $normalizedHeldCastCancellationRules -notmatch 'if \(observation\.HardReset\).*?if \(!observation\.FeatureEnabled\).*?if \(!observation\.SupportedContext\).*?if \(observation\.TextInputActive\).*?if \(observation\.GuardActive\).*?if \(!observation\.PrioritizedInputClaimed\).*?if \(observation\.Request is not \{ IsValid: true \} request\).*?if \(!observation\.IntentOtherwiseReady\).*?if \(!observation\.FrozenKeyStillDown\).*?if \(!observation\.LocalPlayerIdentityValid.*?if \(request\.LocalPlayer != observation\.CurrentLocalPlayer\).*?if \(!observation\.LocalPlayerAlive\).*?if \(!observation\.LocalPlayerTargetable\).*?if \(observation\.ResolvedHelperActionId != request\.HelperActionId\).*?if \(!observation\.HelperActionOffCooldown\).*?if \(!observation\.HelperActionResourcesReady\).*?if \(!observation\.LocalPlayerIsCasting \|\| observation\.CastActionId == 0\).*?if \(request\.IsAutomaticRecovery && !AutomaticRecoveryCastIsAllowed\(request, observation\)\).*?AutomaticRecoveryCastNotAllowed.*?if \(observation\.ActionQueued\).*?if \(!float\.IsFinite\(observation\.AnimationLockSeconds\) \|\| observation\.AnimationLockSeconds < 0f\).*?if \(observation\.AnimationLockSeconds > MaximumCancellationAnimationLockSeconds\)') {
+    $normalizedHeldCastCancellationRules -notmatch 'if \(observation\.HardReset\).*?if \(!observation\.FeatureEnabled\).*?if \(!observation\.SupportedContext\).*?if \(observation\.TextInputActive\).*?if \(observation\.GuardActive\).*?if \(!observation\.PrioritizedInputClaimed\).*?if \(observation\.Request is not \{ IsValid: true \} request\).*?if \(!observation\.IntentOtherwiseReady\).*?if \(!observation\.FrozenKeyStillDown\).*?if \(!observation\.LocalPlayerIdentityValid.*?if \(request\.LocalPlayer != observation\.CurrentLocalPlayer\).*?if \(!observation\.LocalPlayerAlive\).*?if \(!observation\.LocalPlayerTargetable\).*?if \(observation\.ResolvedHelperActionId != request\.HelperActionId\).*?if \(!observation\.HelperActionOffCooldown\).*?if \(!observation\.HelperActionResourcesReady\).*?if \(!observation\.LocalPlayerIsCasting \|\| observation\.CastActionId == 0\).*?if \(request\.IsAutomaticKeyless && !AutomaticKeylessCastIsAllowed\(request, observation\)\).*?AutomaticRecoveryCastNotAllowed.*?if \(observation\.ActionQueued\).*?if \(!float\.IsFinite\(observation\.AnimationLockSeconds\) \|\| observation\.AnimationLockSeconds < 0f\).*?if \(observation\.AnimationLockSeconds > MaximumCancellationAnimationLockSeconds\)') {
     throw 'Central cast cancellation must fail closed across toggle, context, text, Guard, priority/claim, exact request/key/local/action/readiness/resources, dual cast signals, queue, finite lock, identity drift, and cast-ID drift.'
 }
 
@@ -6014,14 +6081,14 @@ Assert-Literals $heldCastCancellationService @(
     'HeldCastCancellationNativeStatus LastNativeStatus,',
     'private HeldCastCancellationRequest? lastRequestedIntent;',
     'private HeldCastCancellationNativeStatus lastNativeStatus;',
-    'var automaticRecoveryRequest =',
-    'request is { IsValid: true, IsAutomaticRecovery: true };',
-    'automaticRecoveryRequest ||',
-    'var textInputActive = automaticRecoveryRequest',
+    'var automaticKeylessRequest =',
+    'request is { IsValid: true, IsAutomaticKeyless: true };',
+    'automaticKeylessRequest ||',
+    'var textInputActive = automaticKeylessRequest',
     '? !TryGetTextInputState(out var currentTextInputActive) ||',
     'prioritizedInputClaimed &&',
-    '(inputFrame.IsConsumed || request?.IsAutomaticRecovery == true)',
-    'inputFrame.IsGameplayKeyPhysicallyDown(',
+    '(inputFrame.IsConsumed || request?.IsAutomaticKeyless == true)',
+    'inputFrame.IsFrozenGameplayKeyConsentValid(',
     'ClientActionAttemptBoundary.Capture(',
     'ResolvedHelperActionId: boundary.AdjustedActionId',
     'HelperActionOffCooldown: boundary.Captured && boundary.IsActionOffCooldown',
@@ -6036,7 +6103,7 @@ Assert-Literals $heldCastCancellationService @(
     'if (decision.ShouldInvokeNative)',
     'lastRequestedIntent = request;',
     'var uiState = UIState.Instance();',
-    'AutomaticRecoveryCastBoundaryStillValid(',
+    'AutomaticKeylessCastBoundaryStillValid(',
     'BlockedByAutomaticRecoveryCastBoundary',
     'uiState->Hotbar.CancelCast();',
     'lastNativeStatus = nativeStatus;',
@@ -6047,10 +6114,10 @@ Assert-Literals $heldCastCancellationService @(
     'localPlayer.CurrentHp > 0 &&',
     'localPlayer.MaxHp >= localPlayer.CurrentHp;'
 ) 'Central void native cast-cancel boundary, exact automatic final recheck, and truthful diagnostics'
-if ($normalizedHeldCastCancellationService -notmatch 'var automaticRecoveryRequest = request is \{ IsValid: true, IsAutomaticRecovery: true \}; var textInputActive = automaticRecoveryRequest \? !TryGetTextInputState\(out var currentTextInputActive\) \|\| currentTextInputActive : inputFrame\.Snapshot\.IsTextInputActive; var frozenKeyStillDown = requestValid && \(automaticRecoveryRequest \|\| \(IsExactVirtualKey\(request!\.Value\.FrozenKeyCode\) && inputFrame\.IsGameplayKeyPhysicallyDown\( \(VirtualKey\)request\.Value\.FrozenKeyCode\)\)\);' -or
-    $normalizedHeldCastCancellationService -notmatch 'PrioritizedInputClaimed: prioritizedInputClaimed && \(inputFrame\.IsConsumed \|\| request\?\.IsAutomaticRecovery == true\)' -or
-    $normalizedHeldCastCancellationService -notmatch 'var decision = HeldCastCancellationRules\.Observe\(state, observation\);.*?state = decision\.NextState;.*?if \(decision\.ShouldInvokeNative\).*?lastRequestedIntent = request;.*?var uiState = UIState\.Instance\(\);.*?if \(uiState == null\).*?NativeBoundaryUnavailable.*?else if \(request!\.Value\.HelperKind is HeldCastCancellationHelperKind\.Purify or HeldCastCancellationHelperKind\.SmartRecuperate \? DefensiveUtilityProbe\.HasActiveGuard\(localPlayer\) : finalOwnGuardActiveOrPropagating.*?BlockedByOwnGuard.*?else if \(!AutomaticRecoveryCastBoundaryStillValid\(.*?BlockedByAutomaticRecoveryCastBoundary.*?else \{ uiState->Hotbar\.CancelCast\(\); nativeStatus = HeldCastCancellationNativeStatus\.Requested; nativeRequestCount\+\+; \}.*?catch \(Exception exception\).*?RequestFaulted.*?lastNativeStatus = nativeStatus;' -or
-    $normalizedHeldCastCancellationService -notmatch 'private bool AutomaticRecoveryCastBoundaryStillValid\(.*?if \(!request\.IsAutomaticRecovery\) return true;.*?automaticRecoveryBasicShotCancellationEnabled && localPlayer\.IsCasting && automaticRecoveryShotCastMetadata\.IsVerified\( localJobId, castActionId\) && AutomaticRecoveryShotCastRules \.IsExactAllowedPairWithAdjustedIdentity\( localJobId, castActionId, adjustedCastActionId\);' -or
+if ($normalizedHeldCastCancellationService -notmatch 'var automaticKeylessRequest = request is \{ IsValid: true, IsAutomaticKeyless: true \}; var textInputActive = automaticKeylessRequest \? !TryGetTextInputState\(out var currentTextInputActive\) \|\| currentTextInputActive : inputFrame\.Snapshot\.IsTextInputActive; var frozenKeyStillDown = requestValid && \(automaticKeylessRequest \|\| \(IsExactVirtualKey\(request!\.Value\.FrozenKeyCode\) && inputFrame\.IsFrozenGameplayKeyConsentValid\( \(VirtualKey\)request\.Value\.FrozenKeyCode\)\)\);' -or
+    $normalizedHeldCastCancellationService -notmatch 'PrioritizedInputClaimed: prioritizedInputClaimed && \(inputFrame\.IsConsumed \|\| request\?\.IsAutomaticKeyless == true\)' -or
+    $normalizedHeldCastCancellationService -notmatch 'var decision = HeldCastCancellationRules\.Observe\(state, observation\);.*?state = decision\.NextState;.*?if \(decision\.ShouldInvokeNative\).*?lastRequestedIntent = request;.*?var uiState = UIState\.Instance\(\);.*?if \(uiState == null\).*?NativeBoundaryUnavailable.*?else if \(request!\.Value\.HelperKind is HeldCastCancellationHelperKind\.Purify or HeldCastCancellationHelperKind\.SmartRecuperate \? DefensiveUtilityProbe\.HasActiveGuard\(localPlayer\) : finalOwnGuardActiveOrPropagating.*?BlockedByOwnGuard.*?else if \(!AutomaticKeylessCastBoundaryStillValid\(.*?BlockedByAutomaticRecoveryCastBoundary.*?else \{ uiState->Hotbar\.CancelCast\(\); nativeStatus = HeldCastCancellationNativeStatus\.Requested; nativeRequestCount\+\+; \}.*?catch \(Exception exception\).*?RequestFaulted.*?lastNativeStatus = nativeStatus;' -or
+    $normalizedHeldCastCancellationService -notmatch 'private bool AutomaticKeylessCastBoundaryStillValid\(.*?if \(!request\.IsAutomaticKeyless\) return true;.*?var exactReviewedBasicShot = localPlayer\.IsCasting && automaticRecoveryShotCastMetadata\.IsVerified\( localJobId, castActionId\) && AutomaticRecoveryShotCastRules \.IsExactAllowedPairWithAdjustedIdentity\( localJobId, castActionId, adjustedCastActionId\);.*?if \(!exactReviewedBasicShot\) return false;.*?if \(request\.IsAutomaticBardRepellingShot\).*?localJobId == BardRepellingShotRules\.BardJobId.*?castActionId == BardRepellingShotRules\.PowerfulShotActionId;.*?return request\.IsAutomaticRecovery && automaticRecoveryBasicShotCancellationEnabled;' -or
     $normalizedHeldCastCancellationService -notmatch 'new HeldCastCancellationSnapshot\( decision\.Kind, decision\.Reason, decision\.NextState\.LastCastEpochToken, request, lastRequestedIntent, observation\.CastActionId, observation\.AdjustedCastActionId, observation\.CurrentLocalJobId, automaticRecoveryBasicShotCancellationEnabled, automaticRecoveryBasicShotMetadataVerified, nativeStatus, lastNativeStatus, nativeRequestCount, nativeFaultCount,' -or
     $heldCastCancellationService -match '\b(UseAction|UseActionLocation|SendInput|keybd_event|mouse_event|ExecuteCommand|QueueAction|ClearActionQueue|Jump|MovePlayer)\s*\(|VirtualKey\.(?:ESCAPE|SPACE|W|A|S|D)\b|->(?:CastActionId|AnimationLock|ActionQueued|QueuedActionId|QueuedTargetId)\s*=(?!=|>)') {
     throw 'The cast-cancel service must latch before exactly one void Hotbar request, keep current versus last-request diagnostics separate, and never use/inject an action, Escape, movement, jump, queue write, or cast-field mutation.'
@@ -6091,6 +6158,7 @@ if ([regex]::Matches($heldCastCancellationSelfTests, '\binternal static void\s+\
 
 $castRequestProducers = @(
     [pscustomobject]@{ Path = $purifyProbePath; Kind = 'Purify'; Count = 1 },
+    [pscustomobject]@{ Path = $bardRepellingShotProbePath; Kind = 'BardRepellingShot'; Count = 1; Keyless = $true },
     [pscustomobject]@{ Path = $astrologianHarmonicOrbisProbePath; Kind = 'AstrologianHarmonicOrbis'; Count = 1 },
     [pscustomobject]@{ Path = $redMageGuardEngageProbePath; Kind = 'RedMageGuardEngage'; Count = 1 },
     [pscustomobject]@{ Path = $samuraiReactiveCounterCcProbePath; Kind = 'ReactiveCounterCc'; Count = 1 },
@@ -6108,17 +6176,19 @@ $castRequestProducerPaths = @($castRequestProducers.Path | Sort-Object -Unique)
 $allCastRequestProducerSource = (($castRequestProducerPaths | ForEach-Object {
     Read-RequiredSource $_ "Held cast cancellation request producer $_"
 }) + (Read-RequiredSource $personalStatusPath 'DRK Shadowbringer cast cancellation adapter')) -join "`n"
-if ([regex]::Matches($allCastRequestProducerSource, '\bnew HeldCastCancellationRequest\s*\(').Count -ne 14) {
-    throw 'Production runtime must construct exactly fourteen reviewed cast-cancellation request shapes; keyless Auto-Guard, automatic NIN Seiton, VPR Serpent Tail, GNB Continuation, held Monk combo, and event Monk remain explicitly excluded.'
+if ([regex]::Matches($allCastRequestProducerSource, '\bnew HeldCastCancellationRequest\s*\(').Count -ne 15) {
+    throw 'Production runtime must construct exactly fifteen reviewed cast-cancellation request shapes; keyless Auto-Guard, automatic NIN Seiton, VPR Serpent Tail, GNB Continuation, held Monk combo, and event Monk remain explicitly excluded.'
 }
 foreach ($producer in $castRequestProducers) {
     $producerSource = Read-RequiredSource $producer.Path "Cast-cancellation producer $($producer.Kind)"
     $kindPattern = "HeldCastCancellationHelperKind\.$([regex]::Escape($producer.Kind))\s*,"
+    $keylessProducer = $producer.PSObject.Properties['Keyless'] -and $producer.Keyless
     if ([regex]::Matches($producerSource, $kindPattern).Count -ne $producer.Count -or
         $producerSource -notmatch '\bCastCancellationRequest\b' -or
-        $producerSource -notmatch '\b(?:FrozenKeyCode|FrozenKey|HeldKey|GameplayKeyToken)\b' -or
+        (-not $keylessProducer -and $producerSource -notmatch '\b(?:FrozenKeyCode|FrozenKey|HeldKey|GameplayKeyToken)\b') -or
+        ($keylessProducer -and $producerSource -notmatch 'FrozenKeyCode:\s*0') -or
         $producerSource -notmatch '\b(?:IntentEpochToken|InstanceToken|HealthEventToken|WarningEpisodeToken|EpisodeToken|GetIntentEpochToken)\b' -or
-        $producerSource -notmatch 'IsGameplayKey(?:PhysicallyDown|GenerationEligible)') {
+        (-not $keylessProducer -and $producerSource -notmatch 'Is(?:FrozenGameplayKeyConsentValid|GameplayKey(?:PhysicallyDown|GenerationEligible))')) {
         throw "$($producer.Kind) must expose exactly one exact local/action/target/frozen-key/nonzero-epoch cast-cancellation request path."
     }
 }
@@ -6135,11 +6205,11 @@ $castSelection = [regex]::Match(
     $normalizedHeldCastPersonalStatus,
     'var castCancellationRequest =(?<Body>.*?)heldCastCancellation\.Observe\(')
 if (-not $castSelection.Success -or
-    [regex]::Matches($castSelection.Groups['Body'].Value, 'ClaimedCastCancellationRequest\(').Count -ne 14 -or
+    [regex]::Matches($castSelection.Groups['Body'].Value, 'ClaimedCastCancellationRequest\(').Count -ne 15 -or
     [regex]::Matches($castSelection.Groups['Body'].Value, 'ClaimedDarkKnightShadowbringerCastCancellationRequest\(').Count -ne 2 -or
-    $castSelection.Groups['Body'].Value -notmatch 'purify\.InputClaimed, purify\.CastCancellationRequest\).*?guardianPass\.InputClaimed, guardianPass\.CastCancellationRequest\).*?recuperate\.InputClaimed, recuperate\.CastCancellationRequest\).*?guardDefense\.InputClaimed, guardDefense\.CastCancellationRequest\).*?astrologianOrbis\.InputClaimed, astrologianOrbis\.CastCancellationRequest\).*?redMageGuard\.InputClaimed, redMageGuard\.CastCancellationRequest\).*?samurai\.InputClaimed, samurai\.CastCancellationRequest\).*?miracle\.InputClaimed, miracle\.CastCancellationRequest\).*?rescue\.InputClaimed, rescue\.CastCancellationRequest\).*?guardShukuchi\.InputClaimed, guardShukuchi\.CastCancellationRequest\).*?scholar\.InputClaimed, scholar\.CastCancellationRequest\).*?shadowbringerPre\.InputClaimed.*?DarkKnightShadowbringerOpportunityKind\.DarkArts.*?plunge\.InputClaimed, plunge\.CastCancellationRequest\).*?shadowbringer\.InputClaimed.*?DarkKnightShadowbringerOpportunityKind\.SafeHpCost.*?teleport\.InputClaimed, teleport\.CastCancellationRequest\).*?pressureEscape\.InputClaimed, pressureEscape\.CastCancellationRequest\)' -or
+    $castSelection.Groups['Body'].Value -notmatch 'purify\.InputClaimed, purify\.CastCancellationRequest\).*?guardianPass\.InputClaimed, guardianPass\.CastCancellationRequest\).*?recuperate\.InputClaimed, recuperate\.CastCancellationRequest\).*?guardDefense\.InputClaimed, guardDefense\.CastCancellationRequest\).*?bardRepelling\.InputClaimed, bardRepelling\.CastCancellationRequest\).*?astrologianOrbis\.InputClaimed, astrologianOrbis\.CastCancellationRequest\).*?redMageGuard\.InputClaimed, redMageGuard\.CastCancellationRequest\).*?samurai\.InputClaimed, samurai\.CastCancellationRequest\).*?miracle\.InputClaimed, miracle\.CastCancellationRequest\).*?rescue\.InputClaimed, rescue\.CastCancellationRequest\).*?guardShukuchi\.InputClaimed, guardShukuchi\.CastCancellationRequest\).*?scholar\.InputClaimed, scholar\.CastCancellationRequest\).*?shadowbringerPre\.InputClaimed.*?DarkKnightShadowbringerOpportunityKind\.DarkArts.*?plunge\.InputClaimed, plunge\.CastCancellationRequest\).*?shadowbringer\.InputClaimed.*?DarkKnightShadowbringerOpportunityKind\.SafeHpCost.*?teleport\.InputClaimed, teleport\.CastCancellationRequest\).*?pressureEscape\.InputClaimed, pressureEscape\.CastCancellationRequest\)' -or
     $castSelection.Groups['Body'].Value -match '\b(viper|gunbreaker|kardia|monk)\b') {
-    throw 'PersonalStatus must select exactly one cast-cancel request in canonical Purify > Guardian > Recuperate > keyless Guard (null by design) > AST Orbis > RDM Guard engage > SAM > reactive CC > Rescue > Guard-Shukuchi > SCH Critical > DRK Dark Arts > DRK Plunge > DRK fallback > Emergency Teleport > Sprint order, excluding automatic NIN Seiton, VPR, GNB, Kardia, and Monk.'
+    throw 'PersonalStatus must select exactly one cast-cancel request in canonical Purify > Guardian > Recuperate > keyless Guard (null by design) > BRD Mannstopper > AST Orbis > RDM Guard engage > SAM > reactive CC > Rescue > Guard-Shukuchi > SCH Critical > DRK Dark Arts > DRK Plunge > DRK fallback > Emergency Teleport > Sprint order, excluding automatic NIN Seiton, VPR, GNB, Kardia, and Monk.'
 }
 Assert-Literals $heldCastPersonalStatus @(
     'cast-cancel request owns this frame; the normal UseAction boundary is',
@@ -6147,6 +6217,8 @@ Assert-Literals $heldCastPersonalStatus @(
     'configuration.AllowHeldHelpersToCancelOwnCast',
     'configuration.AllowAutomaticRecoveryToCancelBasicShotCasts',
     '{ IsAutomaticRecovery: true } =>',
+    '{ IsAutomaticBardRepellingShot: true } =>',
+    'configuration.EnableBardRepellingShotProximityHelper',
     '{ RequiresFrozenKey: true } =>',
     'prioritizedInputClaimed: castCancellationRequest is { IsValid: true }',
     'intentOtherwiseReady: castCancellationRequest is { IsValid: true }',
@@ -6174,8 +6246,8 @@ if ($castConfiguration -notmatch '(?m)^\s*public bool AllowHeldHelpersToCancelOw
     $castConfiguration -match '(?m)^\s*public bool AllowHeldHelpersToCancelOwnCast \{ get; set; \}\s*=\s*true;' -or
     [regex]::Matches($castConfiguration, '\bAllowHeldHelpersToCancelOwnCast\s*=\s*false\s*;').Count -ne 2 -or
     $normalizedCastConfiguration -notmatch 'if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;' -or
-    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 51;.*?AllowHeldHelpersToCancelOwnCast = false;') {
-    throw 'Schema 51 must preserve held-helper cast cancellation as plain default-false, force it off for pre-30 upgrades, and restore it off on Reset Defaults.'
+    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 53;.*?AllowHeldHelpersToCancelOwnCast = false;') {
+    throw 'Schema 53 must preserve held-helper cast cancellation as plain default-false, force it off for pre-30 upgrades, and restore it off on Reset Defaults.'
 }
 
 # Schema 45 introduces two genuinely automatic self-actions. Both are plain
@@ -6186,27 +6258,27 @@ Assert-Literals $castConfiguration @(
     'if (Version < 45)',
     'EnableAutomaticPurify = false;',
     'EnableAutomaticRecuperate = false;',
-    'Version = 51;'
+    'Version = 53;'
 ) 'Schema-45 default-off automatic Purify and Recuperate configuration'
 if ($castConfiguration -match '(?m)^\s*public bool EnableAutomatic(?:Purify|Recuperate) \{ get; set; \}\s*=\s*true;' -or
     [regex]::Matches($castConfiguration, '\bEnableAutomaticPurify\s*=\s*false\s*;').Count -ne 2 -or
     [regex]::Matches($castConfiguration, '\bEnableAutomaticRecuperate\s*=\s*false\s*;').Count -ne 2 -or
-    $normalizedCastConfiguration -notmatch 'if \(Version < 45\) \{.*?EnableAutomaticPurify = false; EnableAutomaticRecuperate = false; \}.*?Version = 51;' -or
-    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 51;.*?EnableSmartRecuperateOnHeldKey = false; EnableAutomaticRecuperate = false;.*?ExperimentalPurifyOnNextKey = false;.*?PurifyOnHeldGameplayKey = false; EnableAutomaticPurify = false;') {
-    throw 'Schema 51 must retain schema-45 default-off automatic Purify and Recuperate behavior without changing their separate held options.'
+    $normalizedCastConfiguration -notmatch 'if \(Version < 45\) \{.*?EnableAutomaticPurify = false; EnableAutomaticRecuperate = false; \}.*?Version = 53;' -or
+    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 53;.*?EnableSmartRecuperateOnHeldKey = false; EnableAutomaticRecuperate = false;.*?ExperimentalPurifyOnNextKey = false;.*?PurifyOnHeldGameplayKey = false; EnableAutomaticPurify = false;') {
+    throw 'Schema 53 must retain schema-45 default-off automatic Purify and Recuperate behavior without changing their separate held options.'
 }
 
 Assert-Literals $castConfiguration @(
     'public bool AllowAutomaticRecoveryToCancelBasicShotCasts { get; set; }',
     'if (Version < 46)',
     'AllowAutomaticRecoveryToCancelBasicShotCasts = false;',
-    'Version = 51;'
+    'Version = 53;'
 ) 'Schema-46 separate default-off automatic recovery basic-shot cast-cancel permission'
 if ($castConfiguration -match '(?m)^\s*public bool AllowAutomaticRecoveryToCancelBasicShotCasts \{ get; set; \}\s*=\s*true;' -or
     [regex]::Matches($castConfiguration, '\bAllowAutomaticRecoveryToCancelBasicShotCasts\s*=\s*false\s*;').Count -ne 2 -or
-    $normalizedCastConfiguration -notmatch 'if \(Version < 46\) \{.*?AllowAutomaticRecoveryToCancelBasicShotCasts = false; \}.*?Version = 51;' -or
-    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 51;.*?AllowHeldHelpersToCancelOwnCast = false; AllowAutomaticRecoveryToCancelBasicShotCasts = false;') {
-    throw 'Schema 51 must keep automatic BRD/MCH basic-shot cancellation as a separate plain default-false permission for upgrades, fresh installs, and Reset Defaults.'
+    $normalizedCastConfiguration -notmatch 'if \(Version < 46\) \{.*?AllowAutomaticRecoveryToCancelBasicShotCasts = false; \}.*?Version = 53;' -or
+    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 53;.*?AllowHeldHelpersToCancelOwnCast = false; AllowAutomaticRecoveryToCancelBasicShotCasts = false;') {
+    throw 'Schema 53 must keep automatic BRD/MCH basic-shot cancellation as a separate plain default-false permission for upgrades, fresh installs, and Reset Defaults.'
 }
 
 $settingsActionsPath = Join-Path $settingsPartsRoot 'SettingsWindow.Actions.cs'
@@ -6256,6 +6328,8 @@ $clientActionAttemptBoundary = Read-RequiredSource $clientActionAttemptBoundaryP
 $heldActionRetryRules = Read-RequiredSource $heldActionRetryRulesPath 'Held action retry rules'
 $normalizedHeldActionRetryRules = $heldActionRetryRules -replace '\s+', ' '
 $heldActionRetrySelfTests = Read-RequiredSource $heldActionRetrySelfTestsPath 'Held action retry self-tests'
+$heldHelperReservationRules = Read-RequiredSource $heldHelperReservationRulesPath 'Held helper release-reservation rules'
+$heldHelperReservationSelfTests = Read-RequiredSource $heldHelperReservationSelfTestsPath 'Held helper release-reservation self-tests'
 Assert-Literals $clientActionAttemptOutcome @(
     'ClientRejected = 2',
     'ClientAccepted = 3',
@@ -6354,6 +6428,29 @@ if ([regex]::Matches($heldActionRetrySelfTests, '\binternal static void\s+\w+\s*
     [regex]::Matches($coreSelfTestProgramForGuardian, '\bHeldActionRetrySelfTests\.\w+').Count -ne 9) {
     throw 'All nine shared retry/classification/priority-retention/cast-soft-wait/latency-window/critical-edge tests must remain registered exactly once.'
 }
+Assert-Literals $heldHelperReservationRules @(
+    'public static bool CanObserveExactFrozenOwnership(',
+    'exactFrozenOwnershipAlreadyObserved ||',
+    '(generation.IsEligible && !generation.IsConsumed)',
+    'public static bool CanBeginReleaseReservation(',
+    '!textInputActive &&',
+    'exactFrozenOwnershipObserved;',
+    'currentInputGeneration != releaseInputGeneration',
+    'return deadline >= 0 && nowMilliseconds < deadline;'
+) 'Exact-owner-only held-helper key-up reservation with an exclusive deadline and new-input cancellation'
+$heldHelperReservationTestMethods = @(
+    'ReleaseWindowIsBoundedAndExclusive',
+    'ConsumedFrozenOwnerMayReserveButDiscoveryCannot',
+    'NewInputAndSafetyDriftCancelReleaseReservation'
+)
+foreach ($method in $heldHelperReservationTestMethods) {
+    Assert-Literals $heldHelperReservationSelfTests @("internal static void $method()") "Held helper reservation self-test $method"
+    Assert-Literals $coreSelfTestProgramForGuardian @("HeldHelperReservationSelfTests.$method") "Held helper reservation test registration $method"
+}
+if ([regex]::Matches($heldHelperReservationSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 3 -or
+    [regex]::Matches($coreSelfTestProgramForGuardian, '\bHeldHelperReservationSelfTests\.\w+').Count -ne 3) {
+    throw 'All three exact-owner, deadline, consumed-generation, and safety-drift release-reservation tests must remain registered exactly once.'
+}
 
 # Optional cross-plugin coordination publishes only an already-consumed exact
 # PvP held frame. It must not create a second action lane or leak into PvE.
@@ -6384,7 +6481,9 @@ Assert-Literals $emergencyInputCoordinatorForCoordination @(
     'internal void RetireWithoutActionClaim()',
     'probe?.ConsumeHeldGameplayKeys();',
     'private readonly Action? onFrameConsumed;',
-    'return new EmergencyActionInputFrame(input, probe, onFrameConsumed);'
+    'heldHelperReservationEnabled',
+    'heldHelperReservationWindowMilliseconds',
+    'probe.Observe(observationMilliseconds)'
 ) 'Critical utility claim originates only from shared held-frame consumption'
 Assert-Literals $personalStatusForCoordination @(
     'criticalUtilityCoordination.ClaimCurrentFrame',
@@ -6973,6 +7072,7 @@ $autoGuardProtectionRules = Read-RequiredSource $autoGuardProtectionRulesPath 'A
 $normalizedAutoGuardProtectionRules = $autoGuardProtectionRules -replace '\s+', ' '
 Assert-Literals $autoGuardProtectionRules @(
     'public static class GuardRepeatProtectionRules',
+    'DefaultEnabled = true',
     'ProtectionMilliseconds = 1_000',
     'ExactGuardRequest',
     'ExactLocalGuardActive',
@@ -6988,15 +7088,33 @@ Assert-Literals $autoGuardProtectionRules @(
     'AutoGuardProtectionDecisionReason.GuardEnded',
     'AutoGuardProtectionDecisionReason.MaximumDurationReached'
 ) 'Global exact Guard-repeat protection plus confirmed-attempt Auto-Guard ownership'
+Assert-Literals $castConfiguration @(
+    'public bool ProtectOwnGuardFromRepeatPress { get; set; } =',
+    'GuardRepeatProtectionRules.DefaultEnabled;',
+    'if (Version < 52)',
+    'ProtectOwnGuardFromRepeatPress = GuardRepeatProtectionRules.DefaultEnabled;',
+    'Version = 53;'
+) 'Schema-52 default-on configurable exact Guard-repeat protection'
+if ([regex]::Matches($castConfiguration, '\bProtectOwnGuardFromRepeatPress\b').Count -ne 3 -or
+    $normalizedCastConfiguration -notmatch 'if \(Version < 52\) \{.*?ProtectOwnGuardFromRepeatPress = GuardRepeatProtectionRules\.DefaultEnabled; \}.*?Version = 53;' -or
+    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 53;.*?ProtectOwnGuardFromRepeatPress = GuardRepeatProtectionRules\.DefaultEnabled;') {
+    throw 'Schema 53 must keep the previously unconditional one-second exact Guard-repeat protection on for fresh, upgraded, and reset configurations.'
+}
+Assert-Literals $settingsActions @(
+    'Ignore a second Guard press for 1 second (manual or automatic)',
+    'Turning it off does not disable',
+    "Auto-Guard's separate protection from other actions."
+) 'Visible independent Guard repeat-protection setting and scope copy'
 if ($autoGuardProtectionRules -match '\b(?:UseAction|UseActionLocation|ActionManager|IPlayerCharacter|HookFromAddress|ITargetManager|TargetManager|SetTarget|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b' -or
-    $normalizedAutoGuardProtectionRules -notmatch 'public static bool ShouldBlock\(GuardRepeatProtectionObservation observation\) => observation\.RuntimeEnabled && observation\.IsSupportedPvpContext && observation\.ExactGuardRequest && observation\.ExactLocalGuardActive && observation\.ExactOwnGuardAttemptObserved && observation\.OwnGuardAttemptAtMilliseconds >= 0 && observation\.NowMilliseconds >= observation\.OwnGuardAttemptAtMilliseconds && observation\.NowMilliseconds - observation\.OwnGuardAttemptAtMilliseconds < ProtectionMilliseconds;' -or
+    $normalizedAutoGuardProtectionRules -notmatch 'public static bool ShouldBlock\(GuardRepeatProtectionObservation observation\) => observation\.RuntimeEnabled && observation\.IsSupportedPvpContext && observation\.ExactGuardRequest && observation\.ExactOwnGuardAttemptObserved && observation\.OwnGuardAttemptAtMilliseconds >= 0 && observation\.NowMilliseconds >= observation\.OwnGuardAttemptAtMilliseconds && observation\.NowMilliseconds - observation\.OwnGuardAttemptAtMilliseconds < ProtectionMilliseconds;' -or
     $normalizedAutoGuardProtectionRules -notmatch 'if \(!previous\.IsArmed\).*?if \(observation\.HardReset\).*?if \(observation\.NowMilliseconds < 0 \|\| observation\.NowMilliseconds < previous\.ConfirmedAtMilliseconds\).*?if \(!observation\.RuntimeEnabled\).*?if \(observation\.TerritoryId != previous\.TerritoryId\).*?if \(!observation\.LocalPlayerLive\).*?if \(observation\.LocalPlayer != previous\.LocalPlayer\).*?if \(observation\.NowMilliseconds >= previous\.MaximumExpiresAtMilliseconds\).*?if \(!observation\.ExactGuardActive\).*?if \(observation\.IsExplicitGuardReuse\) return Released\(AutoGuardProtectionDecisionReason\.ExplicitGuardReuse\);.*?observation\.ActionCanCancelGuard') {
-    throw 'Guard-repeat Core must block only exact own Guard reuse for 1000 ms, while Auto-Guard ownership remains pure, bounded, and releases immediately once that independent gate permits explicit Guard reuse.'
+    throw 'Guard-repeat Core must block only exact own Guard reuse for 1000 ms from the accepted attempt, including the status-propagation gap, while Auto-Guard ownership remains pure and bounded.'
 }
 $autoGuardProtectionTestMethods = @(
     'AutoGuardProtectionOwnershipRequiresTheExactConfirmedAttempt',
     'AutoGuardProtectionStartsOnlyAfterExactStatus',
     'AutoGuardProtectionHasExplicitAndBoundedReleasePaths',
+    'GuardRepeatProtectionToggleIsDefaultOnAndIndependent',
     'AutoGuardProtectionContextDriftAlwaysFailsOpen'
 )
 foreach ($method in $autoGuardProtectionTestMethods) {
@@ -7062,6 +7180,7 @@ Assert-Literals $nearAssistAutoGuard @(
     'TryGetActionMetadata(',
     'action.IsPvP',
     'ShouldBlockRecentOwnGuardRepeatPress(',
+    'configuration.ProtectOwnGuardFromRepeatPress',
     'GuardRepeatProtectionRules.ProtectionMilliseconds',
     'ClearAutoGuardProtection("Action classification failed open")',
     'ClearAutoGuardProtection("Released: explicit Panic Shukuchi command override")',
@@ -7074,7 +7193,8 @@ if ($normalizedDefensiveUtility -notmatch 'var guardActionSpecificallyReady = gu
 if ($normalizedNearAssistAutoGuard -notmatch 'internal bool CanProtectAutomaticGuard => !disposed && started && useActionHook\?\.IsEnabled == true && useActionLocationHook\?\.IsEnabled == true;' -or
     $normalizedNearAssistAutoGuard -notmatch 'private bool UseActionDetour\(.*?var bypassRedirect = internalRedirectBypassDepth > 0;.*?ShouldBlockRecentOwnGuardRepeatPress\(thisPtr, actionType, actionId\).*?if \(TryConsumeExplicitAutoGuardBreak\( actionType, actionId, ExplicitAutoGuardBreakBoundary\.StandardAction\)\).*?ClearAutoGuardProtection\("Released: explicit camera-back dash command override"\);.*?else if \(TryBlockOwnedAutoGuardCancellation\(thisPtr, actionType, actionId\)\).*?return false;.*?var forwardedTargetId' -or
     $normalizedNearAssistAutoGuard -notmatch 'private bool UseActionLocationDetour\(.*?var bypassRedirect = internalRedirectBypassDepth > 0; if \(actionBarActivitySuppressionDepth == 0 && actionType is \(ActionType\.Action or ActionType\.PvPAction\)\) \{ RecordActionBarActivity\(\); \}.*?if \(!bypassRedirect && integratedInputRuntime is \{ \} integratedRuntime && actionType is \(ActionType\.Action or ActionType\.PvPAction\)\) \{ integratedRuntime\.ActionBuffer\.Cancel\( SmartActionBufferCancelReason\.Replaced, "Replaced by a newer external location action request"\); \}.*?ShouldBlockRecentOwnGuardRepeatPress\(thisPtr, actionType, actionId\).*?if \(TryConsumeExplicitAutoGuardBreak\( actionType, actionId, ExplicitAutoGuardBreakBoundary\.LocationAction\)\).*?ClearAutoGuardProtection\("Released: explicit Panic Shukuchi command override"\);.*?else if \(TryBlockOwnedAutoGuardCancellation\(thisPtr, actionType, actionId\)\).*?return false;.*?return useActionLocationHook!\.Original' -or
-    $normalizedNearAssistAutoGuard -notmatch 'private bool ShouldBlockRecentOwnGuardRepeatPress\( ActionManager\* actionManager, ActionType actionType, uint actionId\).*?var exactGuardRequest = supportedActionType && \(actionId == EnemyCombatConstants\.GuardActionId \|\| resolvedActionId == EnemyCombatConstants\.GuardActionId\);.*?exactLocalGuardActive = localLive && HasActiveGuardStatus\(local!\);.*?TryGetRecentExactLocalGuardAttempt\( clientState\.TerritoryType, local!\.GameObjectId, local\.EntityId, now, GuardRepeatProtectionRules\.ProtectionMilliseconds, out attemptAt\);.*?GuardRepeatProtectionRules\.ShouldBlock\(' -or
+    [regex]::Matches($nearAssistAutoGuard, '\bconfiguration\.ProtectOwnGuardFromRepeatPress\b').Count -ne 1 -or
+    $normalizedNearAssistAutoGuard -notmatch 'private bool ShouldBlockRecentOwnGuardRepeatPress\( ActionManager\* actionManager, ActionType actionType, uint actionId\).*?var exactGuardRequest = supportedActionType && \(actionId == EnemyCombatConstants\.GuardActionId \|\| resolvedActionId == EnemyCombatConstants\.GuardActionId\);.*?exactLocalGuardActive = localLive && HasActiveGuardStatus\(local!\);.*?TryGetRecentExactLocalGuardAttempt\( clientState\.TerritoryType, local!\.GameObjectId, local\.EntityId, now, GuardRepeatProtectionRules\.ProtectionMilliseconds, out attemptAt\);.*?GuardRepeatProtectionRules\.ShouldBlock\( new GuardRepeatProtectionObservation\( configuration\.Enabled && configuration\.ProtectOwnGuardFromRepeatPress && clientState\.IsLoggedIn,' -or
     $normalizedNearAssistAutoGuard -notmatch 'private bool TryConsumeExplicitAutoGuardBreak\( ActionType actionType, uint actionId, ExplicitAutoGuardBreakBoundary boundary\).*?var scope = Volatile\.Read\(ref explicitAutoGuardBreakScope\); if \(scope is null \|\| !ReferenceEquals\(scope\.Owner, this\) \|\| scope\.ManagedThreadId != Environment\.CurrentManagedThreadId \|\| scope\.Boundary != boundary \|\| actionType != ActionType\.Action \|\| actionId != scope\.ExpectedActionId \|\| !scope\.TryConsume\(\)\).*?return false;.*?return ReferenceEquals\( Interlocked\.CompareExchange\( ref explicitAutoGuardBreakScope, value: null, comparand: scope\), scope\);' -or
     $normalizedNearAssistAutoGuard -notmatch 'private static bool IsSupportedActionType\(ActionType actionType\) => actionType is ActionType\.Action or ActionType\.PvPAction;' -or
     $normalizedNearAssistAutoGuard -notmatch 'var explicitGuardReuse = supportedActionType && \(actionId == EnemyCombatConstants\.GuardActionId \|\| resolvedActionId == EnemyCombatConstants\.GuardActionId\);.*?var actionCanCancelGuard = supportedActionType && resolvedActionId != 0 && TryGetActionMetadata\(.*?action\.IsPvP && !explicitGuardReuse;.*?ApplyAutoGuardProtectionObservation') {
@@ -7112,22 +7232,19 @@ if ([regex]::Matches($allyRescue, '\bUseAction\s*\(').Count -ne 1) {
 Assert-Literals $allyRescue @(
     'WardensPaeanActionId = 29400',
     'AquaveilActionId = 29227',
-    'WardensPaeanIconId = 9628',
-    'AquaveilIconId = 9607',
     'BardJobId = 23',
     'WhiteMageJobId = 24',
     'ExpectedRange = 30',
-    'WardensPaeanRecast100ms = 240',
-    'AquaveilRecast100ms = 180',
     'ValidateRescueActionMetadata',
     "The Warden's Paean",
     'Aquaveil',
-    '"Removes"',
-    '"Nullifies"',
-    'StringComparison.OrdinalIgnoreCase',
-    'description.Contains(expectedCleanseVerb, StringComparison.OrdinalIgnoreCase)',
-    'description.Contains("status affliction", StringComparison.OrdinalIgnoreCase)',
-    'description.Contains("Purify", StringComparison.OrdinalIgnoreCase)',
+    'action.IsPvP',
+    'action.IsPlayerAction',
+    'action.ClassJob.RowId == expectedJobId',
+    'action.Range == ExpectedRange',
+    'action.CanTargetSelf',
+    'action.CanTargetParty',
+    'action.RequiresLineOfSight',
     'AllyRescueBufferRules.Observe',
     'AllyRescueStatusRules.IsTriggerStatus',
     'PartySlotResolver.Resolve',
@@ -7151,13 +7268,15 @@ if ($allyRescue -match '\bstatus\.Address\b') {
 if ([regex]::Matches($allyRescue, 'ValidateRescueActionMetadata\s*\(').Count -lt 3 -or
     $allyRescue -notmatch 'catch\s*\(Exception exception\)' -or
     $allyRescue -notmatch 'metadata lookup failed closed') {
-    throw 'Each Ally Rescue action must validate current English metadata independently and fail closed on lookup errors.'
+    throw 'Each Ally Rescue action must validate current action-table semantics independently and fail closed on lookup errors.'
 }
-if ($normalizedAllyRescue -notmatch 'string\.Equals\( action\.Name\.ToString\(\), expectedName, StringComparison\.OrdinalIgnoreCase\)' -or
-    $normalizedAllyRescue -notmatch 'description\.Contains\(expectedCleanseVerb, StringComparison\.OrdinalIgnoreCase\)' -or
-    $normalizedAllyRescue -notmatch 'description\.Contains\("status affliction", StringComparison\.OrdinalIgnoreCase\)' -or
-    $normalizedAllyRescue -notmatch 'description\.Contains\("Purify", StringComparison\.OrdinalIgnoreCase\)') {
-    throw 'Ally Rescue action metadata must use case-insensitive names and stable cleanse-description tokens.'
+$allyRescueMetadataMethod = [regex]::Match(
+    $normalizedAllyRescue,
+    'private static bool IsExpectedFriendlyRescueAction\(.*?\) \{(?<Body>.*?)\} private static bool IsLivePlayer')
+if (-not $allyRescueMetadataMethod.Success -or
+    $allyRescueMetadataMethod.Groups['Body'].Value -notmatch 'action\.IsPvP.*?action\.IsPlayerAction.*?action\.ClassJob\.IsValid.*?action\.ClassJob\.RowId == expectedJobId.*?action\.Range == ExpectedRange.*?action\.EffectRange == 0.*?action\.Cast100ms == 0.*?action\.CanTargetSelf.*?action\.CanTargetParty.*?!action\.CanTargetAlly.*?!action\.CanTargetAlliance.*?!action\.CanTargetHostile.*?!action\.TargetArea.*?action\.RequiresLineOfSight' -or
+    $allyRescueMetadataMethod.Groups['Body'].Value -match '\b(?:Icon|Recast100ms|Description|expectedName|expectedCleanseVerb)\b') {
+    throw 'Ally Rescue metadata must retain exact PvP job/friendly-target/range/LoS semantics without cosmetic name, icon, recast-balance, or English-description blockers.'
 }
 
 $allyRescueConfirmationRules = Read-RequiredSource $allyRescueConfirmationRulesPath 'Ally Rescue confirmation rules'
@@ -7402,9 +7521,11 @@ if ($normalizedMiracleIntercept -notmatch 'var guardFollowupEnabled = enabled &&
 if ($normalizedMiracleIntercept -notmatch 'ObserveProtectionEndHeldConsent\( allowHeldGameplayKey && localAlive && \(cleanseFollowupEnabled \|\| guardFollowupEnabled\), inputFrame, hardReset \|\| protectionEndJobChanged\);' -or
     $normalizedMiracleIntercept -notmatch 'var latchedKeyPhysicallyDown = TryGetLatchedProtectionEndKey\(out var previousKey\) && inputFrame\.IsGameplayKeyPhysicallyDown\(previousKey\); var eligibleKey = VirtualKey\.NO_KEY; if \(enabled && !input\.IsTextInputActive\).*?input\.ProbeSucceeded && input\.HeldGameplayKeyEligible \? input\.HeldGameplayKey : input\.ProbeSucceeded && input\.FreshGameplayKeyPressed \? input\.FreshGameplayKey : VirtualKey\.NO_KEY;.*?IsExactVirtualKey\(observedKey\) && inputFrame\.IsGameplayKeyPhysicallyDown\(observedKey\).*?MiracleProtectionEndRules\.ObserveHeldConsent\( protectionEndHeldConsent, new MiracleProtectionEndHeldConsentObservation\( enabled, input\.IsTextInputActive, eligibleKey == VirtualKey\.NO_KEY \? 0 : \(int\)eligibleKey, latchedKeyPhysicallyDown, hardReset\)\)' -or
     $normalizedMiracleIntercept -notmatch 'private int ResolveEpisodeGameplayKeyToken\(.*?!input\.ProbeSucceeded \|\| input\.IsTextInputActive.*?TryGetLatchedProtectionEndKey\(out var latchedKey\) && inputFrame\.IsGameplayKeyGenerationEligible\(latchedKey\).*?input\.HeldGameplayKeyEligible \? input\.HeldGameplayKey : input\.FreshGameplayKeyPressed \? input\.FreshGameplayKey : VirtualKey\.NO_KEY; return IsExactVirtualKey\(candidate\) && inputFrame\.IsGameplayKeyGenerationEligible\(candidate\)' -or
-    $normalizedMiracleIntercept -notmatch 'private static bool IsReservedGameplayKeyPhysicallyDown\(.*?IsExactVirtualKey\(key\) && inputFrame\.IsGameplayKeyGenerationEligible\(key\)' -or
+    $normalizedMiracleIntercept -notmatch 'private static bool IsReservedGameplayKeyPhysicallyDown\(.*?IsExactVirtualKey\(key\) && inputFrame\.IsFrozenGameplayKeyConsentValid\(key\)' -or
+    $normalizedMiracleIntercept -notmatch 'private static bool IsGameplayKeyGenerationEligible\(.*?IsExactVirtualKey\(key\) && inputFrame\.IsGameplayKeyGenerationEligible\(key\)' -or
+    $normalizedMiracleIntercept -notmatch 'ReservationGameplayKeyToken = episodeGameplayKeyToken, ReservedGameplayKeyPhysicallyDown = previous\.GameplayKeyToken > 0 \? IsReservedGameplayKeyPhysicallyDown\( previous\.GameplayKeyToken, inputFrame\) : IsGameplayKeyGenerationEligible\( episodeGameplayKeyToken, inputFrame\).*?var boundGameplayKeyToken = decision\.PromotionIntent\?\.GameplayKeyToken \?\? decision\.NextState\.GameplayKeyToken; if \(boundGameplayKeyToken > 0\).*?IsReservedGameplayKeyPhysicallyDown\( boundGameplayKeyToken, inputFrame\)' -or
     $normalizedMiracleProtectionEndRules -notmatch 'public static bool DispatchConsumesHeldConsent\(MiracleInterceptThreatKind threat\) => false;') {
-    throw 'Protection-end pre-arm may observe the immutable raw frame despite a same-frame Purify claim. Purify/Guard remember the actor episode first, then may bind only the current eligible, unconsumed, non-chat-poisoned generation at authoritative protection end or inside the original 500-ms opportunity.'
+    throw 'Protection-end pre-arm may observe the immutable raw frame despite a same-frame Purify claim. Purify/Guard discovery may inspect only the current eligible generation; only an exact Core-bound actor/action may register release-aware frozen ownership.'
 }
 if ($normalizedMiracleIntercept -notmatch 'if \(!enabled\).*?ClearCleanseFollowupStates\(\);.*?guardFollowupState = MiracleGuardFollowupState\.Initial;.*?protectionEndLocalJobId = 0;.*?ClearProtectionEndDiagnostics\(\);' -or
     $normalizedMiracleIntercept -notmatch 'if \(!localAlive\).*?ClearCleanseFollowupStates\(\);.*?guardFollowupState = MiracleGuardFollowupState\.Initial;.*?protectionEndLocalJobId = 0;.*?ClearProtectionEndDiagnostics\(\);' -or
@@ -7432,7 +7553,7 @@ if ($normalizedMiracleIntercept -notmatch 'var immediateThreats = new List<Mirac
     throw 'All urgent events drained together must first remember exact actor/action/event data, then select one deterministic priority winner via GetDispatchPriority; every simultaneous loser is terminal. A strictly higher-priority urgent event may replace only an unattempted lower-priority reactive lease.'
 }
 if ($normalizedMiracleIntercept -notmatch 'if \(activeThreat is \{ GameplayKeyToken: <= 0 \} unboundThreat\).*?TryRefreshAndResolveFrozenThreat\( localPlayer, unboundThreat, out var refreshedThreat, out _\).*?activeThreat = refreshedThreat;.*?keyless lease retired after exact identity drift.*?activeThreat = null;.*?while \(capture\.TryDequeueMiracleInterceptThreat' -or
-    $normalizedMiracleIntercept -notmatch 'if \(activeThreat is not \{ \} threat\).*?if \(threat\.GameplayKeyToken <= 0\).*?TryRefreshAndResolveFrozenThreat\( localPlayer!, threat, out var refreshedKeylessThreat, out _\).*?activeThreat = null;.*?threat = refreshedKeylessThreat; activeThreat = threat;.*?if \(episodeGameplayKeyToken <= 0\).*?Waiting: exact threat stored; no eligible held/fresh key yet.*?threat = threat with \{ GameplayKeyToken = episodeGameplayKeyToken \}; activeThreat = threat;.*?var input = inputFrame\.Snapshot; var triggerKey = threat\.GameplayKeyToken > 0 \? \(VirtualKey\)threat\.GameplayKeyToken : VirtualKey\.NO_KEY; if \(!IsExactVirtualKey\(triggerKey\) \|\| !inputFrame\.IsGameplayKeyGenerationEligible\(triggerKey\)\).*?activeThreat = null;.*?if \(!dispatchAllowed\)' -or
+    $normalizedMiracleIntercept -notmatch 'if \(activeThreat is not \{ \} threat\).*?if \(threat\.GameplayKeyToken <= 0\).*?TryRefreshAndResolveFrozenThreat\( localPlayer!, threat, out var refreshedKeylessThreat, out _\).*?activeThreat = null;.*?threat = refreshedKeylessThreat; activeThreat = threat;.*?if \(episodeGameplayKeyToken <= 0\).*?Waiting: exact threat stored; no eligible held/fresh key yet.*?threat = threat with \{ GameplayKeyToken = episodeGameplayKeyToken \}; activeThreat = threat;.*?var input = inputFrame\.Snapshot; var triggerKey = threat\.GameplayKeyToken > 0 \? \(VirtualKey\)threat\.GameplayKeyToken : VirtualKey\.NO_KEY; if \(!IsExactVirtualKey\(triggerKey\) \|\| !inputFrame\.IsFrozenGameplayKeyConsentValid\(triggerKey\)\).*?activeThreat = null;.*?if \(!dispatchAllowed\)' -or
     $normalizedMiracleIntercept -notmatch 'private bool TryRefreshAndResolveFrozenThreat\(.*?var currentLocalJobId = localPlayer\.ClassJob\.IsValid \? localPlayer\.ClassJob\.RowId : 0;.*?refreshedThreat\.CounterActionId != counterActionId \|\| refreshedThreat\.LocalJobId != currentLocalJobId.*?return false;.*?candidate = ResolveCandidate\(localPlayer, refreshedThreat\); return candidate is not null;') {
     throw 'An urgent reactive-CC episode must revalidate exact current job/action/actor while keyless, may bind the first eligible key only inside its original lease, and after binding must terminally validate that exact generation before yielding to another helper.'
 }
@@ -7448,7 +7569,7 @@ if ($normalizedMiracleIntercept -notmatch 'private IPlayerCharacter\? ResolveCle
     throw 'Post-Purify status observation must resolve exactly one unchanged canonical e1-e5 and exactly one matching live native player actor.'
 }
 if ($normalizedMiracleIntercept -notmatch 'var blockerFamily = BlockerFamilyForAction\(threat\.CounterActionId\); var anyProtection = HasBlockingProtectionForThreat\( candidate, blockerFamily, threat, nowMilliseconds, out var predictiveProtectionBypassed\); var guardReappeared = threat\.Kind == MiracleInterceptThreatKind\.PostGuardCrowdControl && CountActiveGuardStatuses\(candidate\) != 0 && !predictiveProtectionBypassed;.*?var otherProtection = \(anyProtection && !hardenedScales\) \|\| guardReappeared;.*?var rangeAndLineOfSight = HasActionRangeAndLineOfSight\( threat\.CounterActionId, localPlayer!, candidate, threat\.MaximumRangeYalms\); var structurallyReady = HasStructuralActionReadiness\(localPlayer!, threat\.CounterActionId\); var mainGcdLateReservation = IsProtectionEndThreat\(threat\.Kind\) && ReactiveCounterCcProfileRules\.UsesMainGlobalCooldown\( threat\.CounterActionId\); var exactIntentCanProgress = !hardenedScales && !otherProtection && rangeAndLineOfSight && structurallyReady; var globallyQueueReady = exactIntentCanProgress && HasGlobalQueueReadiness\( localPlayer!, threat\.CounterActionId\);' -or
-    $normalizedMiracleIntercept -notmatch 'var revalidatedPredictiveBypass = false; var revalidatedProtection = revalidated is not null && HasBlockingProtectionForThreat\( revalidated, blockerFamily, threat, revalidationNow, out revalidatedPredictiveBypass\); var revalidatedGuardAbsent = revalidated is not null && \(threat\.Kind != MiracleInterceptThreatKind\.PostGuardCrowdControl \|\| CountActiveGuardStatuses\(revalidated\) == 0 \|\| revalidatedPredictiveBypass\);.*?var revalidatedRange = revalidated is not null && HasActionRangeAndLineOfSight\( threat\.CounterActionId, localPlayer!, revalidated, threat\.MaximumRangeYalms\);.*?var revalidatedActionIdentity = threat\.CounterActionId == counterActionId && threat\.LocalJobId == revalidatedLocalJobId; var revalidatedInput = !input\.IsTextInputActive && IsExactVirtualKey\(triggerKey\) && threat\.GameplayKeyToken == \(int\)triggerKey && inputFrame\.IsGameplayKeyGenerationEligible\(triggerKey\); var revalidatedInsideWindow = revalidationNow >= threat\.ObservedAtMilliseconds && revalidationNow - threat\.ObservedAtMilliseconds < ThreatLifetime\(threat\); var finalProtectionStateValid = !revalidatedProtection && revalidatedGuardAbsent; var finalValidationPassed = revalidated is not null && !revalidatedHardened && finalProtectionStateValid && revalidatedRange && revalidatedActionIdentity && revalidatedInput && revalidatedInsideWindow;.*?if \(finalValidationPassed && mainGcdLateReservation\).*?ReactiveCounterCcLateDispatchRules\.CanDispatch\( new ReactiveCounterCcLateReservation\( threat\.CounterActionId, threat\.GameObjectId, threat\.EntityId, threat\.ScheduledProtectionStatusId, threat\.ObservedAtMilliseconds\), revalidationNow, counterActionId, revalidated!\.GameObjectId, revalidated\.EntityId, revalidatedPredictiveBypass \? threat\.ScheduledProtectionStatusId : 0, finalProtectionStateValid, revalidatedInput, revalidatedRange, revalidatedStructuralReadiness, revalidatedGlobalQueueReadiness\);.*?if \(finalValidationPassed\).*?TryUseCounterCcOnce\( localPlayer!, threat\.CounterActionId, revalidated!, new PredictiveCcBrakeBypassIntent\( threat\.CounterActionId, revalidated!\.GameObjectId, revalidated\.EntityId, revalidated\.ClassJob\.RowId, revalidatedPredictiveBypass \? threat\.ScheduledProtectionStatusId : 0, revalidatedPredictiveBypass \? threat\.ScheduledProtectionEndAtMilliseconds : -1, revalidatedPredictiveBypass \? threat\.ScheduledSafeImpactLeadMilliseconds : 0, RequireGuardAbsent: threat\.Kind == MiracleInterceptThreatKind\.PostGuardCrowdControl\), out attempted, out expectedSourceSequence, out attemptedAtMilliseconds, out attemptedTargetEdgeDistanceYalms\);') {
+    $normalizedMiracleIntercept -notmatch 'var revalidatedPredictiveBypass = false; var revalidatedProtection = revalidated is not null && HasBlockingProtectionForThreat\( revalidated, blockerFamily, threat, revalidationNow, out revalidatedPredictiveBypass\); var revalidatedGuardAbsent = revalidated is not null && \(threat\.Kind != MiracleInterceptThreatKind\.PostGuardCrowdControl \|\| CountActiveGuardStatuses\(revalidated\) == 0 \|\| revalidatedPredictiveBypass\);.*?var revalidatedRange = revalidated is not null && HasActionRangeAndLineOfSight\( threat\.CounterActionId, localPlayer!, revalidated, threat\.MaximumRangeYalms\);.*?var revalidatedActionIdentity = threat\.CounterActionId == counterActionId && threat\.LocalJobId == revalidatedLocalJobId; var revalidatedInput = !input\.IsTextInputActive && IsExactVirtualKey\(triggerKey\) && threat\.GameplayKeyToken == \(int\)triggerKey && inputFrame\.IsFrozenGameplayKeyConsentValid\(triggerKey\); var revalidatedInsideWindow = revalidationNow >= threat\.ObservedAtMilliseconds && revalidationNow - threat\.ObservedAtMilliseconds < ThreatLifetime\(threat\); var finalProtectionStateValid = !revalidatedProtection && revalidatedGuardAbsent; var finalValidationPassed = revalidated is not null && !revalidatedHardened && finalProtectionStateValid && revalidatedRange && revalidatedActionIdentity && revalidatedInput && revalidatedInsideWindow;.*?if \(finalValidationPassed && mainGcdLateReservation\).*?ReactiveCounterCcLateDispatchRules\.CanDispatch\( new ReactiveCounterCcLateReservation\( threat\.CounterActionId, threat\.GameObjectId, threat\.EntityId, threat\.ScheduledProtectionStatusId, threat\.ObservedAtMilliseconds\), revalidationNow, counterActionId, revalidated!\.GameObjectId, revalidated\.EntityId, revalidatedPredictiveBypass \? threat\.ScheduledProtectionStatusId : 0, finalProtectionStateValid, revalidatedInput, revalidatedRange, revalidatedStructuralReadiness, revalidatedGlobalQueueReadiness\);.*?if \(finalValidationPassed\).*?TryUseCounterCcOnce\( localPlayer!, threat\.CounterActionId, revalidated!, new PredictiveCcBrakeBypassIntent\( threat\.CounterActionId, revalidated!\.GameObjectId, revalidated\.EntityId, revalidated\.ClassJob\.RowId, revalidatedPredictiveBypass \? threat\.ScheduledProtectionStatusId : 0, revalidatedPredictiveBypass \? threat\.ScheduledProtectionEndAtMilliseconds : -1, revalidatedPredictiveBypass \? threat\.ScheduledSafeImpactLeadMilliseconds : 0, RequireGuardAbsent: threat\.Kind == MiracleInterceptThreatKind\.PostGuardCrowdControl\), out attempted, out expectedSourceSequence, out attemptedAtMilliseconds, out attemptedTargetEdgeDistanceYalms\);') {
     throw 'Reactive CC must freeze and finally revalidate counter action/local job, exact actor/life, the full action-specific protection set, post-Guard state, range/LoS, exact eligible key generation, and the original lease. Every plugin-owned call carries an exact one-call natural helper recheck; only final scheduled-protection revalidation may populate its predictive schedule, while true main-GCD counters must also pass the frozen late-reservation contract.'
 }
 if ($normalizedMiracleIntercept -notmatch 'return pressureTracker\.TryGetFreshTeamTargetCount\( new TargetPressureActorIdentity\(localPlayer\.GameObjectId, localPlayer\.EntityId\), new TargetPressureActorIdentity\(candidate\.GameObjectId, candidate\.EntityId\), nowMilliseconds, MaximumTeamPressureAgeMilliseconds, out teamTargetCount\);' -or
@@ -7465,10 +7586,13 @@ if ($miracleIntercept -match '\bGetTargetId\s*\(' -or
     $miracleIntercept -match 'pressureTracker\.GetTeamTargetCount\s*\(') {
     throw 'Post-Purify and post-Guard reactive CC must not require or read the local selected/hard target, nor use the stale raw team-count accessor.'
 }
-if ($normalizedMiracleIntercept -notmatch 'private IReadOnlyList<MiracleGuardFollowupCandidate> BuildGuardFollowupCandidates\(.*?executeTracker\.IsActive.*?EnemySlotRules\.IsValidSlot\(enemy\.Slot\).*?ambiguousSlots.*?ambiguousGameObjectIds.*?ambiguousEntityIds.*?ResolveGuardFollowupCandidate\(localPlayer, target\).*?TryGetFreshTeamTargetCount\( localPlayer, player!, nowMilliseconds, out teamTargetCount\).*?CountActiveGuardStatuses\(player!, out guardRemainingMilliseconds\).*?GuardRemainingMilliseconds = live \? guardRemainingMilliseconds : 0.*?ReservationGameplayKeyToken = episodeGameplayKeyToken.*?IsReservedGameplayKeyPhysicallyDown\( ownedGameplayKeyToken, inputFrame\).*?CounterActionReachable = live && IsCounterActionReachable\( localPlayer, player!\)' -or
+if ($normalizedMiracleIntercept -notmatch 'private IReadOnlyList<MiracleGuardFollowupCandidate> BuildGuardFollowupCandidates\(.*?executeTracker\.IsActive.*?EnemySlotRules\.IsValidSlot\(enemy\.Slot\).*?ambiguousSlots.*?ambiguousGameObjectIds.*?ambiguousEntityIds.*?ResolveGuardFollowupCandidate\(localPlayer, target\).*?TryGetFreshTeamTargetCount\( localPlayer, player!, nowMilliseconds, out teamTargetCount\).*?CountActiveGuardStatuses\(player!, out guardRemainingMilliseconds\).*?GuardRemainingMilliseconds = live \? guardRemainingMilliseconds : 0.*?ReservationGameplayKeyToken = episodeGameplayKeyToken.*?ReservedGameplayKeyPhysicallyDown = ownedGameplayKeyToken > 0 \? IsReservedGameplayKeyPhysicallyDown\( ownedGameplayKeyToken, inputFrame\) : IsGameplayKeyGenerationEligible\( episodeGameplayKeyToken, inputFrame\).*?CounterActionReachable = live && IsCounterActionReachable\( localPlayer, player!\)' -or
+    $normalizedMiracleIntercept -notmatch 'guardFollowupState = decision\.NextState;.*?var boundGuardGameplayKeyTokens = guardFollowupState\.Actors' -or
+    $normalizedMiracleIntercept -notmatch 'Append\(decision\.PromotionIntent\?\.GameplayKeyToken \?\? 0\).*?Distinct\(\);' -or
+    $normalizedMiracleIntercept -notmatch 'foreach \(var boundGameplayKeyToken in boundGuardGameplayKeyTokens\).*?IsReservedGameplayKeyPhysicallyDown\( boundGameplayKeyToken, inputFrame\)' -or
     $normalizedMiracleIntercept -notmatch 'private bool IsCounterActionReachable\( IPlayerCharacter localPlayer, IPlayerCharacter candidate\).*?counterActionId == EnemyCombatConstants\.NinjaAeolianEdgeComboCarrierActionId \? EnemyCombatConstants\.ForkedRaijuActionId : counterActionId; return MiracleInterceptConfirmationRules\.ExpectedStatusForAction\(rangeActionId\) != 0 && !HasAnyVerifiedCcProtection\( candidate, BlockerFamilyForAction\(rangeActionId\)\) && HasActionRangeAndLineOfSight\( rangeActionId, localPlayer, candidate, counterActionMaximumRangeYalms\);' -or
     $normalizedMiracleIntercept -notmatch 'private static int CountActiveGuardStatuses\( IPlayerCharacter player, out long longestRemainingMilliseconds\).*?foreach \(var status in player\.StatusList\).*?MiracleGuardFollowupRules\.IsExactGuardStatus\(status\.StatusId\).*?count\+\+;.*?ValidatedProtectionRemainingMilliseconds\( status\.StatusId, status\.RemainingTime\).*?if \(count > 1\) return count') {
-    throw 'Post-Guard observation must use exact unambiguous S1-S5 identity or the exact Wolves Den hard target, exact Guard 3054/3673 live membership, release-time exact key ownership, blocker-free configured native range/LoS reachability before ranking, and only a bounded advisory duration.'
+    throw 'Post-Guard observation must use exact unambiguous S1-S5 identity or the exact Wolves Den hard target, physical-only discovery before release, exact-owner registration only after Core binding, exact Guard 3054/3673 membership, blocker-free native reachability, and bounded advisory duration.'
 }
 if ($normalizedMiracleIntercept -notmatch 'guardFollowupState = decision\.NextState;.*?if \(!decision\.ShouldPromote \|\| decision\.PromotionIntent is not \{ \} promotion\) return null;.*?ResolveCanonicalEnemy\(promotion\.Target\).*?ResolveGuardFollowupCandidate\(localPlayer, promotion\.Target\).*?CountActiveGuardStatuses\(player\) != 0.*?new MiracleProtectionEndRankCandidate\( MiracleInterceptThreatKind\.PostGuardCrowdControl, promotion\.Target\.EnemySlot, promotion\.Target\.GameObjectId, promotion\.Target\.EntityId, promotion\.Target\.JobId, promotion\.TeamTargetCountKnown, promotion\.TeamTargetCount, promotion\.CurrentHp, promotion\.MaximumHp, promotion\.HasTrustedMp, promotion\.CurrentMp, promotion\.MaximumMp\).*?new MiracleThreatState\( MiracleInterceptThreatKind\.PostGuardCrowdControl, promotion\.Target\.GameObjectId, promotion\.Target\.EntityId, promotion\.Target\.JobId, promotion\.Target\.EnemySlot, promotion\.ReleasedAtMilliseconds') {
     throw 'Post-Guard promotion must consume Core state first, revalidate the same frozen S-slot/GOID/entity/job actor and exact Guard absence, then carry one immutable common-rank record without reranking or fallback.'
@@ -7843,6 +7967,7 @@ Assert-Literals $smartWardensPaeanRules @(
     'public const uint ActionId = 29_400;',
     'public const uint WardensPaeanWardStatusId = 3_143;',
     'public const int MinimumIncomingEnemyCount = 3;',
+    'public const int MinimumExactPartyViewSize = 2;',
     'public const int RequiredCrystallineConflictPartySize = 5;',
     'public const int FirstPartySlot = 1;',
     'public const int LastPartySlot = 8;',
@@ -7866,9 +7991,9 @@ Assert-Literals $smartWardensPaeanRules @(
     'IsEligibleCandidate(currentCandidate, currentLocalPlayer)'
 ) 'Pure Smart Warden''s Paean exact-pressure target policy'
 if ($normalizedSmartWardensPaeanRules -notmatch 'if \(!observation\.ConfigurationEnabled\).*?ConfigurationDisabled.*?if \(!observation\.IsCrystallineConflict\).*?OutsideCrystallineConflict.*?if \(!observation\.LocalPlayer\.IsValid\).*?LocalPlayerIdentityInvalid.*?if \(!observation\.IsLocalPlayerAlive\).*?LocalPlayerDead.*?if \(observation\.LocalJobId != BardJobId\).*?LocalJobInvalid.*?if \(!observation\.MetadataVerified\).*?MetadataUnverified.*?if \(observation\.ResolvedActionId != ActionId\).*?ResolvedActionInvalid' -or
-    $normalizedSmartWardensPaeanRules -notmatch 'candidates\.Count != RequiredCrystallineConflictPartySize.*?candidate\.PartySlot is < FirstPartySlot or > LastPartySlot.*?!candidate\.ExactPartyIdentity.*?!candidate\.Actor\.IsValid.*?candidate\.IsSelf != isExactLocal.*?!occupiedSlots\.Add\(candidate\.PartySlot\).*?!occupiedGameObjectIds\.Add\(candidate\.Actor\.GameObjectId\).*?!occupiedEntityIds\.Add\(candidate\.Actor\.EntityId\).*?return localEntries == 1;' -or
+    $normalizedSmartWardensPaeanRules -notmatch 'candidates\.Count is < MinimumExactPartyViewSize or > RequiredCrystallineConflictPartySize.*?candidate\.PartySlot is < FirstPartySlot or > LastPartySlot.*?!candidate\.ExactPartyIdentity.*?!candidate\.Actor\.IsValid.*?candidate\.IsSelf != isExactLocal.*?!occupiedSlots\.Add\(candidate\.PartySlot\).*?!occupiedGameObjectIds\.Add\(candidate\.Actor\.GameObjectId\).*?!occupiedEntityIds\.Add\(candidate\.Actor\.EntityId\).*?return localEntries == 1;' -or
     $normalizedSmartWardensPaeanRules -notmatch 'candidate\.Actor != localPlayer.*?!candidate\.IsSelf.*?candidate\.Alive.*?candidate\.Targetable.*?!candidate\.HasWardensPaeanWard.*?candidate\.CurrentHp > 0.*?candidate\.MaximumHp > 0.*?candidate\.CurrentHp <= candidate\.MaximumHp.*?candidate\.NativeTargetValid.*?candidate\.NativeRangeAndLineOfSight.*?candidate\.PressureKnown.*?candidate\.UniqueIncomingEnemyCount >= MinimumIncomingEnemyCount') {
-    throw 'Smart Paean Core must require default-off exact CC/BRD/action metadata, one complete unique exact five-member party view, a non-self live target without ward 3143, native reachability, and known pressure of at least three.'
+    throw 'Smart Paean Core must require default-off exact CC/BRD/action semantics, one stable unique exact two-to-five-member party view, a non-self live target without ward 3143, native reachability, and known pressure of at least three.'
 }
 if ($normalizedSmartWardensPaeanRules -notmatch 'var pressure = right\.UniqueIncomingEnemyCount\.CompareTo\( left\.UniqueIncomingEnemyCount\); if \(pressure != 0\) return pressure; var health = \(\(ulong\)left\.CurrentHp \* right\.MaximumHp\)\.CompareTo\( \(ulong\)right\.CurrentHp \* left\.MaximumHp\); if \(health != 0\) return health; var partySlot = left\.PartySlot\.CompareTo\(right\.PartySlot\); if \(partySlot != 0\) return partySlot; var entityId = left\.Actor\.EntityId\.CompareTo\(right\.Actor\.EntityId\); return entityId != 0 \? entityId : left\.Actor\.GameObjectId\.CompareTo\(right\.Actor\.GameObjectId\);' -or
     $normalizedSmartWardensPaeanRules -notmatch 'var selectedIndex = SelectBestCandidateIndex\( observation\.Candidates, observation\.LocalPlayer\); if \(selectedIndex < 0\).*?NoKnownPressureTarget.*?var candidate = observation\.Candidates!\[selectedIndex\]; var intent = new SmartWardensPaeanIntent\( observation\.ResolvedActionId, candidate\.PartySlot, observation\.LocalPlayer, candidate\.Actor, candidate\.UniqueIncomingEnemyCount\);') {
@@ -7901,6 +8026,8 @@ Assert-Literals $smartWardensPaeanSelfTests @(
     'PressureKnown = false',
     'HasWardensPaeanWard = true',
     'NativeRangeAndLineOfSight = false',
+    '"stable exact partial party view"',
+    '"self-only view has no ally"',
     '"33/100 is exactly lower than 1/3"',
     'SmartWardensPaeanDecisionKind.Vanilla',
     '"a now-better alternate cannot replace the frozen actor"',
@@ -7915,9 +8042,6 @@ if ([regex]::Matches($smartWardensPaeanSelfTests, '\binternal static void\s+\w+\
 
 Assert-Literals $smartWardensPaeanService @(
     'internal sealed unsafe class SmartWardensPaeanService',
-    'internal const uint WardensPaeanIconId = 9_628;',
-    'internal const uint WardensPaeanWardIconId = 212_611;',
-    'private const ushort ExpectedRecast100ms = 240;',
     'private const int ExpectedRange = 30;',
     'ResolveActionId(actionManager, actionType, rawActionId)',
     'SmartWardensPaeanTargetRules.ActionId',
@@ -7960,19 +8084,23 @@ if (-not $smartPaeanEvaluateMethod.Success -or
     $smartPaeanEvaluateBody -notmatch 'catch \(Exception exception\).*?return redirectCommitted \? RecordSuppressed\(.*?: RecordVanilla\(') {
     throw 'Smart Paean must keep every preselection failure vanilla, commit one frozen target only after Core redirect selection, then suppress every exact-final-preflight failure or exception without fallback.'
 }
-if ($smartPaeanCaptureBody -notmatch 'var partyBefore = CaptureExactPartyEntityIds\(\).*?pressureTracker\.TryCaptureIncomingAllyPressure\( out var pressureCounts\).*?for \(var slot = SmartWardensPaeanTargetRules\.FirstPartySlot; slot <= SmartWardensPaeanTargetRules\.LastPartySlot; slot\+\+\).*?BuildCandidate\( localPlayer, player!, slot, pressureViewActive, pressureCounts\).*?var partyAfter = CaptureExactPartyEntityIds\(\).*?partyBefore\.SetEquals\(partyAfter\).*?members\.Count == SmartWardensPaeanTargetRules\.RequiredCrystallineConflictPartySize.*?SetEquals\(partyBefore\).*?Distinct\(\)\.Count\(\) == members\.Count.*?PartySlotsRemainExact\(members\)' -or
+if ($smartPaeanCaptureBody -notmatch 'var partyBefore = CaptureExactPartyEntityIds\(\).*?pressureTracker\.TryCaptureIncomingAllyPressure\( out var pressureCounts\).*?for \(var slot = SmartWardensPaeanTargetRules\.FirstPartySlot; slot <= SmartWardensPaeanTargetRules\.LastPartySlot; slot\+\+\).*?BuildCandidate\( localPlayer, player!, slot, pressureViewActive, pressureCounts\).*?var partyAfter = CaptureExactPartyEntityIds\(\).*?partyBefore\.SetEquals\(partyAfter\).*?members\.Count == partyBefore\.Count.*?SetEquals\(partyBefore\).*?Distinct\(\)\.Count\(\) == members\.Count.*?PartySlotsRemainExact\(members\)' -or
     $smartPaeanBuildCandidateBody -notmatch 'GetNativeObject\(localPlayer\).*?GetNativeObject\(target\).*?ActionManager\.GetActionInRangeOrLoS\( SmartWardensPaeanTargetRules\.ActionId, sourceObject, targetObject\).*?pressureViewActive && pressureCounts\.TryGetValue\( targetIdentity, out incomingEnemyCount\) && incomingEnemyCount >= 0.*?HasLiveWardensPaeanWard\(target\).*?SeitonRangeRules\.HasNativeRangeAndLineOfSight\(rangeResult\).*?pressureKnown, incomingEnemyCount') {
-    throw 'Smart Paean selection must capture one immutable pressure view for one stable complete five-member P1-P8 party set and build every candidate from exact IDs/address, live ward, native 30y/LoS, and non-negative pressure in that same view.'
+    throw 'Smart Paean selection must capture one immutable pressure view for one stable exact two-to-five-member P1-P8 party set and build every candidate from exact IDs/address, live ward, native 30y/LoS, and non-negative pressure in that same view.'
 }
 if ($normalizedSmartWardensPaeanService -notmatch 'private bool PartySlotsRemainExact\(.*?PartySlotResolver\.Resolve\( objectTable, member\.Candidate\.PartySlot\).*?stableIdentity != member\.Candidate\.Actor.*?stablePlayer!\.Address != member\.Address.*?return false;' -or
-    $normalizedSmartWardensPaeanService -notmatch 'private HashSet<uint>\? CaptureExactPartyEntityIds\(\).*?ids\.Length != SmartWardensPaeanTargetRules\.RequiredCrystallineConflictPartySize.*?ids\.Any\(static entityId => !IsNetworkEntityId\(entityId\)\).*?unique\.Count == ids\.Length \? unique : null' -or
+    $normalizedSmartWardensPaeanService -notmatch 'private HashSet<uint>\? CaptureExactPartyEntityIds\(\).*?ids\.Length is < SmartWardensPaeanTargetRules\.MinimumExactPartyViewSize or > SmartWardensPaeanTargetRules\.RequiredCrystallineConflictPartySize.*?ids\.Any\(static entityId => !IsNetworkEntityId\(entityId\)\).*?unique\.Count == ids\.Length \? unique : null' -or
     $normalizedSmartWardensPaeanService -notmatch 'private bool TryGetExactIdentity\(.*?player\.Address == nint\.Zero.*?!IsNetworkObjectId\(player\.GameObjectId\).*?!IsNetworkEntityId\(player\.EntityId\).*?native->EntityId != player\.EntityId.*?tablePlayer\.Address != player\.Address.*?tablePlayer\.GameObjectId != player\.GameObjectId.*?tablePlayer\.EntityId != player\.EntityId') {
-    throw 'Smart Paean exact-party capture must reject incomplete, duplicate, changed, or object-table/native identity mismatches before a redirect can be committed.'
+    throw 'Smart Paean exact-party capture must reject self-only, oversized, duplicate, changed, or object-table/native identity mismatches before a redirect can be committed.'
 }
-if ($normalizedSmartWardensPaeanService -notmatch 'action\.Name\.ToString\(\), "The Warden''s Paean".*?action\.Icon == WardensPaeanIconId.*?action\.IsPvP.*?action\.IsPlayerAction.*?action\.ClassJob\.RowId == SmartWardensPaeanTargetRules\.BardJobId.*?action\.Range == ExpectedRange.*?action\.EffectRange == 0.*?action\.Cast100ms == 0.*?action\.Recast100ms == ExpectedRecast100ms.*?action\.CanTargetSelf.*?action\.CanTargetParty.*?!action\.CanTargetAlly.*?!action\.CanTargetAlliance.*?!action\.CanTargetHostile.*?!action\.TargetArea.*?action\.RequiresLineOfSight.*?actionDescription\.Contains\("Removes".*?actionDescription\.Contains\("Purify".*?actionDescription\.Contains\("barrier"' -or
-    $normalizedSmartWardensPaeanService -notmatch 'ward\.Name\.ToString\(\), "The Warden''s Paean".*?ward\.Icon == WardensPaeanWardIconId.*?ward\.StatusCategory == 1.*?wardDescription\.Contains\("Purify"' -or
+$smartPaeanMetadataMethod = [regex]::Match(
+    $normalizedSmartWardensPaeanService,
+    'private bool ValidateMetadata\(\) \{(?<Body>.*?)\} private SupportedPvPContext ResolveContext')
+if (-not $smartPaeanMetadataMethod.Success -or
+    $smartPaeanMetadataMethod.Groups['Body'].Value -notmatch 'actions\.TryGetRow\(SmartWardensPaeanTargetRules\.ActionId, out var action\).*?statuses\.TryGetRow\( SmartWardensPaeanTargetRules\.WardensPaeanWardStatusId, out var ward\).*?action\.IsPvP.*?action\.IsPlayerAction.*?action\.ClassJob\.RowId == SmartWardensPaeanTargetRules\.BardJobId.*?action\.Range == ExpectedRange.*?action\.EffectRange == 0.*?action\.Cast100ms == 0.*?action\.CanTargetSelf.*?action\.CanTargetParty.*?!action\.CanTargetAlly.*?!action\.CanTargetAlliance.*?!action\.CanTargetHostile.*?!action\.TargetArea.*?action\.RequiresLineOfSight.*?ward\.StatusCategory == 1.*?!ward\.CanDispel.*?!ward\.IsPermanent' -or
+    $smartPaeanMetadataMethod.Groups['Body'].Value -match '\b(?:Icon|Recast100ms|Description|actionDescription|wardDescription)\b' -or
     $normalizedSmartWardensPaeanService -notmatch 'SmartWardensPaeanTargetRules\.IsWardensPaeanWardStatus\(status\.StatusId\).*?float\.IsFinite\(status\.RemainingTime\).*?status\.RemainingTime > 0f') {
-    throw 'Smart Paean metadata must fail closed on exact PvP BRD action 29400 (icon 9628, 30y, LoS, target flags and description) and exact live ward status 3143 (icon 212611/category/description).'
+    throw 'Smart Paean metadata must fail closed on exact PvP BRD action 29400 targeting/range/LoS semantics and exact live ward 3143 category semantics, without cosmetic icon, recast-balance, or English-description blockers.'
 }
 if ($normalizedSmartWardensPaeanService -notmatch 'private static bool IsRecognizedInvocation\(.*?actionType is ActionType\.Action or ActionType\.PvPAction.*?mode is ActionManager\.UseActionMode\.None or ActionManager\.UseActionMode\.Macro or ActionManager\.UseActionMode\.Queue.*?\(uint\)mode == 100' -or
     ($smartWardensPaeanRules + $smartWardensPaeanService + $smartWardensPaeanSelfTests) -match '\b(ActionLocallyReady|OffCooldown|CooldownRemaining|GetRecastTimeElapsed|GetRecastTimeRemaining)\b' -or
@@ -8884,7 +9012,7 @@ Assert-Literals $defensiveUtilitySelfTests @(
     'clock rollback fails open'
 ) 'One-second global Guard-repeat boundary coverage'
 if ($normalizedCastedMacroRedirectRules -notmatch
-        'CanContinueSmartActionCast\( bool ownedBySmartAction, bool supportedActionType, uint resolvedActionId, bool exactActionMetadata, uint metadataRowId, bool isPvp, bool canTargetHostile, bool isGroundTargeted, float range\) => ownedBySmartAction && supportedActionType && resolvedActionId != 0 && exactActionMetadata && metadataRowId == resolvedActionId && isPvp && canTargetHostile && !isGroundTargeted && float\.IsFinite\(range\) && range > 0f;' -or
+        'CanContinueSmartActionCast\( bool smartTargetRankingSupported, bool ownedBySmartAction, bool supportedActionType, uint resolvedActionId, bool exactActionMetadata, uint metadataRowId, bool isPvp, bool canTargetHostile, bool isGroundTargeted, float range\) => smartTargetRankingSupported && ownedBySmartAction && supportedActionType && resolvedActionId != 0 && exactActionMetadata && metadataRowId == resolvedActionId && isPvp && canTargetHostile && !isGroundTargeted && float\.IsFinite\(range\) && range > 0f;' -or
     $normalizedCastedMacroRedirectRules -notmatch
         'ShouldPassThroughWithoutRedirect\( CastedMacroRedirectDecision decision\) => decision is CastedMacroRedirectDecision\.PreserveAuthoredTarget or CastedMacroRedirectDecision\.PassThroughStaleLifecycle;' -or
     $normalizedCastedMacroRedirectRules -notmatch
@@ -9043,11 +9171,11 @@ if ([regex]::Matches($nearAssist, '\bTryConsumeCastedMacroRedirect\s*\(').Count 
     $normalizedNearAssist -notmatch
         'CastedMacroRedirectOwner\.SmartAction => IsEligibleSmartActionRedirectAction\(.*?CastedMacroRedirectOwner\.NearAssist => IsEligibleRedirectAction\(.*?CastedMacroRedirectOwner\.NearHelp => IsEligibleHelpAction\(' -or
     $normalizedNearAssist -notmatch
-        'private static bool IsExactSmartActionCastRedirect\(.*?CastedMacroRedirectRules\.CanContinueSmartActionCast\( claim\.Owner == CastedMacroRedirectOwner\.SmartAction, IsSupportedActionType\(actionType\), resolvedActionId, exactMetadata, action\.RowId, action\.IsPvP, action\.CanTargetHostile, action\.TargetArea, action\.Range\);' -or
+        'private bool IsExactSmartActionCastRedirect\(.*?CastedMacroRedirectRules\.CanContinueSmartActionCast\( SmartActionContextRules\.CanUseSmartTargetRanking\(ResolveContext\(\)\), claim\.Owner == CastedMacroRedirectOwner\.SmartAction, IsSupportedActionType\(actionType\), resolvedActionId, exactMetadata, action\.RowId, action\.IsPvP, action\.CanTargetHostile, action\.TargetArea, action\.Range\);' -or
     $normalizedNearAssist -notmatch
         'if \(CastedMacroRedirectRules\.ShouldContinueThroughTargetRanking\(decision\)\) \{ if \(decision == CastedMacroRedirectDecision\.RedirectNearHelpCast\) continuingNearHelpCastClaim = claim; return decision; \} if \(!TryConsumeCastedMacroRedirectClaim\(claim, decision\)\) return CastedMacroRedirectDecision\.SuppressStaleOwnership;.*?consumedSmartActionToken = claim\.SmartTarget;.*?return decision;' -or
     $normalizedNearAssist -notmatch
-        'private bool IsExactCurrentHardTarget\(.*?var incomingIsNativeSelectedTargetCarrier = authoredTargetId is 0 or InvalidObjectId;.*?SmartActionContextRules\.CanUseExactVisibleTargetTestFallback\( ResolveContext\(\), configuration\.EnableWolvesDenTesting, combatPriorityMode: true\);.*?TryResolveExactCurrentHardTarget\( objectTable, wolvesDenStrikingDummyMetadataVerified, local, out _, out _, out _, out var exactNativeHardTargetId\).*?exactNativeHardTargetId == hardTargetId;.*?SmartActionContextRules\.IsExactCurrentTargetCarrier\( ResolveContext\(\), configuration\.EnableWolvesDenTesting, combatPriorityMode: true, incomingIsNativeSelectedTargetCarrier: true, exactNativeHardTargetResolved: exactWolvesDenHardTargetResolved, explicitTargetMatchesNativeHardTarget: false\);.*?if \(!IsNetworkObjectId\(authoredTargetId\)\) return false;.*?if \(hardTargetId == authoredTargetId\) return true;.*?SmartActionContextRules\.IsExactCurrentTargetCarrier\( ResolveContext\(\), configuration\.EnableWolvesDenTesting, combatPriorityMode: true, incomingIsNativeSelectedTargetCarrier: false, exactNativeHardTargetResolved: hardTarget is not null, explicitTargetMatchesNativeHardTarget: HasSameNativeIdentity\(hardTarget, authoredTarget\)\)') {
+        'private bool IsExactCurrentHardTarget\(.*?var incomingIsNativeSelectedTargetCarrier = SmartActionContextRules\.IsNativeSelectedTargetCarrier\(authoredTargetId\);.*?SmartActionContextRules\.CanUseExactVisibleTargetTestFallback\( ResolveContext\(\), configuration\.EnableWolvesDenTesting, combatPriorityMode: true\);.*?TryResolveExactCurrentHardTarget\( objectTable, wolvesDenStrikingDummyMetadataVerified, local, out _, out _, out _, out var exactNativeHardTargetId\).*?exactNativeHardTargetId == hardTargetId;.*?SmartActionContextRules\.IsExactCurrentTargetCarrier\( ResolveContext\(\), configuration\.EnableWolvesDenTesting, combatPriorityMode: true, incomingIsNativeSelectedTargetCarrier: true, exactNativeHardTargetResolved: exactWolvesDenHardTargetResolved, explicitTargetMatchesNativeHardTarget: false\);.*?if \(!IsNetworkObjectId\(authoredTargetId\)\) return false;.*?if \(hardTargetId == authoredTargetId\) return true;.*?SmartActionContextRules\.IsExactCurrentTargetCarrier\( ResolveContext\(\), configuration\.EnableWolvesDenTesting, combatPriorityMode: true, incomingIsNativeSelectedTargetCarrier: false, exactNativeHardTargetResolved: hardTarget is not null, explicitTargetMatchesNativeHardTarget: HasSameNativeIdentity\(hardTarget, authoredTarget\)\)') {
     throw 'Casted macro actions must let exact Smart Action-owned hostile PvP casts and Near Help-owned friendly PvP casts continue into their normal ranking, retain authored-target anti-spin for Near Assist, validate and consume only the exact live route-owned generation, preserve newer arms, resolve the native Wolves Den zero/default selected-target carrier only through one exact current duel/dummy hard target, preserve exact explicit-target identity, and leave instant redirects unchanged.'
 }
 Assert-Literals $nearAssistOneShotSelfTests @(
@@ -10419,9 +10547,7 @@ Assert-Literals $ccImmunityBrakeMetadata @(
     'CcImmunityBrakeActionCatalog.Definitions',
     'expected.JobId == definition.JobId',
     'actions.TryGetRow(definition.ActionId, out var action)',
-    'descriptions.TryGetRow(definition.ActionId, out var transient)',
     'action.RowId == expected.ActionId',
-    'action.Icon == expected.IconId',
     'action.ClassJob.RowId == expected.JobId',
     'action.IsPvP',
     'action.CanTargetHostile',
@@ -10430,17 +10556,29 @@ Assert-Literals $ccImmunityBrakeMetadata @(
     'action.Range == expected.Range',
     'action.EffectRange == expected.EffectRange',
     'action.CastType == expected.CastType',
-    'action.Recast100ms == expected.Recast100ms',
     'action.AffectsPosition == expected.AffectsPosition',
     'bool AffectsPosition,',
-    'expected.DescriptionFragment',
-    'status.Icon == expected.IconId',
+    'status.Name.ExtractText()',
     'status.StatusCategory == 1',
     '!status.CanDispel',
     '!status.IsPermanent',
     'verifiedActions.Clear()',
     'verifiedStatuses.Clear()'
-) 'Fail-open English metadata verification for every CC-brake action and blocker'
+) 'Fail-open semantic metadata verification for every CC-brake action and blocker'
+$ccBrakeActionMetadataMethod = [regex]::Match(
+    ($ccImmunityBrakeMetadata -replace '\s+', ' '),
+    'private static bool ValidateAction\(.*?\) =>(?<Body>.*?); private static HashSet<uint> RequiredStatusIds')
+$ccBrakeStatusMetadataMethod = [regex]::Match(
+    ($ccImmunityBrakeMetadata -replace '\s+', ' '),
+    'private static void ValidateStatuses\(.*?\) \{(?<Body>.*?)\} private static bool ValidateAction')
+if (-not $ccBrakeActionMetadataMethod.Success -or
+    $ccBrakeActionMetadataMethod.Groups['Body'].Value -notmatch 'action\.RowId == expected\.ActionId.*?action\.ClassJob\.IsValid.*?action\.ClassJob\.RowId == expected\.JobId.*?action\.IsPvP.*?action\.CanTargetHostile.*?!action\.CanTargetSelf.*?!action\.TargetArea.*?action\.Range == expected\.Range.*?action\.EffectRange == expected\.EffectRange.*?action\.CastType == expected\.CastType.*?action\.AffectsPosition == expected\.AffectsPosition' -or
+    $ccBrakeActionMetadataMethod.Groups['Body'].Value -match '\b(?:Icon|Recast100ms|Description|transient)\b' -or
+    -not $ccBrakeStatusMetadataMethod.Success -or
+    $ccBrakeStatusMetadataMethod.Groups['Body'].Value -notmatch 'statuses\.TryGetRow\(statusId, out var status\).*?status\.Name\.ExtractText\(\), expected\.Name.*?status\.StatusCategory == 1.*?!status\.CanDispel.*?!status\.IsPermanent' -or
+    $ccBrakeStatusMetadataMethod.Groups['Body'].Value -match '\b(?:Icon|Description)\b') {
+    throw 'CC-brake metadata must retain exact ID/job/target/range/cast/position and blocker category semantics without cosmetic icon, recast-balance, or English-description blockers.'
+}
 $metadataActionExpectations = [regex]::Matches(
     $ccImmunityBrakeMetadata,
     '(?m)^\s*new\(\s*(?<Action>[\d_]+)\s*,\s*(?<Job>[\d_]+)\s*,\s*"(?<Name>[^"]+)"\s*,\s*[\d_]+\s*,\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*(?:true|false)\s*,\s*"[^"]+"\s*\),')
@@ -10632,31 +10770,36 @@ foreach ($relativePath in $retiredCombatFrameRuntimeRelativePaths) {
 }
 
 # The optional opponent-LB strip is a narrow observer, not a replacement for
-# the retired Combat Frames runtime. It may read only direct native GaugeBar
-# values after exact row identity/stability checks and a same-frame local
-# LimitBreakController proof. Any uncertainty must hide the complete strip.
-$opponentLimitBreakGaugeRules = Read-RequiredSource $opponentLimitBreakGaugeRulesPath 'Opponent LB direct-value rules'
-$opponentLimitBreakGaugeSelfTests = Read-RequiredSource $opponentLimitBreakGaugeSelfTestsPath 'Opponent LB direct-value self-tests'
+# the retired Combat Frames runtime. It may read only the bounded NineGrid 3/4
+# geometry after exact row identity/stability checks and a complete calibration
+# against the same-frame local LimitBreakController. Any uncertainty must hide
+# the complete strip.
+$opponentLimitBreakGaugeRules = Read-RequiredSource $opponentLimitBreakGaugeRulesPath 'Opponent LB bounded-value rules'
+$opponentLimitBreakGaugeSelfTests = Read-RequiredSource $opponentLimitBreakGaugeSelfTestsPath 'Opponent LB bounded-value self-tests'
 $opponentLimitBreakGaugeService = Read-RequiredSource $opponentLimitBreakGaugeServicePath 'Opponent LB native observer'
 $normalizedOpponentLimitBreakGaugeService = $opponentLimitBreakGaugeService -replace '\s+', ' '
 Assert-Literals $opponentLimitBreakGaugeRules @(
     'public const int FirstEnemySlot = 1;',
     'public const int LastEnemySlot = 5;',
     'public const int EnemyCount = 5;',
+    'public const int CalibratedMaximumValue = 10_000;',
     'public const long MaximumSnapshotAgeMilliseconds = 250;',
+    'TryCreateCalibratedValue(',
+    'fraction is < 0f or > 1f',
+    'fraction == 1f',
+    'CalibratedMaximumValue - 1',
     'currentValue == MaximumValue',
-    'MatchesLocalController(',
-    'MatchesNativeScale(',
-    'var quantizationTolerance = controllerMaximum + gaugeRange;',
     'values.Count != EnemyCount',
     'value.EnemySlot != index + FirstEnemySlot',
     'ReadyPulseAlpha(',
     'if (!ready || reducedMotion || nowMilliseconds < 0) return 1f;'
-) 'Direct opponent-LB values, exact S1-S5 completeness, local proof, and bounded presentation'
+) 'Bounded opponent-LB values, exact S1-S5 completeness, and bounded presentation'
 Assert-Literals $opponentLimitBreakGaugeService @(
     'private const long UpdateIntervalMilliseconds = 50;',
     'private const string AllyAddonName = "PvPMKSPartyList1";',
     'private const string EnemyAddonName = "PvPMKSPartyList3";',
+    'private const uint FirstGaugeNodeId = 3;',
+    'private const uint SecondGaugeNodeId = 4;',
     'clientState.IsPvPExcludingDen',
     'tracker.IsCrystallineConflict',
     'tracker.ResolvedSlots == OpponentLimitBreakGaugeRules.EnemyCount',
@@ -10666,34 +10809,40 @@ Assert-Literals $opponentLimitBreakGaugeService @(
     'row->GetTextNodeById(21)',
     'string.Equals(name->GetText().ToString(), player.Name.TextValue, StringComparison.Ordinal)',
     'row->GetComponentById(GaugeComponentId)',
-    'component->GetComponentType() != ComponentType.GaugeBar',
-    'gauge->MinValue',
-    'gauge->MaxValue',
-    'gauge->Values[0].ValueInt',
-    'first[slot - 1] != second[slot - 1]',
+    'component->GetNineGridNodeById(FirstGaugeNodeId)',
+    'component->GetNineGridNodeById(SecondGaugeNodeId)',
+    'TryCapturePotentialTrack(',
+    'HasStableIdentityAndLayout(expected, second[slot - 1])',
     'LimitBreakController.Instance()',
-    'OpponentLimitBreakGaugeRules.MatchesLocalController(',
-    'OpponentLimitBreakGaugeRules.MatchesNativeScale(',
+    'CombatFrameLimitGaugeCalibrator',
+    'CombatFrameLimitGaugeCalibrationObservation(',
+    'calibrator.TryProjectRemote(',
+    'OpponentLimitBreakGaugeRules.TryCreateCalibratedValue(',
     'OpponentLimitBreakGaugeRules.IsCompleteExactEnemySet(enemies)',
     'PublishInactive('
-) 'Stable exact native GaugeBar capture with same-frame local-controller proof'
+) 'Stable exact native NineGrid capture with same-frame local-controller calibration'
 if ($normalizedOpponentLimitBreakGaugeService -notmatch 'if \(!enabledProvider\(\)\).*?PublishInactive\(OpponentLimitBreakGaugeFailure\.Disabled\); return;' -or
-    $normalizedOpponentLimitBreakGaugeService -notmatch 'var localMatches = allyRows\.Where\(row => row\.Actor == localIdentity\)\.ToArray\(\); if \(localMatches\.Length != 1 \|\| !OpponentLimitBreakGaugeRules\.MatchesLocalController' -or
-    $normalizedOpponentLimitBreakGaugeService -notmatch 'if \(!OpponentLimitBreakGaugeRules\.IsCompleteExactEnemySet\(enemies\)\).*?PublishInactive\(OpponentLimitBreakGaugeFailure\.Identity\); return;' -or
+    $normalizedOpponentLimitBreakGaugeService -notmatch 'var localMatches = team\.Rows \.Where\(row => row\.Actor == activeLocalIdentity && row\.PlayerAddress == localPlayer\.Address\) \.ToArray\(\); if \(localMatches\.Length != 1\) return false;' -or
+    $normalizedOpponentLimitBreakGaugeService -notmatch 'if \(mapping == OpponentLimitBreakGaugeNativeMapping\.Unknown\).*?PublishInactive\( OpponentLimitBreakGaugeFailure\.Calibration' -or
+    $normalizedOpponentLimitBreakGaugeService -notmatch 'if \(!TryProjectEnemyRows\(contextFingerprint, enemyTeam, out var enemies\) \|\| !OpponentLimitBreakGaugeRules\.IsCompleteExactEnemySet\(enemies\)\).*?InvalidateCalibration\(CombatFrameLimitGaugeInvalidationReason\.ContradictorySample\);.*?PublishInactive\( OpponentLimitBreakGaugeFailure\.Calibration' -or
     $opponentLimitBreakGaugeService -match '->\w+\s*=(?!=)' -or
-    $opponentLimitBreakGaugeService -match '\b(?:UseAction|UseActionLocation|ITargetManager|TargetManager|SetTarget|SetRawValue|FireCallback|SendEvent|SetPosition|SetScale|SetAlpha|SetGauge|ToggleVisibility|GaugeChargeSeconds|EstimatedRecharge|ElapsedCharge|CombatFrameLimitGaugeCalibrator)\b') {
-    throw 'Opponent LB bars must remain a direct, stable, read-only, exact-row observer; actions, targets, native writes, geometry calibration, and recharge estimates are forbidden.'
+    $opponentLimitBreakGaugeService -match '\b(?:UseAction|UseActionLocation|ITargetManager|TargetManager|SetTarget|SetRawValue|FireCallback|SendEvent|SetPosition|SetScale|SetAlpha|SetGauge|ToggleVisibility|GaugeChargeSeconds|EstimatedRecharge|ElapsedCharge|AtkComponentGaugeBar)\b|ComponentType\.GaugeBar|Values\[0\]\.ValueInt|gauge->(?:MinValue|MaxValue)') {
+    throw 'Opponent LB bars must remain a bounded, stable, read-only, exact-row NineGrid observer; actions, targets, native writes, direct GaugeBar casts, and recharge estimates are forbidden.'
 }
 Assert-Literals $opponentLimitBreakGaugeSelfTests @(
     'DirectValuesAndLocalProofFailClosed',
+    'CalibratedValuesRemainBoundedAndExactAtReady',
     'CompleteSetFreshnessAndPulseAreBounded',
+    'OpponentLimitBreakGaugeRules.TryCreateCalibratedValue(',
+    '0.99999f',
+    'False(nearFull.IsReady, "near-full rounding cannot synthesize ready")',
     'MatchesNativeScale(0, 10_000, 0, 10_000)',
     'MatchesNativeScale(0, 10_000, 0, 1_000)',
     'MatchesLocalController(0, 75, 100, 7_500, 10_000)',
     'OpponentLimitBreakGaugeRules.IsCompleteExactEnemySet(duplicate)',
     'OpponentLimitBreakGaugeRules.IsFresh(now - 251, now)',
     'OpponentLimitBreakGaugeRules.ReadyPulseAlpha(true, now, true)'
-) 'Opponent-LB exact-value, completeness, freshness, and reduced-motion coverage'
+) 'Opponent-LB direct/calibrated value, completeness, freshness, and reduced-motion coverage'
 
 
 # Combat LB telemetry reuses the existing sole ActionEffect hook. Catalog,
@@ -11399,9 +11548,6 @@ Assert-Literals $metadata @(
     'ContradanceVerified',
     'ZantetsukenVerified',
     'FuriousBacklashVerified',
-    'Forcibly transforms target',
-    'preventing them from using actions other than Purify',
-    'nullifies status afflictions that can be removed by Purify',
     'Increases target''s damage taken by 10%',
     'SmartActionGuardBypassRules.HasExactEnglishGuardReductionDescription('
 ) 'Metadata guard'
@@ -11424,8 +11570,25 @@ if (-not $shieldSmiteMetadataBlock.Success -or
     $normalizedMetadata -notmatch 'smartActionGuardBypassActions = smartActionGuardBypassActions\.WithVerified\( shieldSmiteVerified \? EnemyCombatConstants\.ShieldSmiteActionId : 0, scholarCriticalStrategyVerified \? EnemyCombatConstants\.ScholarCriticalStrategyActionId : 0\);') {
     throw 'PLD Shield Smite and SCH Chain Stratagem must each pass their own complete current English action/transient metadata proof before only that exact action ID enters the Guard-target catalog.'
 }
-if ($normalizedMetadata -notmatch 'var silentNocturneVerified = ValidateFeature\("Silent Nocturne", log, \(\) => \{.*?actions\.TryGetRow\(EnemyCombatConstants\.SilentNocturneActionId, out var action\).*?action\.Name\.ToString\(\), "Silent Nocturne", StringComparison\.Ordinal\).*?action\.Icon == EnemyCombatConstants\.SilentNocturneActionIconId.*?action\.ClassJob\.RowId == EnemyCombatConstants\.BardJobId.*?action\.Range == EnemyCombatConstants\.SilentNocturneRange.*?action\.CanTargetHostile.*?action\.RequiresLineOfSight.*?"Silences target\."') {
-    throw 'BRD Silent Nocturne must fail closed unless exact English PvP BRD metadata proves action 29395, icon 9627, hostile line-of-sight targeting, and its separate 20-yalm native range.'
+$miracleMetadataBlock = [regex]::Match(
+    $normalizedMetadata,
+    'var miracleOfNatureActionVerified = ValidateFeature\("Miracle of Nature action", log, \(\) => \{(?<Body>.*?)\}\); var silentNocturneVerified')
+$silentNocturneMetadataBlock = [regex]::Match(
+    $normalizedMetadata,
+    'var silentNocturneVerified = ValidateFeature\("Silent Nocturne", log, \(\) => \{(?<Body>.*?)\}\); var panicShukuchiVerified')
+$purifiableStatusMetadataMethod = [regex]::Match(
+    $normalizedMetadata,
+    'private static bool ValidatePurifiableStatus\(.*?\) =>(?<Body>.*?);')
+if (-not $miracleMetadataBlock.Success -or
+    $miracleMetadataBlock.Groups['Body'].Value -notmatch 'actions\.TryGetRow\(EnemyCombatConstants\.MiracleOfNatureActionId, out var action\).*?statuses\.TryGetRow\(EnemyCombatConstants\.MiracleOfNatureStatusId, out var status\).*?action\.IsPvP.*?action\.IsPlayerAction.*?action\.ClassJob\.RowId == EnemyCombatConstants\.WhiteMageJobId.*?action\.Range == EnemyCombatConstants\.MiracleOfNatureRange.*?action\.EffectRange == 0.*?action\.Cast100ms == 0.*?action\.CanTargetHostile.*?!action\.CanTargetSelf.*?!action\.CanTargetParty.*?!action\.CanTargetAlly.*?!action\.CanTargetAlliance.*?!action\.TargetArea.*?action\.RequiresLineOfSight.*?!action\.AffectsPosition.*?ValidatePurifiableStatus\(' -or
+    $miracleMetadataBlock.Groups['Body'].Value -match '\b(?:Icon|Recast100ms|Description|transient)\b' -or
+    -not $silentNocturneMetadataBlock.Success -or
+    $silentNocturneMetadataBlock.Groups['Body'].Value -notmatch 'actions\.TryGetRow\(EnemyCombatConstants\.SilentNocturneActionId, out var action\).*?action\.IsPvP.*?action\.IsPlayerAction.*?action\.ClassJob\.RowId == EnemyCombatConstants\.BardJobId.*?action\.Range == EnemyCombatConstants\.SilentNocturneRange.*?action\.EffectRange == 0.*?action\.CastType == 1.*?action\.Cast100ms == 0.*?action\.CanTargetHostile.*?!action\.CanTargetSelf.*?!action\.CanTargetParty.*?!action\.CanTargetAlly.*?!action\.CanTargetAlliance.*?!action\.TargetArea.*?action\.RequiresLineOfSight.*?!action\.AffectsPosition' -or
+    $silentNocturneMetadataBlock.Groups['Body'].Value -match '\b(?:Icon|Recast100ms|Description|transient)\b' -or
+    -not $purifiableStatusMetadataMethod.Success -or
+    $purifiableStatusMetadataMethod.Groups['Body'].Value -notmatch 'status\.Name\.ToString\(\) == expectedName.*?status\.StatusCategory == 2.*?status\.CanDispel.*?!status\.IsPermanent.*?status\.CanStatusOff.*?status\.LockMovement == expectMovementLock.*?status\.LockActions == expectActionLock.*?status\.Transfiguration == expectTransfiguration' -or
+    $purifiableStatusMetadataMethod.Groups['Body'].Value -match '\bIcon\b') {
+    throw 'WHM Miracle and BRD Silent Nocturne must fail closed on exact PvP job/target/range/LoS and status semantics without cosmetic name, icon, recast-balance, or English-description blockers.'
 }
 
 $exactCombatIds = [ordered]@{
@@ -12002,18 +12165,18 @@ $whatsNewWindow = Read-RequiredSource $whatsNewWindowPath 'What''s New window'
 $releaseNotesContentRules = Read-RequiredSource $releaseNotesContentRulesPath 'Release-note content rules'
 $releaseNotesContentSelfTests = Read-RequiredSource $releaseNotesContentSelfTestsPath 'Release-note content self-tests'
 Assert-Literals $projectFile @(
-    '<Version>0.44.0.0</Version>',
-    '<AssemblyVersion>0.44.0.0</AssemblyVersion>',
-    '<FileVersion>0.44.0.0</FileVersion>'
-) 'v0.44.0.0 project version'
+    '<Version>0.44.0.1</Version>',
+    '<AssemblyVersion>0.44.0.1</AssemblyVersion>',
+    '<FileVersion>0.44.0.1</FileVersion>'
+) 'v0.44.0.1 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.44.0.0";',
-    'New CC Win Prediction panel: a playful local estimate using saved W/L from both teams.',
-    'Switch between allies and enemies to see W/L plus this match''s deaths, damage, healing, and crystal time.',
-    'Optional one-time PvpStats import reads old CC history locally without changing its database.',
-    'Guard cannot be cancelled by pressing Guard again during its first second.',
-    'No gameplay or player history is uploaded.'
-) 'v0.44.0.0 version-acknowledged player-facing What''s New content'
+    'private const string CurrentReleaseVersion = "0.44.0.1";',
+    'Smart Action works again in CC and Wolves'' Den, including harmful casts and no-target target choice.',
+    'Held helpers keep their chosen action and target briefly after key release, so Paean, Silent Nocturne, and Miracle get another safe chance.',
+    'Optional BRD Mannstopper fires near an enemy and may cancel only Powerful Shot.',
+    'CC Win Prediction appears during preparation; live match numbers begin only when fighting starts.',
+    'Old PvpStats import works from Wolves'' Den while out of combat; nothing is uploaded.'
+) 'v0.44.0.1 version-acknowledged player-facing What''s New content'
 Assert-Literals $releaseNotesContentRules @(
     'public const int MaximumBulletCount = 5;',
     'if (bullets is null) return [];',
@@ -12066,14 +12229,16 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.44.0.0 plugin manifest metadata'
+) 'v0.44.0.1 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.44.0.0"',
-    'Added a movable CC Win Prediction panel using local W/L from both teams, live match stats, and an optional one-time read-only PvpStats history import.',
-    'Added one-second Guard repeat protection.',
+    '"AssemblyVersion": "0.44.0.1"',
+    'Fixed Smart Action in CC and Wolves'' Den',
+    'added optional BRD Mannstopper',
+    'shows CC prediction during preparation',
+    'repaired the local PvpStats import.',
     'Nothing is uploaded.',
     'Automated checks are separate from live in-game confirmation.',
     '"IsHide": false',
@@ -12081,7 +12246,7 @@ Assert-Literals $repositoryIndex @(
     '"DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"',
     '"DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"',
     '"DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"'
-) 'v0.44.0.0 custom-repository metadata'
+) 'v0.44.0.1 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -12151,7 +12316,7 @@ Assert-Literals $normalizedPrivacy @(
     'A cancellation consumes that framework frame;',
     'Automatic observation does not retire a physical held-key generation.',
     'Acceptance starts an exact metadata-verified 1.0-second recast floor. A sampled unavailable edge is retained when visible, but after that floor current positive readiness may rearm without requiring the brief negative frame, preventing an indefinite latch.',
-    'Configuration schema 51 is current. It adds the local CC prediction/history settings and retains the release-independent tap-to-land behavior with one release-independent tap-to-land reservation (0-3000 ms, 2200 ms default),',
+    'Configuration schema 53 is current. It adds the local CC prediction/history settings and retains the release-independent tap-to-land behavior with one release-independent tap-to-land reservation (0-3000 ms, 2200 ms default),',
     'adds default-on exact active-Sprint repeat protection, and adds a separate default-off 3000-5000 ms idle Smart Sprint option.',
     'the tap-to-land lane is limited to the same physically pressed direct action, the exact lease/generation-backed Smart Action visible-target fallback, or the target-independent exact Smart Action `S1`-`S5` winner in Crystalline Conflict.',
     'It waits only for the frozen hostile actor''s native range/line-of-sight result.',
@@ -12432,11 +12597,11 @@ Assert-Literals $normalizedReadme @(
     'Native input and Seiton''s separate Turbo path remain available.',
     'Compatibility is assessed in memory on plugin-change events and at a bounded five-second cadence, with one final live check when the buffer arms and when it is actually ready to replay; Seiton does not scan plugin files.',
     'Enabling the outside-combat test scope also starts a new lifecycle, so a key which was already held cannot be inherited.',
-    'Configuration schema 51 is current.',
+    'Configuration schema 53 is current.',
     'release-independent tap-to-land wait',
     'protects active PvP Sprint from a second Sprint press by default',
     'adds the separate optional idle Smart Sprint.',
-    'For the current source, the exact 624-test Core registry, ten plugin self-tests, and source checks pin configuration schema 51',
+    'For the current source, the exact 634-test Core registry, eleven plugin self-tests, and source checks pin configuration schema 53',
     'the independent default-off automatic basic-shot cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
@@ -12448,11 +12613,16 @@ Assert-Literals $normalizedReadme @(
     'a bounded exact-action fallback lease',
     'For the shared physical-hold option trackers, key choice prefers stable movement',
     'Automatic Zantetsuken and Auto-Seiton never use this permission.',
-    'constructs sixteen reviewed request shapes across seventeen ordered selection slots',
+    'constructs fifteen reviewed request shapes across seventeen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.44.0.0 local CC prediction/history plus retained safety history'
+) 'v0.44.0.1 Smart Action, held-helper, preparation prediction, import, and retained safety history'
 Assert-Literals $normalizedChangelog @(
+    '## 0.44.0.1',
+    'Fixed `/smartaction` in Crystalline Conflict and Wolves'' Den.',
+    'Added a default-off **BRD Mannstopper** helper.',
+    'The CC Win Prediction panel now appears during preparation',
+    'Fixed the one-time PvpStats import in Wolves'' Den while out of combat',
     '## 0.44.0.0',
     'Added a movable **CC Win Prediction** panel.',
     'Added an explicit one-time **PvpStats history import**.',
@@ -12853,7 +13023,7 @@ Assert-Literals $normalizedPrivacy @(
     'the shared frame is consumed only after this check so its own held-key evidence remains readable.',
     'The episode is marked spent before the native call.',
     'cannot retry, rerank, or select a fallback.',
-    'Configuration schema 51 is current.'
+    'Configuration schema 53 is current.'
 ) 'Emergency Teleport transient-data contract'
 Assert-Literals $normalizedReadme @(
     'polls FFXIV''s currently transformed Serpent''s Tail / Serpentiner Geist carrier `39183` every active framework frame',
@@ -12982,7 +13152,7 @@ Assert-Literals $normalizedPrivacy @(
     'only the last command, origin/destination coordinates, bounded camera diagnostics, native acceptance outcome, and aggregate command counters may remain in plugin memory',
     'not persisted or uploaded',
     'Four-direction testing for all six jobs plus NIN slope/wall/invalid-endpoint cases in Wolves'' Den remains a live- validation boundary',
-    'Configuration schema 51 is current'
+    'Configuration schema 53 is current'
 ) 'Current explicit dash transient-data, immediate, own-Guard, no-target, and live-boundary privacy contract'
 Assert-Literals $normalizedChangelog @(
     '## 0.27.1.0',
@@ -13088,7 +13258,7 @@ Assert-Literals $normalizedPrivacy @(
     'current-patch stationary plus mobile BRD/MCH behavior still requires live validation',
     'only the current cast decision, the last requested helper/action/target/key/ intent and native request result, plus request/fault counts in memory',
     'none is persisted or uploaded',
-    'Configuration schema 51 is current',
+    'Configuration schema 53 is current',
     'Historical v0.30.0.0 baseline: schema 32 forced the NIN Guard-Shukuchi held-key option off for upgrading configurations and left it off for fresh and Reset Defaults configurations',
     'generic held-action cast-cancellation test',
     'schema-46 automatic basic-shot permission remain explicitly off for fresh, reset, and migrated configurations'
@@ -13459,7 +13629,7 @@ Assert-Literals $normalizedPrivacy @(
     'live client race remains possible',
     'Nothing is persisted or uploaded',
     'separate Auto Low-MP Focus Target opt-in',
-    'Configuration schema 51 is current',
+    'Configuration schema 53 is current',
     'Fresh and reset configurations keep NIN Guard-Shukuchi, Smart Recuperate, Emergency Teleport, Hiebsprung, Smart Action/other macro helpers, and all other action-helper masters off',
     'An older explicitly enabled fresh-edge NIN Seiton option still traverses schema 29, migrates to the retained compatibility-named opt-in',
     'clears the obsolete field. The retained opt-in now arms fully automatic Seiton;',
@@ -13539,7 +13709,7 @@ Assert-Literals $privacy @(
     'Pressure is used only for that frozen selection and is not a',
     'Pressure drift neither reranks, switches, nor',
     'No drift can cause another selection, alternate',
-    'Configuration schema 51 is current'
+    'Configuration schema 53 is current'
 ) 'Retained pressure escape, Smart Paean, Guardian, Scholar, and current schema local-data/live-boundary disclosure'
 Assert-Literals $normalizedPrivacy @(
     'The current action-request priority is **Purify > PLD Guardian > Smart Recuperate > automatic Guard > AST same-target heal chain > RDM fresh-Guard engage > SAM staged counter-CC / automatic Zantetsuken > automatic NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Emergency Teleport > pressure Sprint > idle Smart Sprint > event Kardia > event Monk**',
@@ -13610,7 +13780,7 @@ Assert-Literals $normalizedPrivacy @(
 $configuration = Read-RequiredSource $configurationPath 'Plugin configuration'
 $normalizedConfiguration = $configuration -replace '\s+', ' '
 Assert-Literals $configuration @(
-    'public int Version { get; set; } = 51',
+    'public int Version { get; set; } = 53',
     'public bool PurifyOnHeldGameplayKey { get; set; }',
     'if (Version < 6)',
     'PurifyOnHeldGameplayKey = false',
@@ -13797,7 +13967,13 @@ Assert-Literals $configuration @(
     'public bool EnableLocalCrystallineConflictPlayerHistory { get; set; } = true;',
     'public bool EnableDynamicCrystallineConflictPrediction { get; set; } = true;',
     'if (Version < 51)',
-    'Version = 51',
+    'public bool ProtectOwnGuardFromRepeatPress { get; set; } =',
+    'GuardRepeatProtectionRules.DefaultEnabled;',
+    'if (Version < 52)',
+    'public bool EnableBardRepellingShotProximityHelper { get; set; }',
+    'if (Version < 53)',
+    'EnableBardRepellingShotProximityHelper = false;',
+    'Version = 53',
     'ApplyCombatFramesLayoutDefaults()',
     'ApplyCombatFramesCleanPreset()',
     'NormalizeCcBrakeSelections()',
@@ -13824,7 +14000,7 @@ Assert-Literals $configuration @(
     'MonkEarthReplyExpirySeconds,',
     '0.5f,',
     '2.5f,'
-) 'Schema-51 local CC prediction/history, release-independent tap-to-land, independent Smart Sprint controls, and retained prior defaults'
+) 'Schema-53 configurable BRD Mannstopper, Guard-repeat protection, local CC prediction/history, release-independent tap-to-land, independent Smart Sprint controls, and retained prior defaults'
 if ($configuration -notmatch '(?m)^\s*public bool EnableDefensiveUtilities \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool DefensiveUtilitiesOnHeldKey \{ get; set; \} = true;\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool GuardOnStunPressure \{ get; set; \} = true;\s*$' -or
@@ -13908,8 +14084,8 @@ if ($configuration -notmatch '(?m)^\s*public bool EnableNinjaGuardShukuchiOnHeld
     $configuration -match '(?m)^\s*public bool EnableNinjaGuardShukuchiOnHeldGameplayKey \{ get; set; \}\s*=\s*true;') {
     throw 'Schema 31 must keep the target-mutating NIN Guard-Shukuchi helper off for upgrades and ResetToDefaults, with a plain default-false property.'
 }
-if ([regex]::Matches($configuration, '\bVersion\s*=\s*51\s*;').Count -ne 2 -or
-    $normalizedConfiguration -notmatch 'if \(Version >= 51\).*?return;.*?if \(Version < 29\).*?EnableNinjaSeitonOnHeldGameplayKey = EnableNinjaSeitonOnFreshGameplayKey;.*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;.*?if \(Version < 31\).*?EnableNinjaGuardShukuchiOnHeldGameplayKey = false;.*?if \(Version < 32\).*?ShowCombatFrames = false;.*?if \(Version < 39\).*?EnablePvpLatencyResponseHelper = false;.*?if \(Version < 40\).*?EnableSmartActionBuffer = true;.*?if \(Version < 45\).*?EnableAutomaticPurify = false;.*?EnableAutomaticRecuperate = false;.*?if \(Version < 46\).*?AllowAutomaticRecoveryToCancelBasicShotCasts = false;.*?if \(Version < 48\).*?EnableInstantLeaveAfterCrystallineConflict = false;.*?if \(Version < 49\).*?EnableAdaptiveResponseEngine = true;.*?AllowCriticalRecoveryThroughNativeQueue = true;.*?EnableHoldToLandChaseBuffer = true;.*?if \(Version < 50\).*?TapToLandReservationMilliseconds = HeldChaseBufferWindowRules\.DefaultMilliseconds;.*?ProtectActiveSprintFromRepeatPress = SmartSprintRules\.RepeatProtectionDefaultEnabled;.*?EnableIdleSmartSprintOnHeldKey = SmartSprintRules\.IdleSprintDefaultEnabled;.*?SmartSprintInactivityMilliseconds = SmartSprintRules\.DefaultInactivityMilliseconds;.*?if \(Version < 51\).*?ShowCrystallineConflictPredictionPanel = true;.*?EnableLocalCrystallineConflictPlayerHistory = true;.*?EnableDynamicCrystallineConflictPrediction = true;.*?CrystallineConflictPredictionPanelLocked = false;.*?CrystallineConflictPredictionPanelShowBackground = true;.*?CrystallineConflictPredictionPanelScale = 1f;.*?CrystallineConflictPredictionPanelBackgroundOpacity = 0\.88f;.*?Version = 51;' -or
+if ([regex]::Matches($configuration, '\bVersion\s*=\s*53\s*;').Count -ne 2 -or
+    $normalizedConfiguration -notmatch 'if \(Version >= 53\).*?return;.*?if \(Version < 29\).*?EnableNinjaSeitonOnHeldGameplayKey = EnableNinjaSeitonOnFreshGameplayKey;.*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;.*?if \(Version < 31\).*?EnableNinjaGuardShukuchiOnHeldGameplayKey = false;.*?if \(Version < 32\).*?ShowCombatFrames = false;.*?if \(Version < 39\).*?EnablePvpLatencyResponseHelper = false;.*?if \(Version < 40\).*?EnableSmartActionBuffer = true;.*?if \(Version < 45\).*?EnableAutomaticPurify = false;.*?EnableAutomaticRecuperate = false;.*?if \(Version < 46\).*?AllowAutomaticRecoveryToCancelBasicShotCasts = false;.*?if \(Version < 48\).*?EnableInstantLeaveAfterCrystallineConflict = false;.*?if \(Version < 49\).*?EnableAdaptiveResponseEngine = true;.*?AllowCriticalRecoveryThroughNativeQueue = true;.*?EnableHoldToLandChaseBuffer = true;.*?if \(Version < 50\).*?TapToLandReservationMilliseconds = HeldChaseBufferWindowRules\.DefaultMilliseconds;.*?ProtectActiveSprintFromRepeatPress = SmartSprintRules\.RepeatProtectionDefaultEnabled;.*?EnableIdleSmartSprintOnHeldKey = SmartSprintRules\.IdleSprintDefaultEnabled;.*?SmartSprintInactivityMilliseconds = SmartSprintRules\.DefaultInactivityMilliseconds;.*?if \(Version < 51\).*?ShowCrystallineConflictPredictionPanel = true;.*?EnableLocalCrystallineConflictPlayerHistory = true;.*?EnableDynamicCrystallineConflictPrediction = true;.*?CrystallineConflictPredictionPanelLocked = false;.*?CrystallineConflictPredictionPanelShowBackground = true;.*?CrystallineConflictPredictionPanelScale = 1f;.*?CrystallineConflictPredictionPanelBackgroundOpacity = 0\.88f;.*?if \(Version < 52\).*?ProtectOwnGuardFromRepeatPress = GuardRepeatProtectionRules\.DefaultEnabled;.*?if \(Version < 53\).*?EnableBardRepellingShotProximityHelper = false;.*?Version = 53;' -or
     $configuration -match '(?m)^\s*public bool (?:EnableRedMageGuardEngageOnHeldKey|EnableAstrologianHarmonicOrbisOnHeldKey|EnableViperSerpentTailOnHeldKey|EnableEmergencyTeleportOnHeldKey|EnableGunbreakerContinuationOnHeldKey|EnableDarkKnightShadowbringerOnHeldKey|EnableMonkHeldComboOnHeldKey|ReactiveCcPaladinIntervene|ReactiveCcRedMageResolution|ReactiveCcRedMageViceOfThorns|ReactiveCcBlackMageFrostStar|ReactiveCcSamuraiSotenMineuchi|EnableSamuraiZantetsukenOnHeldKey) \{ get; set; \}\s*=\s*true;' -or
     [regex]::Matches($configuration, '\bEnableAstrologianHarmonicOrbisOnHeldKey\s*=\s*false\s*;').Count -ne 2 -or
     [regex]::Matches($configuration, '\bEnableRedMageGuardEngageOnHeldKey\s*=\s*false\s*;').Count -ne 2 -or
@@ -13936,7 +14112,7 @@ if ([regex]::Matches($configuration, '\bVersion\s*=\s*51\s*;').Count -ne 2 -or
     [regex]::Matches($configuration, '\bEnableIdleSmartSprintOnHeldKey\s*=\s*SmartSprintRules\.IdleSprintDefaultEnabled\s*;').Count -ne 2 -or
     [regex]::Matches($configuration, '\bSmartSprintInactivityMilliseconds\s*=\s*SmartSprintRules\.DefaultInactivityMilliseconds\s*;').Count -ne 2 -or
     $normalizedConfiguration -notmatch 'HeldChaseBufferWindowRules\.Normalize\( TapToLandReservationMilliseconds\).*?SmartSprintRules\.NormalizeInactivityMilliseconds\( SmartSprintInactivityMilliseconds\)') {
-    throw 'Schema 51 must preserve every earlier opt-in/migration, add the default-on local prediction/history UI without gameplay actions, keep adaptive response/critical recovery/tap-to-land enabled, preserve the latency opt-out, default exact Sprint repeat protection on, keep idle Smart Sprint off, and clamp all timing/UI controls.'
+    throw 'Schema 53 must preserve every earlier opt-in/migration, keep BRD Mannstopper default off, retain default-on exact Guard-repeat protection and local prediction/history, keep adaptive response/critical recovery/tap-to-land enabled, preserve the latency opt-out, default exact Sprint repeat protection on, keep idle Smart Sprint off, and clamp all timing/UI controls.'
 }
 Assert-Literals $configuration @(
     'public bool EnablePvpLatencyResponseHelper { get; set; }',
@@ -14142,7 +14318,7 @@ Assert-Literals $redMageGuardEngageProbe @(
     'nearAssist.RunWithoutRedirect(() =>',
     'ResolveCurrentContext(wolvesDenTestingEnabled) != frozen.Intent.Context',
     'now > frozen.Intent.ExpiresAtMilliseconds',
-    '!inputFrame.IsGameplayKeyPhysicallyDown(frozen.HeldKey)',
+    '!inputFrame.IsFrozenGameplayKeyConsentValid(frozen.HeldKey)',
     'actionId != frozen.Intent.ActionId',
     'comboActionId != frozen.Intent.ComboCarrierActionId',
     'frozen.Intent.Target.GameObjectId',
@@ -14164,7 +14340,7 @@ if ([regex]::Matches($redMageGuardEngageProbe, '->UseAction\s*\(').Count -ne 1 -
     [regex]::Matches($redMageGuardEngageProbe, 'targetManager\.Target\s*=\s*target\s*;').Count -ne 1 -or
     $redMageGuardEngageProbe -match '\bUseActionLocation\s*\(' -or
     $normalizedRedMageGuardEngageProbe -notmatch 'for \(var slot = EnemySlotRules\.FirstSlot; slot <= EnemySlotRules\.LastSlot; slot\+\+\).*?var target = EnemySlotResolver\.Resolve\(objectTable, slot\); if \(!HasValidNativeIdentity\(target\)\) continue; var tableTarget = HasValidNativeIdentity\(target\).*?if \(!HasSameNativeIdentity\(target, tableTarget\) \|\| !seenObjects\.Add\(target!\.GameObjectId\) \|\| !seenEntities\.Add\(target\.EntityId\) \|\| !seenAddresses\.Add\(target\.Address\)\).*?guardEpisodes\.Clear\(\); return \[\];.*?resolved\.Add\(\(slot, target, DarkKnightWolvesDenTargetKind\.None\)\);' -or
-    $normalizedRedMageGuardEngageProbe -notmatch 'if \(!configurationEnabled \|\| !metadataVerified \|\| !HasSameNativeIdentity\(expectedLocalPlayer, currentLocal\).*?ResolveCurrentContext\(wolvesDenTestingEnabled\) != frozen\.Intent\.Context \|\| now > frozen\.Intent\.ExpiresAtMilliseconds \|\| !inputFrame\.IsGameplayKeyPhysicallyDown\(frozen\.HeldKey\).*?IsCurrentlySuppressedByGuard\(currentLocal, now\).*?minimumHpPercent.*?minimumMpPercent\).*?return false;' -or
+    $normalizedRedMageGuardEngageProbe -notmatch 'if \(!configurationEnabled \|\| !metadataVerified \|\| !HasSameNativeIdentity\(expectedLocalPlayer, currentLocal\).*?ResolveCurrentContext\(wolvesDenTestingEnabled\) != frozen\.Intent\.Context \|\| now > frozen\.Intent\.ExpiresAtMilliseconds \|\| !inputFrame\.IsFrozenGameplayKeyConsentValid\(frozen\.HeldKey\).*?IsCurrentlySuppressedByGuard\(currentLocal, now\).*?minimumHpPercent.*?minimumMpPercent\).*?return false;' -or
     $normalizedRedMageGuardEngageProbe -notmatch 'if \(!TryReadActionState\( currentLocal, out var actionId, out var corpsReady, out var comboActionId, out var meleeStarterReady, out var nativeBoundaryReady\) \|\| actionId != frozen\.Intent\.ActionId \|\| comboActionId != frozen\.Intent\.ComboCarrierActionId \|\| !corpsReady \|\| !meleeStarterReady\).*?if \(!nativeBoundaryReady\).*?softUnavailable = true; return false;' -or
     $normalizedRedMageGuardEngageProbe -notmatch 'BuildExactCandidate\( currentLocal, frozen\.Intent\.Context, frozen\.Intent\.EnemySlot, frozen\.Intent\.Target, wolvesDenStrikingDummyMetadataVerified, observeEpisode: false\).*?boundaryKind != frozen\.WolvesDenKind.*?RedMageGuardEngageRules\.CanUseFrozenIntent\( frozen\.Intent, exact, now, exactHeldKeyStillDown: true, actionId, corpsReady, comboActionId, meleeStarterReady\)' -or
     $normalizedRedMageGuardEngageProbe -notmatch 'GetActionStatus\( ActionType\.Action, frozen\.Intent\.ActionId, frozen\.Intent\.Target\.GameObjectId, checkRecastActive: true, checkCastingActive: true\) != 0.*?actionManager->UseAction\( ActionType\.Action, frozen\.Intent\.ActionId, frozen\.Intent\.Target\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\)' -or
@@ -14267,4 +14443,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 51 and the exact 624-test Core registry. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, PLD Guardian, Recuperate, then Auto-Guard own priority in that order. Guardian requires exact Guard and Guardian metadata/readiness through the final boundary: <=20% is unconditional, <=40% needs fresh exact 2+ focus, and <=50% needs fresh exact 3+ focus. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-actor reservation from either a certified direct standard hotbar press, an exact lease/generation-backed /smartaction visible-<t> fallback, or a target-independent CC Smart Action S1-S5 winner; only the first two bind the visible hard target. Queue stays rejected. Release cannot cancel it; new action, context, Guard, CC, identity, protection, or exact-action/actor drift does, only a post-revalidated clean native range/LoS false may retry, accepted or ambiguous outcomes are terminal, and it never reranks or writes target/facing. /seitonfar remains reachable-only. Enabled Wolves Den Smart Action may resolve only FFXIV's native zero/default selected-target carrier through the exact current duel opponent or reviewed dummy, and every current damaging non-ground-target shape shares the same closed admission and final-protection path. Metadata-verified Shield Smite and Chain Stratagem may select Guard; other primary protections remain candidate-local blockers and only incidental/global Chiten vetoes AoE. Every exact Smart Action-owned harmful non-ground-target PvP cast continues through ordinary reachable S1-S5 ranking; exact Near Help-owned friendly PvP casts use one-shot current ally ranking after atomic exact-generation consumption, while Near Assist retains authored-target anti-spin. A Smart Action fallback transfers only an exactly consumed live token into the same bounded reservation. Auto-Zantetsuken uses an identity/context-bound 500-ms no-target collection from the first exact own-source Kuzushi, ranks the fresh live cluster only after maturity, and rechecks collection, frozen identity, current Kuzushi, protection, Bind, readiness, range, and line of sight at the final boundary. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not reset it, Guard/CC/cast/priority/native waits do not spend, and automatic Sprint/replay cannot rearm themselves. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."
+Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 53 and the exact 634-test Core registry. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, PLD Guardian, Recuperate, then Auto-Guard own priority in that order. Guardian requires exact Guard and Guardian metadata/readiness through the final boundary: <=20% is unconditional, <=40% needs fresh exact 2+ focus, and <=50% needs fresh exact 3+ focus. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-actor reservation from either a certified direct standard hotbar press, an exact lease/generation-backed /smartaction visible-<t> fallback, or a target-independent CC Smart Action S1-S5 winner; only the first two bind the visible hard target. Queue stays rejected. Release cannot cancel it; new action, context, Guard, CC, identity, protection, or exact-action/actor drift does, only a post-revalidated clean native range/LoS false may retry, accepted or ambiguous outcomes are terminal, and it never reranks or writes target/facing. /seitonfar remains reachable-only. Enabled Wolves Den Smart Action may resolve only FFXIV's native zero/default selected-target carrier through the exact current duel opponent or reviewed dummy, and every current damaging non-ground-target shape shares the same closed admission and final-protection path. Current-name semantic protection metadata tolerates removed historical duplicate rows while still requiring Guard, Covered, Hallowed Ground, and Undead Redemption. Metadata-verified Shield Smite and Chain Stratagem may select Guard; other primary protections remain candidate-local blockers and only incidental/global Chiten vetoes AoE. Every exact Smart Action-owned harmful non-ground-target PvP cast uses reachable S1-S5 ranking only in CC; in enabled Wolves Den it preserves the exact visible duel/dummy target through the same closed protection path. Exact Near Help-owned friendly PvP casts use one-shot current ally ranking after atomic exact-generation consumption, while Near Assist retains authored-target anti-spin. A Smart Action fallback transfers only an exactly consumed live token into the same bounded reservation. Auto-Zantetsuken uses an identity/context-bound 500-ms no-target collection from the first exact own-source Kuzushi, ranks the fresh live cluster only after maturity, and rechecks collection, frozen identity, current Kuzushi, protection, Bind, readiness, range, and line of sight at the final boundary. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not reset it, Guard/CC/cast/priority/native waits do not spend, and automatic Sprint/replay cannot rearm themselves. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."

@@ -44,8 +44,15 @@ internal sealed class GameInputContextProbe
     private readonly IKeyState keyState;
     private readonly VirtualKey[] gameplayKeys;
     private readonly PhysicalGameplayKeyState[] keyGenerations;
+    private readonly long[] releasedAtMilliseconds;
+    private readonly long[] releaseInputGenerations;
+    private readonly bool[] releaseWasEligible;
+    private readonly bool[] reservationInvalidatedThisFrame;
+    private readonly bool[] exactFrozenOwnershipObserved;
+    private readonly bool[] frozenOwnershipRetiredUntilRelease;
     private VirtualKey selectedHeldGameplayKey = VirtualKey.NO_KEY;
     private VirtualKey selectedHeldMovementKey = VirtualKey.NO_KEY;
+    private long inputGeneration;
 
     internal GameInputContextProbe(IKeyState keyState)
     {
@@ -65,11 +72,19 @@ internal sealed class GameInputContextProbe
         }
 
         keyGenerations = new PhysicalGameplayKeyState[gameplayKeys.Length];
+        releasedAtMilliseconds = new long[gameplayKeys.Length];
+        releaseInputGenerations = new long[gameplayKeys.Length];
+        releaseWasEligible = new bool[gameplayKeys.Length];
+        reservationInvalidatedThisFrame = new bool[gameplayKeys.Length];
+        exactFrozenOwnershipObserved = new bool[gameplayKeys.Length];
+        frozenOwnershipRetiredUntilRelease = new bool[gameplayKeys.Length];
+        Array.Fill(releasedAtMilliseconds, -1);
+        Array.Fill(releaseInputGenerations, -1);
     }
 
-    internal unsafe GameInputContextSnapshot Observe()
+    internal unsafe GameInputContextSnapshot Observe(long nowMilliseconds)
     {
-        if (gameplayKeys.Length == 0)
+        if (gameplayKeys.Length == 0 || nowMilliseconds < 0)
         {
             Reset();
             return GameInputContextSnapshot.FailedClosed;
@@ -99,13 +114,34 @@ internal sealed class GameInputContextProbe
             var fallbackHeldMovementKeyIsFreshPress = false;
             var selectedHeldGameplayKeyStillEligible = false;
             var selectedHeldMovementKeyStillEligible = false;
+            var freshInputObserved = false;
+            Array.Clear(reservationInvalidatedThisFrame);
+            if (textInputActive) InvalidateFrozenOwnershipAndReservations();
             for (var index = 0; index < gameplayKeys.Length; index++)
             {
                 var pressed = keyState[gameplayKeys[index]];
+                var previous = keyGenerations[index];
                 var decision = PhysicalGameplayKeyRules.Observe(
-                    keyGenerations[index],
+                    previous,
                     new PhysicalGameplayKeyObservation(pressed, textInputActive));
                 keyGenerations[index] = decision.NextState;
+                if (previous.IsDown && !pressed)
+                {
+                    var eligibleRelease =
+                        HeldHelperReservationRules.CanBeginReleaseReservation(
+                            exactFrozenOwnershipObserved[index],
+                            textInputActive);
+                    releaseWasEligible[index] = eligibleRelease;
+                    releasedAtMilliseconds[index] = eligibleRelease
+                        ? nowMilliseconds
+                        : -1;
+                    releaseInputGenerations[index] = eligibleRelease
+                        ? inputGeneration
+                        : -1;
+                    exactFrozenOwnershipObserved[index] = false;
+                    frozenOwnershipRetiredUntilRelease[index] = false;
+                }
+                if (decision.IsFreshPress) freshInputObserved = true;
                 if (decision.IsFreshPress && freshKey == VirtualKey.NO_KEY)
                     freshKey = gameplayKeys[index];
                 if (decision.IsHeldEligible)
@@ -150,6 +186,12 @@ internal sealed class GameInputContextProbe
                 }
             }
 
+            if (freshInputObserved)
+            {
+                inputGeneration = IncrementSaturating(inputGeneration);
+                InvalidateFrozenOwnershipAndReservations();
+            }
+
             var heldKeyToken = PhysicalGameplayKeyRules.RetainEligibleHeldKeyToken(
                 (int)selectedHeldGameplayKey,
                 selectedHeldGameplayKeyStillEligible,
@@ -187,15 +229,25 @@ internal sealed class GameInputContextProbe
     internal void Reset()
     {
         Array.Clear(keyGenerations);
+        Array.Clear(releaseWasEligible);
+        Array.Clear(reservationInvalidatedThisFrame);
+        Array.Clear(exactFrozenOwnershipObserved);
+        Array.Clear(frozenOwnershipRetiredUntilRelease);
+        Array.Fill(releasedAtMilliseconds, -1);
+        Array.Fill(releaseInputGenerations, -1);
         selectedHeldGameplayKey = VirtualKey.NO_KEY;
         selectedHeldMovementKey = VirtualKey.NO_KEY;
+        inputGeneration = 0;
     }
 
-    internal void ConsumeHeldGameplayKeys()
+    internal void ConsumeHeldGameplayKeys(
+        VirtualKey preservedFreshKey = VirtualKey.NO_KEY)
     {
+        InvalidateFrozenOwnershipAndReservations();
         for (var index = 0; index < keyGenerations.Length; index++)
         {
             if (!keyGenerations[index].IsDown) continue;
+            if (gameplayKeys[index] == preservedFreshKey) continue;
             keyGenerations[index] = PhysicalGameplayKeyRules.Consume(keyGenerations[index]);
         }
 
@@ -240,6 +292,72 @@ internal sealed class GameInputContextProbe
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Revalidates only an already-frozen held-helper intent. Ordinary held-key
+    /// discovery continues to use the physical snapshot, so a released key can
+    /// never create, rerank, or substitute an intent. A fresh later key invalidates
+    /// every outstanding release reservation before any of them can dispatch.
+    /// </summary>
+    internal bool IsFrozenGameplayKeyConsentValid(
+        VirtualKey key,
+        bool reservationEnabled,
+        int reservationWindowMilliseconds,
+        long nowMilliseconds,
+        bool textInputActive)
+    {
+        if (key == VirtualKey.NO_KEY) return false;
+        for (var index = 0; index < gameplayKeys.Length; index++)
+        {
+            if (gameplayKeys[index] != key) continue;
+            if (reservationInvalidatedThisFrame[index]) return false;
+            var generation = keyGenerations[index];
+            var physicalFrozenOwnershipValid =
+                HeldHelperReservationRules.CanObserveExactFrozenOwnership(
+                    generation,
+                    exactFrozenOwnershipObserved[index],
+                    frozenOwnershipRetiredUntilRelease[index],
+                    textInputActive);
+            if (physicalFrozenOwnershipValid)
+            {
+                exactFrozenOwnershipObserved[index] = true;
+            }
+            return HeldHelperReservationRules.IsFrozenConsentValid(
+                physicalFrozenOwnershipValid,
+                releaseWasEligible[index],
+                releasedAtMilliseconds[index],
+                releaseInputGenerations[index],
+                inputGeneration,
+                reservationEnabled,
+                reservationWindowMilliseconds,
+                nowMilliseconds,
+                textInputActive);
+        }
+
+        return false;
+    }
+
+    private static long IncrementSaturating(long value) =>
+        value == long.MaxValue ? long.MaxValue : value + 1;
+
+    private void InvalidateFrozenOwnershipAndReservations()
+    {
+        for (var index = 0; index < gameplayKeys.Length; index++)
+        {
+            var hadFrozenOwnershipOrReservation =
+                exactFrozenOwnershipObserved[index] ||
+                releasedAtMilliseconds[index] >= 0;
+            if (hadFrozenOwnershipOrReservation && keyGenerations[index].IsDown)
+                frozenOwnershipRetiredUntilRelease[index] = true;
+            reservationInvalidatedThisFrame[index] |=
+                hadFrozenOwnershipOrReservation;
+            exactFrozenOwnershipObserved[index] = false;
+            if (releasedAtMilliseconds[index] < 0) continue;
+            releaseWasEligible[index] = false;
+            releasedAtMilliseconds[index] = -1;
+            releaseInputGenerations[index] = -1;
+        }
     }
 
     private static HashSet<int> BuildCandidateVirtualKeyCodes()

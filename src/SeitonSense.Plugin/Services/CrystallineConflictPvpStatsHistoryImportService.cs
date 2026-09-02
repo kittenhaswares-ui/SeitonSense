@@ -90,13 +90,12 @@ internal sealed class CrystallineConflictPvpStatsHistoryImportService : IDisposa
         }
 
         if (!clientState.IsLoggedIn ||
-            clientState.IsPvP ||
             condition[ConditionFlag.InCombat] ||
             condition[ConditionFlag.BoundByDuty] ||
             playerState.ContentId == 0 ||
             objectTable.LocalPlayer is not { } localPlayer)
         {
-            SetStatus("Log in on the destination character and leave combat, PvP, and duties before importing.");
+            SetStatus("Log in on the destination character and leave combat and duties before importing.");
             return false;
         }
 
@@ -290,7 +289,6 @@ internal sealed class CrystallineConflictPvpStatsHistoryImportService : IDisposa
 
         if (playerState.ContentId != contentId ||
             contentId == 0 ||
-            clientState.IsPvP ||
             condition[ConditionFlag.InCombat] ||
             condition[ConditionFlag.BoundByDuty])
         {
@@ -323,7 +321,7 @@ internal sealed class CrystallineConflictPvpStatsHistoryImportService : IDisposa
                 merged.Status));
     }
 
-    private void SetStatus(string status, bool complete = false)
+    private void SetStatus(string status, bool complete = true)
     {
         Volatile.Write(
             ref snapshot,

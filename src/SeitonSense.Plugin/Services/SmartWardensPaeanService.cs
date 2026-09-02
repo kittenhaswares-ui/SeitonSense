@@ -72,10 +72,6 @@ internal readonly record struct SmartWardensPaeanDiagnostics(
 /// </summary>
 internal sealed unsafe class SmartWardensPaeanService
 {
-    internal const uint WardensPaeanIconId = 9_628;
-    internal const uint WardensPaeanWardIconId = 212_611;
-
-    private const ushort ExpectedRecast100ms = 240;
     private const int ExpectedRange = 30;
 
     private readonly PluginConfiguration configuration;
@@ -381,8 +377,7 @@ internal sealed unsafe class SmartWardensPaeanService
         var partyAfter = CaptureExactPartyEntityIds();
         var complete = partyAfter is not null &&
                        partyBefore.SetEquals(partyAfter) &&
-                       members.Count ==
-                       SmartWardensPaeanTargetRules.RequiredCrystallineConflictPartySize &&
+                       members.Count == partyBefore.Count &&
                        members.Select(static member => member.Candidate.Actor.EntityId)
                            .ToHashSet()
                            .SetEquals(partyBefore) &&
@@ -464,8 +459,9 @@ internal sealed unsafe class SmartWardensPaeanService
         var ids = partyList
             .Select(static member => member.EntityId)
             .ToArray();
-        if (ids.Length !=
-            SmartWardensPaeanTargetRules.RequiredCrystallineConflictPartySize ||
+        if (ids.Length is <
+                SmartWardensPaeanTargetRules.MinimumExactPartyViewSize or
+                > SmartWardensPaeanTargetRules.RequiredCrystallineConflictPartySize ||
             ids.Any(static entityId => !IsNetworkEntityId(entityId)))
         {
             return null;
@@ -503,13 +499,8 @@ internal sealed unsafe class SmartWardensPaeanService
         try
         {
             var actions = dataManager.GetExcelSheet<GameAction>(ClientLanguage.English);
-            var descriptions =
-                dataManager.GetExcelSheet<ActionTransient>(ClientLanguage.English);
             var statuses = dataManager.GetExcelSheet<GameStatus>(ClientLanguage.English);
             if (!actions.TryGetRow(SmartWardensPaeanTargetRules.ActionId, out var action) ||
-                !descriptions.TryGetRow(
-                    SmartWardensPaeanTargetRules.ActionId,
-                    out var description) ||
                 !statuses.TryGetRow(
                     SmartWardensPaeanTargetRules.WardensPaeanWardStatusId,
                     out var ward))
@@ -517,21 +508,13 @@ internal sealed unsafe class SmartWardensPaeanService
                 return false;
             }
 
-            var actionDescription = description.Description.ToString();
-            var wardDescription = ward.Description.ToString();
-            return string.Equals(
-                       action.Name.ToString(),
-                       "The Warden's Paean",
-                       StringComparison.OrdinalIgnoreCase) &&
-                   action.Icon == WardensPaeanIconId &&
-                   action.IsPvP &&
+            return action.IsPvP &&
                    action.IsPlayerAction &&
                    action.ClassJob.IsValid &&
                    action.ClassJob.RowId == SmartWardensPaeanTargetRules.BardJobId &&
                    action.Range == ExpectedRange &&
                    action.EffectRange == 0 &&
                    action.Cast100ms == 0 &&
-                   action.Recast100ms == ExpectedRecast100ms &&
                    action.CanTargetSelf &&
                    action.CanTargetParty &&
                    !action.CanTargetAlly &&
@@ -539,16 +522,9 @@ internal sealed unsafe class SmartWardensPaeanService
                    !action.CanTargetHostile &&
                    !action.TargetArea &&
                    action.RequiresLineOfSight &&
-                   actionDescription.Contains("Removes", StringComparison.Ordinal) &&
-                   actionDescription.Contains("Purify", StringComparison.Ordinal) &&
-                   actionDescription.Contains("barrier", StringComparison.OrdinalIgnoreCase) &&
-                   string.Equals(
-                       ward.Name.ToString(),
-                       "The Warden's Paean",
-                       StringComparison.OrdinalIgnoreCase) &&
-                   ward.Icon == WardensPaeanWardIconId &&
                    ward.StatusCategory == 1 &&
-                   wardDescription.Contains("Purify", StringComparison.Ordinal);
+                   !ward.CanDispel &&
+                   !ward.IsPermanent;
         }
         catch (Exception exception)
         {

@@ -153,7 +153,7 @@ public static class PressureEscapeRules
             false);
     }
 
-    public static bool CanDispatchSprint(PressureEscapeSprintObservation observation) =>
+    public static bool CanFreezeSprintIntent(PressureEscapeSprintObservation observation) =>
         observation.Enabled &&
         observation.IsCrystallineConflict &&
         observation.IsLocalPlayerValidAndAlive &&
@@ -165,8 +165,10 @@ public static class PressureEscapeRules
         !observation.HigherPriorityClaimed &&
         observation.EpisodeAvailable &&
         observation.HeldMovementKeyEligible &&
-        IsSupportedMovementVirtualKey(observation.HeldMovementVirtualKey) &&
-        observation.SprintLocallyReady;
+        IsSupportedMovementVirtualKey(observation.HeldMovementVirtualKey);
+
+    public static bool CanDispatchSprint(PressureEscapeSprintObservation observation) =>
+        CanFreezeSprintIntent(observation) && observation.SprintLocallyReady;
 
     private static PressureEscapeWarningState Hide(PressureEscapeWarningState state) =>
         new(false, false, -1, state.EpisodeToken);

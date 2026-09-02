@@ -275,7 +275,7 @@ internal sealed unsafe class ViperSerpentTailProbe
         var input = inputFrame.Snapshot;
         var previousIntent = state.Intent;
         var frozenKeyStillDown = state.Intent is { IsValid: true } heldIntent &&
-                                 inputFrame.IsGameplayKeyPhysicallyDown(
+                                 inputFrame.IsFrozenGameplayKeyConsentValid(
                                      (VirtualKey)heldIntent.FrozenKeyCode);
         var currentIntentStillTracked = state.Intent is { IsValid: true } currentIntent &&
                                         ViperSerpentTailRules.IsTrackedUnspentExposure(
@@ -432,6 +432,11 @@ internal sealed unsafe class ViperSerpentTailProbe
 
         state = decision.NextState;
         var inputClaimed = decision.InputClaimed;
+        if (state.Intent is { IsValid: true } claimedIntent)
+        {
+            _ = inputFrame.IsFrozenGameplayKeyConsentValid(
+                (VirtualKey)claimedIntent.FrozenKeyCode);
+        }
         if (inputClaimed) inputFrame.Consume();
 
         var attempted = false;
@@ -598,7 +603,7 @@ internal sealed unsafe class ViperSerpentTailProbe
 
                 var exactKey = (VirtualKey)intent.FrozenKeyCode;
                 var exactGenerationEligible =
-                    inputFrame.IsGameplayKeyGenerationEligible(exactKey);
+                    inputFrame.IsFrozenGameplayKeyConsentValid(exactKey);
                 if (adjustedActionId != intent.ActionId ||
                     !ViperSerpentTailRules.CanUseFrozenIntent(
                         intent,
@@ -614,7 +619,7 @@ internal sealed unsafe class ViperSerpentTailProbe
                         higherPriorityClaimed,
                         exposure,
                         actionLocallyReady,
-                        (int)inputFrame.Snapshot.HeldGameplayKey,
+                        intent.FrozenKeyCode,
                         exactGenerationEligible,
                         candidate.Value.Core))
                 {

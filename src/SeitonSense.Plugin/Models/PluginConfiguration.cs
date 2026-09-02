@@ -43,7 +43,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 51;
+    public int Version { get; set; } = 53;
     public string LastSeenReleaseNotesVersion { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
@@ -83,6 +83,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool EnableMonkHeldComboOnHeldKey { get; set; }
     public bool AllowHeldHelpersToCancelOwnCast { get; set; }
     public bool AllowAutomaticRecoveryToCancelBasicShotCasts { get; set; }
+    public bool EnableBardRepellingShotProximityHelper { get; set; }
     public bool EnablePvpLatencyResponseHelper { get; set; } = true;
     public int PvpLatencyResponseWindowMilliseconds { get; set; } =
         HeldActionRetryRules.DefaultLatencyResponseWindowMilliseconds;
@@ -203,6 +204,8 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool EnableDefensiveUtilities { get; set; }
     public bool DefensiveUtilitiesOnHeldKey { get; set; } = true;
     public bool GuardOnStunPressure { get; set; } = true;
+    public bool ProtectOwnGuardFromRepeatPress { get; set; } =
+        GuardRepeatProtectionRules.DefaultEnabled;
     // Schema-25 compatibility only. The pre-Guard rule is no longer used.
     public bool PreGuardOnLowHpPressure { get; set; }
     public bool PaladinGuardianLowAlly { get; set; }
@@ -333,7 +336,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 51)
+        if (Version >= 53)
         {
             if (repaired) Save();
             return;
@@ -877,7 +880,21 @@ public sealed class PluginConfiguration : IPluginConfiguration
             CrystallineConflictPredictionPanelBackgroundOpacity = 0.88f;
         }
 
-        Version = 51;
+        if (Version < 52)
+        {
+            // The one-second repeat-only Guard safety was unconditional before
+            // this setting became visible. Keep that behavior for upgrades.
+            ProtectOwnGuardFromRepeatPress = GuardRepeatProtectionRules.DefaultEnabled;
+        }
+
+        if (Version < 53)
+        {
+            // This helper can issue Mannstopper automatically and may cancel
+            // the reviewed BRD basic-shot cast. Upgrades must opt in.
+            EnableBardRepellingShotProximityHelper = false;
+        }
+
+        Version = 53;
         ClampSettings();
         Save();
     }
@@ -886,7 +903,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 51;
+        Version = 53;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -922,6 +939,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         EnableMonkHeldComboOnHeldKey = false;
         AllowHeldHelpersToCancelOwnCast = false;
         AllowAutomaticRecoveryToCancelBasicShotCasts = false;
+        EnableBardRepellingShotProximityHelper = false;
         EnablePvpLatencyResponseHelper = true;
         PvpLatencyResponseWindowMilliseconds =
             HeldActionRetryRules.DefaultLatencyResponseWindowMilliseconds;
@@ -1042,6 +1060,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         EnableDefensiveUtilities = false;
         DefensiveUtilitiesOnHeldKey = true;
         GuardOnStunPressure = true;
+        ProtectOwnGuardFromRepeatPress = GuardRepeatProtectionRules.DefaultEnabled;
         PreGuardOnLowHpPressure = false;
         PaladinGuardianLowAlly = false;
         PaladinGuardianOnHeldKey = true;

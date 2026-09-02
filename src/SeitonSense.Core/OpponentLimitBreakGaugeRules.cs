@@ -23,6 +23,7 @@ public static class OpponentLimitBreakGaugeRules
     public const int FirstEnemySlot = 1;
     public const int LastEnemySlot = 5;
     public const int EnemyCount = 5;
+    public const int CalibratedMaximumValue = 10_000;
     public const long MaximumSnapshotAgeMilliseconds = 250;
 
     public static bool TryCreateValue(
@@ -53,6 +54,31 @@ public static class OpponentLimitBreakGaugeRules
             currentValue,
             maximumValue);
         return true;
+    }
+
+    public static bool TryCreateCalibratedValue(
+        TargetPressureActorIdentity actor,
+        int enemySlot,
+        uint jobId,
+        float fraction,
+        out OpponentLimitBreakGaugeValue value)
+    {
+        value = default;
+        if (!float.IsFinite(fraction) || fraction is < 0f or > 1f) return false;
+
+        var currentValue = fraction == 1f
+            ? CalibratedMaximumValue
+            : Math.Min(
+                CalibratedMaximumValue - 1,
+                (int)MathF.Round(fraction * CalibratedMaximumValue));
+        return TryCreateValue(
+            actor,
+            enemySlot,
+            jobId,
+            0,
+            currentValue,
+            CalibratedMaximumValue,
+            out value);
     }
 
     public static bool MatchesLocalController(

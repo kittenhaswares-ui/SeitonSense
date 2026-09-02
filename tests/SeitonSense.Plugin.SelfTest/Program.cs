@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using LiteDB;
 using SeitonSense.Core;
 using SeitonSense.Plugin.Services;
 
@@ -15,6 +16,7 @@ var tests = new (string Name, Action Run)[]
     ("schema-2 player rows are discarded while map and overall W/L survive", SchemaTwoPlayersFailClosed),
     ("unknown old player-history epoch blocks import", UnknownPlayerEpochFailsClosed),
     ("LiteDB local datetime conversion preserves the UTC instant", LiteDbLocalDateTimeUsesUtcInstant),
+    ("PvpStats reader accepts the current LiteDB CC shape", PvpStatsReaderAcceptsCurrentLiteDbShape),
     ("full imported player history evicts deterministically for one native match", FullImportStillAcceptsNativeMatch),
     ("repeated rejected Guard spam preserves the original attempt", RejectedGuardSpamRestoresOriginalAttempt),
 };
@@ -253,6 +255,85 @@ static void LiteDbLocalDateTimeUsesUtcInstant()
         "local BSON datetime");
     Equal(new DateTimeOffset(utc).ToUnixTimeSeconds(), actual, "same UTC instant");
 }
+
+static void PvpStatsReaderAcceptsCurrentLiteDbShape()
+{
+    var directory = Path.Combine(
+        Path.GetTempPath(),
+        $"SeitonSense.Plugin.PvpStatsReader.{Guid.NewGuid():N}");
+    Directory.CreateDirectory(directory);
+    try
+    {
+        var databasePath = Path.Combine(directory, "data.db");
+        using (var database = new LiteDatabase(databasePath))
+        {
+            var teams = new BsonDocument
+            {
+                ["Astra"] = PvpStatsTeam(
+                    "Astra",
+                    ["Local Tester", "Ally One", "Ally Two", "Ally Three", "Ally Four"]),
+                ["Umbra"] = PvpStatsTeam(
+                    "Umbra",
+                    ["Enemy One", "Enemy Two", "Enemy Three", "Enemy Four", "Enemy Five"]),
+            };
+            database.GetCollection<BsonDocument>("ccmatch").Insert(
+                new BsonDocument
+                {
+                    ["IsCompleted"] = true,
+                    ["IsDeleted"] = false,
+                    ["IsQuarantined"] = false,
+                    ["MatchType"] = "Ranked",
+                    ["MatchWinner"] = "Astra",
+                    ["MatchEndTime"] = new DateTime(2026, 8, 1, 12, 0, 0, DateTimeKind.Utc),
+                    ["LocalPlayer"] = PvpStatsAlias("Local Tester"),
+                    ["Teams"] = teams,
+                });
+        }
+
+        var result = CrystallineConflictPvpStatsHistoryReader.ReadAsync(
+                databasePath,
+                "Local Tester",
+                "Alpha",
+                new Dictionary<string, ushort>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Alpha"] = 21,
+                },
+                long.MaxValue,
+                progress: null,
+                CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        True(result.Success, result.Status);
+        Equal(1, result.MatchesImported, "imported match count");
+        Equal(9, result.Players.Count, "remote player count");
+        Equal(1L, result.LocalWins, "local win count");
+        Equal(0L, result.LocalLosses, "local loss count");
+    }
+    finally
+    {
+        Directory.Delete(directory, recursive: true);
+    }
+}
+
+static BsonDocument PvpStatsTeam(string teamName, IEnumerable<string> playerNames) =>
+    new()
+    {
+        ["TeamName"] = teamName,
+        ["Players"] = new BsonArray(
+            playerNames.Select(
+                static name => (BsonValue)new BsonDocument
+                {
+                    ["Alias"] = PvpStatsAlias(name),
+                })),
+    };
+
+static BsonDocument PvpStatsAlias(string playerName) =>
+    new()
+    {
+        ["Name"] = playerName,
+        ["HomeWorld"] = "Alpha",
+    };
 
 static void FullImportStillAcceptsNativeMatch()
 {
@@ -535,7 +616,7 @@ static string CreateFullImportedHistoryDocument(
         },
     };
     var path = Path.Combine(directory, "cc-map-stats.json");
-    File.WriteAllText(path, JsonSerializer.Serialize(document));
+    File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(document));
     return path;
 }
 

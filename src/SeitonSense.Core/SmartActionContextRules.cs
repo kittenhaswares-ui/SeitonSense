@@ -7,6 +7,11 @@ namespace SeitonSense.Core;
 /// </summary>
 public static class SmartActionContextRules
 {
+    public const ulong NativeSelectedTargetSentinel = 0xE0000000UL;
+
+    public static bool IsNativeSelectedTargetCarrier(ulong targetId) =>
+        targetId is 0 or NativeSelectedTargetSentinel;
+
     public static bool IsSupported(
         SupportedPvPContext context,
         bool wolvesDenTestingEnabled) =>

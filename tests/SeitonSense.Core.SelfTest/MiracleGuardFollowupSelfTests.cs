@@ -626,16 +626,31 @@ internal static class MiracleGuardFollowupSelfTests
             Find(frozenBehindPriority.NextState, 3).GameplayKeyToken,
             "once Guard has ended, the exact key is frozen through priority waits");
 
-        var releasedFrozenKey = MiracleGuardFollowupRules.Observe(
+        var releasedInsideReservation = MiracleGuardFollowupRules.Observe(
             frozenBehindPriority.NextState,
             Observation(
                 Candidate(
                     strictTarget,
                     guardCount: 0,
                     reservationKey: 66,
+                    reservedKeyDown: true),
+                2_002,
+                higherPriority: true));
+        Equal(
+            65,
+            Find(releasedInsideReservation.NextState, 3).GameplayKeyToken,
+            "release-aware grace retains only the bound Guard-end key without substitution");
+
+        var releasedFrozenKey = MiracleGuardFollowupRules.Observe(
+            releasedInsideReservation.NextState,
+            Observation(
+                Candidate(
+                    strictTarget,
+                    guardCount: 0,
+                    reservationKey: 66,
                     reservedKeyDown: false),
-                2_002));
-        False(releasedFrozenKey.ShouldPromote, "releasing the frozen key cancels this exact opportunity");
+                2_003));
+        False(releasedFrozenKey.ShouldPromote, "expired release-aware consent cancels this exact opportunity");
         Equal(
             MiracleGuardFollowupPhase.WaitingForGuard,
             Find(releasedFrozenKey.NextState, 3).Phase,

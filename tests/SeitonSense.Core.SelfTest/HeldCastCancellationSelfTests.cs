@@ -31,6 +31,7 @@ internal static class HeldCastCancellationSelfTests
             HeldCastCancellationHelperKind.DarkKnightShadowbringer,
             HeldCastCancellationHelperKind.AstrologianHarmonicOrbis,
             HeldCastCancellationHelperKind.RedMageGuardEngage,
+            HeldCastCancellationHelperKind.BardRepellingShot,
         };
         var actual = Enum.GetValues<HeldCastCancellationHelperKind>()
             .Where(static helper => helper != HeldCastCancellationHelperKind.None)
@@ -289,6 +290,29 @@ internal static class HeldCastCancellationSelfTests
             automaticRecuperate.IsValid,
             "exact automatic Recuperate request is valid");
 
+        var automaticRepellingShot = new HeldCastCancellationRequest(
+            HeldCastCancellationHelperKind.BardRepellingShot,
+            BardRepellingShotRules.RepellingShotActionId,
+            LocalPlayer,
+            Target,
+            FrozenKeyCode: 0,
+            IntentEpochToken: 9);
+        True(
+            automaticRepellingShot.IsAutomaticBardRepellingShot,
+            "exact Mannstopper request is the reviewed automatic BRD path");
+        True(
+            automaticRepellingShot.IsAutomaticKeyless,
+            "automatic Mannstopper is explicitly keyless");
+        False(
+            automaticRepellingShot.IsAutomaticRecovery,
+            "Mannstopper never inherits recovery semantics");
+        False(
+            automaticRepellingShot.RequiresFrozenKey,
+            "automatic Mannstopper requires no physical key");
+        True(
+            automaticRepellingShot.IsValid,
+            "exact automatic Mannstopper request is valid");
+
         var wrongAction = automaticPurify with
         {
             HelperActionId = HeldCastCancellationRules.AutomaticPurifyActionId + 1,
@@ -334,6 +358,13 @@ internal static class HeldCastCancellationSelfTests
         var automaticRecuperate = AutomaticRequest(
             HeldCastCancellationHelperKind.SmartRecuperate,
             HeldCastCancellationRules.AutomaticRecuperateActionId);
+        var automaticRepellingShot = new HeldCastCancellationRequest(
+            HeldCastCancellationHelperKind.BardRepellingShot,
+            BardRepellingShotRules.RepellingShotActionId,
+            LocalPlayer,
+            Target,
+            FrozenKeyCode: 0,
+            IntentEpochToken: 9);
 
         True(
             DecideAutomatic(
@@ -356,6 +387,21 @@ internal static class HeldCastCancellationSelfTests
                 AutomaticRecoveryShotCastRules.MachinistBlastChargeActionId)
                 .ShouldInvokeNative,
             "MCH Blast Charge permits automatic Recuperate with explicit consent");
+        True(
+            DecideAutomatic(
+                automaticRepellingShot,
+                AutomaticRecoveryShotCastRules.BardJobId,
+                AutomaticRecoveryShotCastRules.BardPowerfulShotActionId,
+                enabled: false)
+                .ShouldInvokeNative,
+            "Mannstopper cancels only its exact BRD Powerful Shot without the recovery toggle");
+        False(
+            DecideAutomatic(
+                automaticRepellingShot,
+                AutomaticRecoveryShotCastRules.MachinistJobId,
+                AutomaticRecoveryShotCastRules.MachinistBlastChargeActionId)
+                .ShouldInvokeNative,
+            "Mannstopper cannot cancel an MCH cast");
 
         var blockedCases = new (string Label, uint JobId, uint CastActionId,
             uint AdjustedActionId, bool Enabled, bool MetadataVerified)[]

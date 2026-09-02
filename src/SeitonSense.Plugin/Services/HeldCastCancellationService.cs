@@ -112,16 +112,16 @@ internal sealed unsafe class HeldCastCancellationService
             localPlayer,
             out var currentLocalIdentity);
         var requestValid = request is { IsValid: true };
-        var automaticRecoveryRequest =
-            request is { IsValid: true, IsAutomaticRecovery: true };
-        var textInputActive = automaticRecoveryRequest
+        var automaticKeylessRequest =
+            request is { IsValid: true, IsAutomaticKeyless: true };
+        var textInputActive = automaticKeylessRequest
             ? !TryGetTextInputState(out var currentTextInputActive) ||
               currentTextInputActive
             : inputFrame.Snapshot.IsTextInputActive;
         var frozenKeyStillDown = requestValid &&
-                                 (automaticRecoveryRequest ||
+                                 (automaticKeylessRequest ||
                                   (IsExactVirtualKey(request!.Value.FrozenKeyCode) &&
-                                   inputFrame.IsGameplayKeyPhysicallyDown(
+                                   inputFrame.IsFrozenGameplayKeyConsentValid(
                                        (VirtualKey)request.Value.FrozenKeyCode)));
 
         var localJobId = localPlayer?.ClassJob.IsValid == true
@@ -149,7 +149,7 @@ internal sealed unsafe class HeldCastCancellationService
             GuardActive: guardActive,
             PrioritizedInputClaimed:
                 prioritizedInputClaimed &&
-                (inputFrame.IsConsumed || request?.IsAutomaticRecovery == true),
+                (inputFrame.IsConsumed || request?.IsAutomaticKeyless == true),
             IntentOtherwiseReady: intentOtherwiseReady,
             Request: request,
             FrozenKeyStillDown: frozenKeyStillDown,
@@ -200,7 +200,7 @@ internal sealed unsafe class HeldCastCancellationService
                     nativeStatus =
                         HeldCastCancellationNativeStatus.BlockedByOwnGuard;
                 }
-                else if (!AutomaticRecoveryCastBoundaryStillValid(
+                else if (!AutomaticKeylessCastBoundaryStillValid(
                              request!.Value,
                              localPlayer,
                              actionManager,
@@ -292,13 +292,13 @@ internal sealed unsafe class HeldCastCancellationService
         localPlayer.CurrentHp > 0 &&
         localPlayer.MaxHp >= localPlayer.CurrentHp;
 
-    private bool AutomaticRecoveryCastBoundaryStillValid(
+    private bool AutomaticKeylessCastBoundaryStillValid(
         HeldCastCancellationRequest request,
         IPlayerCharacter? localPlayer,
         ActionManager* actionManager,
         bool automaticRecoveryBasicShotCancellationEnabled)
     {
-        if (!request.IsAutomaticRecovery) return true;
+        if (!request.IsAutomaticKeyless) return true;
         if (localPlayer?.ClassJob.IsValid != true || actionManager == null)
             return false;
 
@@ -307,16 +307,26 @@ internal sealed unsafe class HeldCastCancellationService
         var adjustedCastActionId = TryGetAdjustedCastActionId(
             actionManager,
             castActionId);
-        return automaticRecoveryBasicShotCancellationEnabled &&
-               localPlayer.IsCasting &&
-               automaticRecoveryShotCastMetadata.IsVerified(
-                   localJobId,
-                   castActionId) &&
-               AutomaticRecoveryShotCastRules
-                   .IsExactAllowedPairWithAdjustedIdentity(
-                       localJobId,
-                       castActionId,
-                       adjustedCastActionId);
+        var exactReviewedBasicShot =
+            localPlayer.IsCasting &&
+            automaticRecoveryShotCastMetadata.IsVerified(
+                localJobId,
+                castActionId) &&
+            AutomaticRecoveryShotCastRules
+                .IsExactAllowedPairWithAdjustedIdentity(
+                    localJobId,
+                    castActionId,
+                    adjustedCastActionId);
+        if (!exactReviewedBasicShot) return false;
+
+        if (request.IsAutomaticBardRepellingShot)
+        {
+            return localJobId == BardRepellingShotRules.BardJobId &&
+                   castActionId == BardRepellingShotRules.PowerfulShotActionId;
+        }
+
+        return request.IsAutomaticRecovery &&
+               automaticRecoveryBasicShotCancellationEnabled;
     }
 
     private static uint TryGetAdjustedCastActionId(
@@ -357,7 +367,7 @@ internal sealed unsafe class HeldCastCancellationService
             HeldCastCancellationNativeStatus.BlockedByOwnGuard =>
                 "Native cast cancellation vetoed by a fresh exact own-Guard check",
             HeldCastCancellationNativeStatus.BlockedByAutomaticRecoveryCastBoundary =>
-                "Automatic recovery cast cancellation vetoed by the final exact BRD/MCH basic-shot boundary",
+                "Keyless helper cast cancellation vetoed by the final exact reviewed basic-shot boundary",
             HeldCastCancellationNativeStatus.NativeBoundaryUnavailable =>
                 "Native cast-cancel boundary unavailable; no retry in this cast epoch",
             HeldCastCancellationNativeStatus.RequestFaulted =>

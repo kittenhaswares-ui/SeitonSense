@@ -43,6 +43,49 @@ internal static class OpponentLimitBreakGaugeSelfTests
             "invalid controller fails closed");
     }
 
+    internal static void CalibratedValuesRemainBoundedAndExactAtReady()
+    {
+        var actor = new TargetPressureActorIdentity(10, 20);
+        True(
+            OpponentLimitBreakGaugeRules.TryCreateCalibratedValue(
+                actor,
+                3,
+                30,
+                0.5f,
+                out var half),
+            "bounded calibrated half value");
+        Equal(0, half.MinimumValue, "calibrated minimum");
+        Equal(
+            OpponentLimitBreakGaugeRules.CalibratedMaximumValue,
+            half.MaximumValue,
+            "calibrated maximum");
+        NearlyEqual(0.5f, half.Fraction, "calibrated half fraction");
+        False(half.IsReady, "partial calibrated value is not ready");
+
+        True(
+            OpponentLimitBreakGaugeRules.TryCreateCalibratedValue(
+                actor,
+                3,
+                30,
+                1f,
+                out var full),
+            "exact calibrated full value");
+        True(full.IsReady, "only exact calibrated full is ready");
+
+        True(
+            OpponentLimitBreakGaugeRules.TryCreateCalibratedValue(
+                actor,
+                3,
+                30,
+                0.99999f,
+                out var nearFull),
+            "near-full calibrated value");
+        False(nearFull.IsReady, "near-full rounding cannot synthesize ready");
+        False(TryCalibrated(actor, 3, 30, -0.01f), "negative calibrated fraction");
+        False(TryCalibrated(actor, 3, 30, 1.01f), "overflow calibrated fraction");
+        False(TryCalibrated(actor, 3, 30, float.NaN), "non-finite calibrated fraction");
+    }
+
     internal static void CompleteSetFreshnessAndPulseAreBounded()
     {
         var values = Enumerable.Range(1, 5)
@@ -87,6 +130,18 @@ internal static class OpponentLimitBreakGaugeSelfTests
             minimum,
             current,
             maximum,
+            out _);
+
+    private static bool TryCalibrated(
+        TargetPressureActorIdentity actor,
+        int slot,
+        uint job,
+        float fraction) =>
+        OpponentLimitBreakGaugeRules.TryCreateCalibratedValue(
+            actor,
+            slot,
+            job,
+            fraction,
             out _);
 
     private static void NearlyEqual(float expected, float actual, string message)

@@ -332,14 +332,14 @@ internal static class DefensiveUtilitySelfTests
             GuardRepeatProtectionRules.ShouldBlock(
                 exactRepeat with { ExactGuardRequest = false }),
             "a different action is never blocked by the repeat-only policy");
-        False(
+        True(
             GuardRepeatProtectionRules.ShouldBlock(
                 exactRepeat with { ExactLocalGuardActive = false }),
-            "a provisional or rejected request cannot create a phantom block");
+            "an accepted native request is protected before Guard status propagates");
         False(
             GuardRepeatProtectionRules.ShouldBlock(
                 exactRepeat with { ExactOwnGuardAttemptObserved = false }),
-            "missing exact own attempt fails open");
+            "a provisional or rejected request without an accepted exact attempt fails open");
         False(
             GuardRepeatProtectionRules.ShouldBlock(
                 exactRepeat with { IsSupportedPvpContext = false }),
@@ -382,6 +382,44 @@ internal static class DefensiveUtilitySelfTests
             AutoGuardProtectionDecisionReason.GuardEnded,
             ended.Reason,
             "status-end reason");
+    }
+
+    public static void GuardRepeatProtectionToggleIsDefaultOnAndIndependent()
+    {
+        True(
+            GuardRepeatProtectionRules.DefaultEnabled,
+            "fresh and migrated configurations preserve the existing repeat safety");
+
+        var repeat = new GuardRepeatProtectionObservation(
+            RuntimeEnabled: GuardRepeatProtectionRules.DefaultEnabled,
+            IsSupportedPvpContext: true,
+            ExactGuardRequest: true,
+            ExactLocalGuardActive: true,
+            ExactOwnGuardAttemptObserved: true,
+            OwnGuardAttemptAtMilliseconds: 1_000,
+            NowMilliseconds: 1_500);
+        True(
+            GuardRepeatProtectionRules.ShouldBlock(repeat),
+            "the default-on setting blocks the exact second Guard request");
+        False(
+            GuardRepeatProtectionRules.ShouldBlock(repeat with { RuntimeEnabled = false }),
+            "turning off repeat protection permits the exact second Guard request");
+        False(
+            GuardRepeatProtectionRules.ShouldBlock(repeat with { ExactGuardRequest = false }),
+            "the toggle never blocks a different action");
+
+        var local = new TargetPressureActorIdentity(0x1001, 0x2001);
+        var armed = AutoGuardProtectionRules.ArmConfirmed(42, 250, local, 1_000, true);
+        var ownedAutoGuard = AutoGuardProtectionRules.Observe(
+            armed,
+            ProtectionObservation(
+                local,
+                exactGuardActive: true,
+                actionCanCancelGuard: true,
+                now: 1_500));
+        True(
+            ownedAutoGuard.ShouldBlockAction,
+            "the separate automatic-Guard all-action protection remains active");
     }
 
     public static void AutoGuardProtectionContextDriftAlwaysFailsOpen()

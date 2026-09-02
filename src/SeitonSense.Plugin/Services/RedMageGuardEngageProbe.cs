@@ -253,7 +253,7 @@ internal sealed class RedMageGuardEngageProbe
                                context == retry.Intent.Context &&
                                input.ProbeSucceeded &&
                                !input.IsTextInputActive &&
-                               inputFrame.IsGameplayKeyPhysicallyDown(retry.HeldKey) &&
+                               inputFrame.IsFrozenGameplayKeyConsentValid(retry.HeldKey) &&
                                !actionHelpersSuppressedByGuard &&
                                RedMageGuardEngageRules.MeetsInclusivePercent(
                                    localPlayer!.CurrentHp,
@@ -338,6 +338,7 @@ internal sealed class RedMageGuardEngageProbe
                     wolvesDenKind,
                     NextIntentEpochToken(),
                     HeldActionRetryState.Initial);
+                _ = inputFrame.IsFrozenGameplayKeyConsentValid(heldKey);
                 frozenRetry = newRetry;
                 inputClaimed = true;
                 inputFrame.Consume();
@@ -666,7 +667,7 @@ internal sealed class RedMageGuardEngageProbe
                     !currentLocal.IsTargetable ||
                     ResolveCurrentContext(wolvesDenTestingEnabled) != frozen.Intent.Context ||
                     now > frozen.Intent.ExpiresAtMilliseconds ||
-                    !inputFrame.IsGameplayKeyPhysicallyDown(frozen.HeldKey) ||
+                    !inputFrame.IsFrozenGameplayKeyConsentValid(frozen.HeldKey) ||
                     IsCurrentlySuppressedByGuard(currentLocal, now) ||
                     !RedMageGuardEngageRules.MeetsInclusivePercent(
                         currentLocal.CurrentHp,

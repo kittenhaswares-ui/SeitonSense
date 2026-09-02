@@ -200,10 +200,111 @@ internal static class SmartActionContextSelfTests
             "an explicit comparison cannot pass when native target resolution failed");
     }
 
+    public static void WolvesDenCastsKeepTheExactSelectedTargetFallback()
+    {
+        const uint representativeResolvedAction = 41_480;
+        static bool CanContinueRankedCast(SupportedPvPContext context) =>
+            CastedMacroRedirectRules.CanContinueSmartActionCast(
+                SmartActionContextRules.CanUseSmartTargetRanking(context),
+                ownedBySmartAction: true,
+                supportedActionType: true,
+                resolvedActionId: representativeResolvedAction,
+                exactActionMetadata: true,
+                metadataRowId: representativeResolvedAction,
+                isPvp: true,
+                canTargetHostile: true,
+                isGroundTargeted: false,
+                range: 25f);
+
+        True(
+            CanContinueRankedCast(SupportedPvPContext.CrystallineConflict),
+            "CC casts continue into ordinary Smart Target ranking");
+        False(
+            CanContinueRankedCast(SupportedPvPContext.WolvesDen),
+            "Wolves' Den casts stay on the exact selected-target fallback");
+
+        Equal(
+            CastedMacroRedirectDecision.NotApplicable,
+            CastedMacroRedirectRules.Evaluate(
+                redirectTokenArmed: true,
+                supportedActionType: true,
+                exactActionMetadata: true,
+                adjustedCastTimeMilliseconds: 0,
+                baseCastTime100Milliseconds: 0,
+                authoredTargetMatchesVisibleTarget: false,
+                allowSmartActionCastRedirect: false),
+            "a CC instant action with an alternate authored carrier enters ordinary ranking");
+        Equal(
+            CastedMacroRedirectDecision.RedirectSmartActionCast,
+            CastedMacroRedirectRules.Evaluate(
+                redirectTokenArmed: true,
+                supportedActionType: true,
+                exactActionMetadata: true,
+                adjustedCastTimeMilliseconds: 1_500,
+                baseCastTime100Milliseconds: 15,
+                authoredTargetMatchesVisibleTarget: false,
+                allowSmartActionCastRedirect:
+                    CanContinueRankedCast(SupportedPvPContext.CrystallineConflict)),
+            "a CC cast with an alternate authored carrier enters the same ranking");
+
+        True(
+            SmartActionContextRules.CanUseSameCallVisibleTargetFallback(
+                SupportedPvPContext.WolvesDen,
+                wolvesDenTestingEnabled: true,
+                combatPriorityMode: true,
+                redirectApplied: false,
+                rankedWinnerSelected: false,
+                exactCurrentHardTarget: true),
+            "a Den instant action retains its exact visible-target fallback");
+
+        var denVisibleDecision = CastedMacroRedirectRules.Evaluate(
+            redirectTokenArmed: true,
+            supportedActionType: true,
+            exactActionMetadata: true,
+            adjustedCastTimeMilliseconds: 1_500,
+            baseCastTime100Milliseconds: 15,
+            authoredTargetMatchesVisibleTarget: true,
+            allowSmartActionCastRedirect:
+                CanContinueRankedCast(SupportedPvPContext.WolvesDen));
+        Equal(
+            CastedMacroRedirectDecision.PreserveAuthoredTarget,
+            denVisibleDecision,
+            "an exact Den cast retains the e018196 authored-target safety lease path");
+
+        foreach (var carrier in new[]
+                 {
+                     0UL,
+                     SmartActionContextRules.NativeSelectedTargetSentinel,
+                 })
+        {
+            True(
+                SmartActionContextRules.IsNativeSelectedTargetCarrier(carrier),
+                $"documented native selected-target carrier {carrier:X} is admitted");
+        }
+        foreach (var invalidOrExplicit in new[]
+                 {
+                     1UL,
+                     (ulong)uint.MaxValue,
+                     ulong.MaxValue,
+                 })
+        {
+            False(
+                SmartActionContextRules.IsNativeSelectedTargetCarrier(invalidOrExplicit),
+                $"unknown or explicit ID {invalidOrExplicit:X} cannot borrow the native carrier lane");
+        }
+    }
+
     private static void True(bool value, string message)
     {
         if (!value) throw new InvalidOperationException(message);
     }
 
     private static void False(bool value, string message) => True(!value, message);
+
+    private static void Equal<T>(T expected, T actual, string message)
+        where T : notnull
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException($"{message}: expected {expected}, got {actual}");
+    }
 }

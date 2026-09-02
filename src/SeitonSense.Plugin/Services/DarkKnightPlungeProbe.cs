@@ -246,7 +246,7 @@ internal sealed class DarkKnightPlungeProbe
         DarkKnightPlungeCandidate? boundaryCandidate = null;
         if (frozenRetry is { } retry)
         {
-            var exactKeyDown = inputFrame.IsGameplayKeyPhysicallyDown(retry.HeldKey);
+            var exactKeyDown = inputFrame.IsFrozenGameplayKeyConsentValid(retry.HeldKey);
             var exactBaseContext = featureContextValid &&
                                    localIdentity == retry.LocalPlayer &&
                                    input.ProbeSucceeded &&
@@ -371,6 +371,7 @@ internal sealed class DarkKnightPlungeProbe
                 (VirtualKey)intent.HeldKeyCode,
                 NextIntentEpochToken(),
                 HeldActionRetryState.Initial);
+            _ = inputFrame.IsFrozenGameplayKeyConsentValid(retryIntent.HeldKey);
             var outcome = TryUsePlungeOnce(
                 localPlayer!,
                 localIdentity,
@@ -743,7 +744,7 @@ internal sealed class DarkKnightPlungeProbe
                     return false;
                 }
 
-                var exactHeldKeyStillDown = inputFrame.IsGameplayKeyPhysicallyDown(
+                var exactHeldKeyStillDown = inputFrame.IsFrozenGameplayKeyConsentValid(
                     (VirtualKey)intent.HeldKeyCode);
                 var exactCandidate = ResolveFrozenIntent(
                     currentLocal,

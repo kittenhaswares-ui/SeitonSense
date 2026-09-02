@@ -274,7 +274,7 @@ internal sealed partial class SettingsWindow
     {
         var changed = false;
         changed |= Checkbox(
-            "Show CC win prediction during a match",
+            "Show CC win prediction from team reveal through the match",
             configuration.ShowCrystallineConflictPredictionPanel,
             value => configuration.ShowCrystallineConflictPredictionPanel = value);
         changed |= Checkbox(
@@ -299,6 +299,7 @@ internal sealed partial class SettingsWindow
         {
             ImGui.BeginTooltip();
             ImGui.TextUnformatted("One-time, local import for the character currently logged in.");
+            ImGui.TextUnformatted("Wolves' Den is supported while you are out of combat.");
             ImGui.TextUnformatted("Unload PvpStats first so Seiton can prove exclusive read-only access.");
             ImGui.TextUnformatted("Only completed Casual and Ranked 5v5 matches count.");
             ImGui.EndTooltip();

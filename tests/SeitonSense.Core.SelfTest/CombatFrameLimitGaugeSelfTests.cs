@@ -47,23 +47,18 @@ internal static class CombatFrameLimitGaugeSelfTests
             CombatFrameLimitGaugeCalibrationResult.Accepted,
             calibrator.Observe(Observation(250, 1_000, 0.25f)),
             "first partial point");
-        Equal(
-            CombatFrameLimitGaugeCalibrationResult.Accepted,
-            calibrator.Observe(Observation(1_000, 1_000, 1f)),
-            "full endpoint alone is insufficient");
         False(Project(calibrator, 0.4f), "one partial point cannot publish remote values");
-
         Equal(
             CombatFrameLimitGaugeCalibrationResult.Calibrated,
             calibrator.Observe(Observation(600, 1_000, 0.6f)),
-            "second separated partial point completes proof");
+            "second separated partial point completes proof without a sampled full frame");
         True(Project(calibrator, 0.4f, out var projected), "calibrated remote projection");
         Near(0.4f, projected, 0.0001f, "projected native fraction");
 
         var diagnostics = calibrator.Diagnostics;
         True(diagnostics.Calibrated, "diagnostic calibrated state");
         True(diagnostics.SeenZero, "diagnostic zero proof");
-        True(diagnostics.SeenFull, "diagnostic full proof");
+        False(diagnostics.SeenFull, "full is diagnostic evidence, not a liveness dependency");
         Equal(2, diagnostics.DistinctNonTerminalSamples, "diagnostic partial proof count");
         True(diagnostics.HasSeparatedNonTerminalSamples, "diagnostic partial separation");
     }

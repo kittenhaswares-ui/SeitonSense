@@ -54,6 +54,7 @@ internal static class SamuraiSmartActionCastSelfTests
         const uint representativeBlmResolvedAction = 41_480;
         True(
             CastedMacroRedirectRules.CanContinueSmartActionCast(
+                smartTargetRankingSupported: true,
                 ownedBySmartAction: true,
                 supportedActionType: true,
                 representativeBlmResolvedAction,
@@ -101,6 +102,7 @@ internal static class SamuraiSmartActionCastSelfTests
         {
             False(
                 CastedMacroRedirectRules.CanContinueSmartActionCast(
+                    smartTargetRankingSupported: true,
                     gate.Owned,
                     gate.SupportedType,
                     gate.Resolved,

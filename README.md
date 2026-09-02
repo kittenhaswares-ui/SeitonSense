@@ -3,7 +3,22 @@
 Seiton Sense is a local PvP awareness HUD with pressure tracking, nameplate
 cues, warnings, job helpers, Smart Action, and target highlights.
 
-Version 0.44.0.0 adds a movable **CC Win Prediction** panel. Unknown players
+Version 0.44.0.1 restores **Smart Action** target choice in Crystalline
+Conflict and Wolves' Den, including harmful casts. Held helpers keep only their
+already chosen action and target for the configured short retry window after
+key release, which gives Paean, Silent Nocturne, Miracle, and the other held
+job tools another safe chance without selecting somebody new. BRD also has a
+default-off **Mannstopper** helper: when an enemy is within 10 yalms it uses the
+Smart Action target, never breaks your Guard, and may cancel only the exact
+Powerful Shot cast.
+
+The CC prediction is now visible as soon as both teams are known during
+preparation. Deaths, damage, healing, and crystal progress do not affect it
+until combat has actually started. The one-time PvpStats import also works from
+Wolves' Den while out of combat. It remains a local read-only import; Seiton
+does not upload player history.
+
+Version 0.44.0.0 added the movable **CC Win Prediction** panel. Unknown players
 count as a neutral 50%; locally observed W/L from all five allies and enemies
 shapes the opening estimate. An optional playful live estimate reacts to
 observed deaths and crystal progress. Switch the panel between both teams to
@@ -2134,7 +2149,7 @@ with the RDM fresh-Guard engage. Reset Defaults clears previews and restores
 every action, target-
 write, and party-visible communication master to off.
 
-Configuration schema 51 is current. It adds the local CC prediction/history
+Configuration schema 53 is current. It adds the local CC prediction/history
 panel settings while retaining the release-independent tap-to-land chase that
 replaced the held-only chase with the
 release-independent tap-to-land wait, protects active PvP Sprint from a second
@@ -2421,7 +2436,7 @@ all macro helpers are excluded as well. Automatic Zantetsuken and Auto-Seiton
 never use this permission. Viper Serpentiner Geist is excluded
 because it polls only the currently transformed carrier. GNB Continuation and
 held Monk combo likewise wait for a clear cast instead of cancelling it. The cast-cancellation
-experiment therefore constructs sixteen reviewed request shapes across seventeen
+experiment therefore constructs fifteen reviewed request shapes across seventeen
 ordered selection slots; held Shadowbringer occupies separate Dark Arts and safe-
 fallback positions through the same exact request adapter.
 
@@ -2578,8 +2593,8 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 624-test Core registry, ten plugin self-tests,
-and source checks pin configuration schema 51, the shared monotonic response clock and framework
+For the current source, the exact 634-test Core registry, eleven plugin self-tests,
+and source checks pin configuration schema 53, the shared monotonic response clock and framework
 epoch, true not-ready-to-ready wakeups, strict unchanged-queue critical recovery,
 the immutable release-independent tap-to-land buffer, active-Sprint repeat
 protection, optional action-bar-idle Smart Sprint, the default-off exact public-CC instant-leave state
@@ -2634,7 +2649,7 @@ Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer
 (safe fallback) > Monk combo > Emergency Teleport > pressure Sprint > idle Smart Sprint > event Kardia
 > event Monk**. Twenty physical-hold
 option enable edges share the scheduler input. Held-action cast cancellation
-constructs sixteen reviewed request shapes across seventeen ordered selection
+constructs fifteen reviewed request shapes across seventeen ordered selection
 slots and explicitly excludes Viper, GNB, and held Monk combo.
 
 Emergency tests pin MNK/BLM/SGE/VPR action mappings, strict HP/MP/direct-focus

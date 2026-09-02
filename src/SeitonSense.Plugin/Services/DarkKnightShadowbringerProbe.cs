@@ -608,7 +608,7 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
 
         var input = inputFrame.Snapshot;
         var frozenKeyStillDown = state.Intent is { IsValid: true } currentIntent &&
-                                 inputFrame.IsGameplayKeyGenerationEligible(
+                                 inputFrame.IsFrozenGameplayKeyConsentValid(
                                      (VirtualKey)currentIntent.FrozenKeyCode);
         var hasOpportunity = DarkKnightShadowbringerRules.TrySelectOpportunity(
             darkArts,
@@ -778,6 +778,11 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
         }
 
         state = decision.NextState;
+        if (state.Intent is { IsValid: true } claimedIntent)
+        {
+            _ = inputFrame.IsFrozenGameplayKeyConsentValid(
+                (VirtualKey)claimedIntent.FrozenKeyCode);
+        }
         if (decision.InputClaimed) inputFrame.Consume();
 
         var attempted = false;
@@ -1456,7 +1461,7 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
 
                 var exactKey = (VirtualKey)intent.FrozenKeyCode;
                 var exactGenerationEligible =
-                    inputFrame.IsGameplayKeyGenerationEligible(exactKey);
+                    inputFrame.IsFrozenGameplayKeyConsentValid(exactKey);
                 if (!DarkKnightShadowbringerRules.CanUseFrozenIntent(
                         intent,
                         boundaryConfigurationEnabled,

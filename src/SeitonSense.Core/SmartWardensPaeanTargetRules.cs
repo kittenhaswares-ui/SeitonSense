@@ -100,6 +100,7 @@ public static class SmartWardensPaeanTargetRules
     public const uint ActionId = 29_400;
     public const uint WardensPaeanWardStatusId = 3_143;
     public const int MinimumIncomingEnemyCount = 3;
+    public const int MinimumExactPartyViewSize = 2;
     public const int RequiredCrystallineConflictPartySize = 5;
     public const int FirstPartySlot = 1;
     public const int LastPartySlot = 8;
@@ -144,16 +145,19 @@ public static class SmartWardensPaeanTargetRules
     }
 
     /// <summary>
-    /// A complete CC party view contains exactly five exact actors, exactly one
-    /// exact local-player entry, and no duplicate or partially conflicting
-    /// P-slot, GameObjectId, or EntityId identity.
+    /// A usable CC party view contains a stable exact subset of two to five
+    /// actors, exactly one local-player entry, and no duplicate or partially
+    /// conflicting P-slot, GameObjectId, or EntityId identity. A temporarily
+    /// incomplete PartyList must not globally disable a safe exact ally which
+    /// is present in both snapshots.
     /// </summary>
     public static bool HasCompleteExactPartyView(
         IReadOnlyList<SmartWardensPaeanCandidate>? candidates,
         TargetPressureActorIdentity localPlayer)
     {
         if (candidates is null ||
-            candidates.Count != RequiredCrystallineConflictPartySize ||
+            candidates.Count is < MinimumExactPartyViewSize or
+                > RequiredCrystallineConflictPartySize ||
             !localPlayer.IsValid)
         {
             return false;

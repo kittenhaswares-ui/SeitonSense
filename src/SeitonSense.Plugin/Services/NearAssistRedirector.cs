@@ -239,7 +239,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private readonly ExecuteTracker executeTracker;
     private readonly SmartWardensPaeanService smartWardensPaean;
     private readonly CcImmunityBrakeService ccImmunityBrake;
-    private readonly bool smartActionProtectionMetadataVerified;
+    private readonly SmartActionProtectionStatusCatalog smartActionProtectionStatuses;
     private readonly SmartActionGuardBypassCatalog smartActionGuardBypassActions;
     private readonly bool samuraiSmartActionCastsMetadataVerified;
     private readonly bool chitenMetadataVerified;
@@ -316,7 +316,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         ExecuteTracker executeTracker,
         SmartWardensPaeanService smartWardensPaean,
         CcImmunityBrakeService ccImmunityBrake,
-        bool smartActionProtectionMetadataVerified,
+        SmartActionProtectionStatusCatalog smartActionProtectionStatuses,
         SmartActionGuardBypassCatalog smartActionGuardBypassActions,
         bool samuraiSmartActionCastsMetadataVerified,
         bool chitenMetadataVerified,
@@ -334,7 +334,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         this.executeTracker = executeTracker;
         this.smartWardensPaean = smartWardensPaean;
         this.ccImmunityBrake = ccImmunityBrake;
-        this.smartActionProtectionMetadataVerified = smartActionProtectionMetadataVerified;
+        this.smartActionProtectionStatuses = smartActionProtectionStatuses;
         this.smartActionGuardBypassActions = smartActionGuardBypassActions;
         this.samuraiSmartActionCastsMetadataVerified =
             samuraiSmartActionCastsMetadataVerified;
@@ -1327,7 +1327,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             return SmartTargetArmFailure(NearAssistArmOutcome.Disabled, $"{displayName} arm ignored: feature disabled");
         if (useActionHook is null || !useActionHook.IsEnabled)
             return SmartTargetArmFailure(NearAssistArmOutcome.HookUnavailable, $"{displayName} arm ignored: hook unavailable");
-        if (!smartActionProtectionMetadataVerified)
+        if (!smartActionProtectionStatuses.IsVerified)
             return SmartTargetArmFailure(
                 NearAssistArmOutcome.FailedClosed,
                 $"{displayName} arm failed closed: protection metadata unverified");
@@ -2790,13 +2790,14 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         }
     }
 
-    private static bool IsExactSmartActionCastRedirect(
+    private bool IsExactSmartActionCastRedirect(
         CastedMacroRedirectClaim claim,
         ActionType actionType,
         uint resolvedActionId,
         bool exactMetadata,
         GameAction action) =>
         CastedMacroRedirectRules.CanContinueSmartActionCast(
+            SmartActionContextRules.CanUseSmartTargetRanking(ResolveContext()),
             claim.Owner == CastedMacroRedirectOwner.SmartAction,
             IsSupportedActionType(actionType),
             resolvedActionId,
@@ -3020,7 +3021,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
         var hardTarget = ResolveGameObjectByNativeId(hardTargetId);
         var incomingIsNativeSelectedTargetCarrier =
-            authoredTargetId is 0 or InvalidObjectId;
+            SmartActionContextRules.IsNativeSelectedTargetCarrier(authoredTargetId);
         if (incomingIsNativeSelectedTargetCarrier)
         {
             var nativeSelectedTargetCarrierAllowed =
@@ -3266,7 +3267,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             return false;
         }
 
-        var effectiveTargetId = requestedTargetId is 0 or InvalidObjectId
+        var effectiveTargetId = SmartActionContextRules
+            .IsNativeSelectedTargetCarrier(requestedTargetId)
             ? nativeHardTargetId
             : requestedTargetId;
         if (!ActorIdMatches(effectiveTargetId, wolvesTarget) ||
@@ -3329,8 +3331,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
         foreach (var status in target.StatusList)
         {
-            var exactKind = SmartActionProtectionRules.ClassifyExactStatus(
-                status.StatusId);
+            var exactKind = ClassifySmartActionProtectionStatus(status.StatusId);
             if (exactKind == SmartActionProtectionKind.None) continue;
             if (exactKind == SmartActionProtectionKind.Chiten &&
                 (player is null ||
@@ -3807,7 +3808,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
             return GuardRepeatProtectionRules.ShouldBlock(
                 new GuardRepeatProtectionObservation(
-                    configuration.Enabled && clientState.IsLoggedIn,
+                    configuration.Enabled &&
+                    configuration.ProtectOwnGuardFromRepeatPress &&
+                    clientState.IsLoggedIn,
                     context != SupportedPvPContext.None,
                     exactGuardRequest,
                     exactLocalGuardActive,
@@ -5505,7 +5508,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 return SmartActionSafetyInspectionOutcome.Unsafe;
             }
 
-            var effectiveTargetId = incomingTargetId is 0 or InvalidObjectId
+            var effectiveTargetId = SmartActionContextRules
+                .IsNativeSelectedTargetCarrier(incomingTargetId)
                 ? GetNativeHardTargetId(local)
                 : incomingTargetId;
             if (!TryEvaluateExactSmartActionTargetProtection(
@@ -5557,7 +5561,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         out CanonicalEnemy[] canonicalEnemies,
         out SmartActionProtectedActor[] protectedActors)
     {
-        if (!smartActionProtectionMetadataVerified)
+        if (!smartActionProtectionStatuses.IsVerified)
         {
             canonicalEnemies = [];
             protectedActors = [];
@@ -5599,7 +5603,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 : SmartActionProtectionKind.None;
             foreach (var status in enemy.StatusList)
             {
-                var exactKind = SmartActionProtectionRules.ClassifyExactStatus(status.StatusId);
+                var exactKind = ClassifySmartActionProtectionStatus(status.StatusId);
                 if (exactKind == SmartActionProtectionKind.None) continue;
                 if (exactKind == SmartActionProtectionKind.Chiten)
                 {
@@ -5688,6 +5692,12 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         SmartActionProtectionRules.ClassifyAttackShape(
             action.EffectRange,
             action.CastType);
+
+    private SmartActionProtectionKind ClassifySmartActionProtectionStatus(
+        uint statusId) =>
+        statusId == SmartActionProtectionRules.ChitenStatusId
+            ? SmartActionProtectionKind.Chiten
+            : smartActionProtectionStatuses.Classify(statusId);
 
     /// <summary>
     /// Guard may be selected when strict startup metadata proves that the
@@ -6609,7 +6619,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         entityId is not 0 and not 0xE0000000;
 
     private static bool IsNetworkObjectId(ulong objectId) =>
-        objectId is not 0 and not InvalidObjectId;
+        objectId is not 0 and not InvalidObjectId and not ulong.MaxValue;
 
     private static ulong GetNativeHardTargetId(IPlayerCharacter player)
     {

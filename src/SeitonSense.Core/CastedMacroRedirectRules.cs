@@ -21,6 +21,7 @@ public enum CastedMacroRedirectDecision
 public static class CastedMacroRedirectRules
 {
     public static bool CanContinueSmartActionCast(
+        bool smartTargetRankingSupported,
         bool ownedBySmartAction,
         bool supportedActionType,
         uint resolvedActionId,
@@ -30,6 +31,7 @@ public static class CastedMacroRedirectRules
         bool canTargetHostile,
         bool isGroundTargeted,
         float range) =>
+        smartTargetRankingSupported &&
         ownedBySmartAction &&
         supportedActionType &&
         resolvedActionId != 0 &&

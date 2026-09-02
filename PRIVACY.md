@@ -1934,7 +1934,7 @@ hitbox radius plus the game's world-to-screen projection. It draws two fixed
 sampled rings and does not scan other actors, retain movement history, raycast
 terrain, change a target, or issue/suppress an action.
 
-Configuration schema 51 is current. It adds the local CC prediction/history
+Configuration schema 53 is current. It adds the local CC prediction/history
 settings and retains the release-independent tap-to-land behavior with
 one release-independent tap-to-land reservation (0-3000 ms, 2200 ms default),
 adds default-on exact active-Sprint repeat protection, and adds a separate

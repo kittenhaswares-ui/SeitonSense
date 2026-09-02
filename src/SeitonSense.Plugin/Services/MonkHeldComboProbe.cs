@@ -524,7 +524,7 @@ internal sealed unsafe class MonkHeldComboProbe
         var input = inputFrame.Snapshot;
         var frozenKeyStillDown =
             state.Intent is { IsValid: true } heldIntent &&
-            inputFrame.IsGameplayKeyPhysicallyDown(
+            inputFrame.IsFrozenGameplayKeyConsentValid(
                 (VirtualKey)heldIntent.FrozenKeyCode);
 
         RuntimeCandidate? runtimeCandidate = null;
@@ -654,6 +654,11 @@ internal sealed unsafe class MonkHeldComboProbe
         }
 
         state = decision.NextState;
+        if (state.Intent is { IsValid: true } claimedIntent)
+        {
+            _ = inputFrame.IsFrozenGameplayKeyConsentValid(
+                (VirtualKey)claimedIntent.FrozenKeyCode);
+        }
         if (decision.InputClaimed) inputFrame.Consume();
 
         var attempted = false;
@@ -851,10 +856,9 @@ internal sealed unsafe class MonkHeldComboProbe
                     MetadataVerified = metadataVerified,
                     ActionHelpersSuppressedByGuard = guardSuppressed,
                     HigherPriorityClaimed = higherPriorityClaimed,
-                    HeldGameplayKeyCode =
-                        (int)inputFrame.Snapshot.HeldGameplayKey,
+                    HeldGameplayKeyCode = intent.FrozenKeyCode,
                     FrozenKeyStillDown =
-                        inputFrame.IsGameplayKeyGenerationEligible(
+                        inputFrame.IsFrozenGameplayKeyConsentValid(
                             (VirtualKey)intent.FrozenKeyCode),
                     ResolvedComboActionId =
                         currentActions.ResolvedComboActionId,

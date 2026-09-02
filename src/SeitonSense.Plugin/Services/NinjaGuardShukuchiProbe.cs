@@ -236,7 +236,7 @@ internal sealed class NinjaGuardShukuchiProbe
                                    localIdentity == retry.LocalPlayer &&
                                    input.ProbeSucceeded &&
                                    !input.IsTextInputActive &&
-                                   inputFrame.IsGameplayKeyPhysicallyDown(retry.HeldKey);
+                                   inputFrame.IsFrozenGameplayKeyConsentValid(retry.HeldKey);
             if (!exactBaseContext)
             {
                 SpendFrozenEpisode(retry);
@@ -342,6 +342,7 @@ internal sealed class NinjaGuardShukuchiProbe
                 fromAcceptedHold,
                 readyEpochToken,
                 HeldActionRetryState.Initial);
+            _ = inputFrame.IsFrozenGameplayKeyConsentValid(heldKey);
             inputClaimed = true;
             inputFrame.Consume();
             if (!nativeBoundaryReady)

@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.44.0.1
+
+- Fixed `/smartaction` in Crystalline Conflict and Wolves' Den. A removed old
+  status row can no longer disable all Smart Action attacks. CC again chooses a
+  reachable `S1`-`S5` target; Den testing keeps the exact visible duel opponent
+  or reviewed dummy. Harmful casts use the same safe rules.
+- Held helpers now keep one already chosen action and target for the configured
+  retry time after the original key is released. They do not discover a new
+  target from a released key, and a later key press cancels the reservation.
+  This also fixes valid Paean, Silent Nocturne, Miracle, and other job-helper
+  opportunities being lost before they could use their action.
+- Added a default-off **BRD Mannstopper** helper. When an enemy is within 10
+  yalms it uses the Smart Action target without changing the visible target. It
+  never breaks your Guard and may cancel only the exact Powerful Shot cast.
+- The CC Win Prediction panel now appears during preparation as soon as the
+  exact 5v5 roster is available. Live deaths, damage, healing, and crystal
+  progress begin only after the match enters combat.
+- Fixed the one-second Guard double-press protection so it begins after the
+  first accepted native Guard request, before the Guard icon has propagated.
+  The new default-on checkbox affects only a second Guard press; Auto-Guard's
+  separate protection from other actions stays independent.
+- Fixed the live opponent LB strip above the pressure counter. It reads the
+  rendered party-list LB layer instead of treating it as the wrong native
+  gauge type, and proves the current layout against your own exact LB value.
+- The LB layout proof now needs an empty sample and two clearly different
+  partial samples. It no longer waits for a full frame that can disappear
+  between UI reads, so the bars can become available earlier in the match.
+- Fixed the one-time PvpStats import in Wolves' Den while out of combat, made
+  rejected starts visible as errors, and tested the current LiteDB match shape.
+- All automated source, build, test, package, and public-download checks remain
+  separate from live in-game confirmation.
+
 ## 0.44.0.0
 
 - Added a movable **CC Win Prediction** panel. Unknown players count as 50%,
