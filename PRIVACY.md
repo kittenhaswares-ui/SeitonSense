@@ -1490,10 +1490,12 @@ the original two-second post-Purify lease remains alive; a clean rejection
 retracts that generation. Once confirmed, the boundaries block only a metadata-
 resolved PvP `Action`/`PvPAction` that can cancel Guard; the location boundary
 also covers deferred and ground-location calls. Protection follows the exact
-status until it ends. An explicit second Guard press is blocked for the first
-two seconds after confirmation. At the exact two-second boundary it is allowed
-again and atomically releases ownership whether its incoming or resolved ID is
-Guard. Manual Guard is observed but never owned. The dedicated exact command scope releases ownership only for
+status until it ends. Separately, every exact own Guard request receives a
+one-second repeat-only gate once the same local Guard status is visible. Only an
+incoming or resolved Guard ID is blocked; every other action is untouched by
+that global gate. At the exact one-second boundary Guard is allowed again and,
+for Auto-Guard, atomically releases ownership. Manual Guard is observed but
+never receives the separate all-action ownership. The dedicated exact command scope releases ownership only for
 the matching NIN location action or reviewed directional standard action, even
 if the native request rejects it.
 Disabled/runtime or context, territory, player,
@@ -1836,7 +1838,9 @@ DNC-only `/seitonenavant` movement-direction macro also reuses,
   nested Blackblood-preservation, and separate DRK Hiebsprung held-key options,
   the generic held-helper cast-cancellation test and independent automatic
   basic-shot cast-cancellation opt-ins, and the CC-immunity-brake master plus exact per-job/
-per-action selections. Retired Combat Frames properties remain only as legacy
+per-action selections. It also stores the CC prediction panel visibility,
+dynamic-update, local-history, lock, scale, background, and opacity settings.
+Retired Combat Frames properties remain only as legacy
 configuration compatibility fields; no current runtime or settings page reads
 them to draw frames, change targets, or publish mouseover actors.
 
@@ -1857,18 +1861,51 @@ duplicate participants, unknown teams/jobs, invalid duration/result, and an
 unavailable hook all record nothing.
 
 Confirmed totals are saved locally in `cc-map-stats.json`. The file contains a
-random salt, an HMAC-SHA256 per-character key, per-map win/loss totals, and at
-most 32 recent HMAC-SHA256 match fingerprints per character for duplicate
-suppression. It contains no raw Content ID, character name, world, roster, queue,
-rating, or per-player scoreboard values. Saving uses a same-directory temporary
-file and atomic replacement. If the existing document is malformed, Seiton
-Sense disables reading and writing it rather than guessing or overwriting it.
-The settings clear control atomically replaces only this file with a fresh empty
-document, also allowing an explicitly requested reset to recover malformed
-storage; a failed reset preserves the existing file and reports failure in the
-UI. There is no historical backfill, upload, telemetry, account, service query,
-or network request; maps remain `NO DATA` until an exact future local match is
-confirmed.
+random salt, install-specific HMAC-SHA256 character and player keys, overall and
+per-map W/L, per-player aggregate W/L, one first-player-history timestamp, and
+at most 32 recent HMAC-SHA256 match fingerprints per character for duplicate
+suppression. A completed optional import also stores only its completion time,
+safe cutoff, and aggregate match/player counts. Raw Content IDs, character
+names, worlds, rosters, ratings, timelines, and per-match scoreboard values are
+not persisted. Because the random salt and HMAC keys live in the same local
+file, these keys are pseudonymous installation-local identifiers, not
+encryption or guaranteed anonymity; a person who already guesses an exact
+name and Home World could test that guess offline.
+
+For live prediction, the exact current 5+5 names, jobs, direct observed damage
+and healing, death edges, and final result rows exist only in memory for that
+match. Unknown historical players contribute a neutral 50%. Live damage and
+healing are explicitly incomplete observations until the exact local result
+packet replaces them at match end. None of this live state is written to disk
+or sent over the network.
+
+The optional **Import old PvpStats player history** button is a one-time local
+action for the currently logged-in character. It is allowed only outside PvP,
+combat, and duties. Seiton opens the sibling PvpStats `data.db` through an
+exclusive read-only stream; if PvpStats is still using the file, the import
+stops before reading. It does not copy, modify, compact, or replace that
+database. The reader accepts only completed, non-deleted, non-quarantined
+Casual or Ranked 5v5 matches with one exact local alias and a known winner. A
+persisted first-history boundary plus a five-minute safety margin prevents old
+and newly recorded rows from overlapping. Raw aliases exist only in memory
+during the import; only the bounded HMAC player keys and aggregate W/L are merged. Cancelling,
+resetting local W/L, changing character, entering a duty, or any store change
+before completion prevents the pending result from being saved.
+
+When a legacy schema-2 statistics file is loaded, its map W/L and own overall
+W/L remain usable. Its per-player rows are explicitly discarded and the count
+is written to the ordinary local plugin log: those rows used one-way keys made
+from Content IDs, so they cannot be mapped safely to the current name/world
+keys without guessing or retaining raw identities.
+
+Saving uses a unique same-directory temporary file, flushes it, and atomically
+replaces the old file. If the existing document is malformed, Seiton Sense
+disables reading and writing it rather than guessing or overwriting it. The
+settings clear control cancels any running import and atomically replaces only
+this file with a fresh empty document; a failed reset preserves the existing
+file and reports failure in the UI. There is no upload, telemetry, account,
+service query, or network request. Without a local exact result or an explicit
+PvpStats import, player and map history remains `NO DATA`.
 
 If the separate instant-leave option is enabled, the same already-confirmed
 public-CC result may arm one transient in-memory leave intent even when local
@@ -1897,7 +1934,8 @@ hitbox radius plus the game's world-to-screen projection. It draws two fixed
 sampled rings and does not scan other actors, retain movement history, raycast
 terrain, change a target, or issue/suppress an action.
 
-Configuration schema 50 is current. It replaces held-only chase behavior with
+Configuration schema 51 is current. It adds the local CC prediction/history
+settings and retains the release-independent tap-to-land behavior with
 one release-independent tap-to-land reservation (0-3000 ms, 2200 ms default),
 adds default-on exact active-Sprint repeat protection, and adds a separate
 default-off 3000-5000 ms idle Smart Sprint option. Smart Sprint retains only a

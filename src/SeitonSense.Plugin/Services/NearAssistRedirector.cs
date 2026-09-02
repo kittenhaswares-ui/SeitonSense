@@ -127,6 +127,7 @@ internal readonly record struct LocalGuardActionBoundaryObservation(
     ulong LocalGameObjectId,
     uint LocalEntityId,
     long GenerationBeforeCall,
+    LocalGuardActionAttempt? PreviousAttempt,
     ClientActionAttemptFingerprint BoundaryBefore)
 {
     internal bool IsObserved =>
@@ -571,7 +572,18 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     internal bool TryRetractClientRejectedLocalGuardAttempt(
         ulong localGameObjectId,
         uint localEntityId,
-        long generationBeforeCall)
+        long generationBeforeCall) =>
+        TryRetractClientRejectedLocalGuardAttempt(
+            localGameObjectId,
+            localEntityId,
+            generationBeforeCall,
+            previousAttempt: null);
+
+    private bool TryRetractClientRejectedLocalGuardAttempt(
+        ulong localGameObjectId,
+        uint localEntityId,
+        long generationBeforeCall,
+        LocalGuardActionAttempt? previousAttempt)
     {
         if (!IsNetworkObjectId(localGameObjectId) ||
             !IsNetworkEntityId(localEntityId) ||
@@ -595,9 +607,40 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 return false;
             }
 
-            latestLocalGuardActionAttempt = null;
+            // A spammed second press may be cleanly rejected before the first
+            // accepted/provisional Guard status becomes visible. Roll back the
+            // exact synchronous replacement so the original attempt can still
+            // prove propagation and protect the next repeat. If no exact prior
+            // generation exists, ordinary retraction still clears the attempt.
+            latestLocalGuardActionAttempt = RestorePreviousLocalGuardAttempt(
+                previousAttempt,
+                attempt.TerritoryId,
+                localGameObjectId,
+                localEntityId);
             return true;
         }
+    }
+
+    internal static LocalGuardActionAttempt? RestorePreviousLocalGuardAttempt(
+        LocalGuardActionAttempt? previousAttempt,
+        uint territoryId,
+        ulong localGameObjectId,
+        uint localEntityId)
+    {
+        // The previous value was frozen under the same lock immediately before
+        // this exact replacement. Its generation can be older than
+        // generationBeforeCall after an earlier rejected spam press already
+        // rolled back, so equality would lose the original accepted attempt on
+        // the next rejection. Context/identity and later age checks remain the
+        // authority; generation only needs to be a valid observed generation.
+        return previousAttempt is { } previous &&
+               previous.Generation > 0 &&
+               previous.ObservedAtMilliseconds >= 0 &&
+               previous.TerritoryId == territoryId &&
+               previous.LocalGameObjectId == localGameObjectId &&
+               previous.LocalEntityId == localEntityId
+            ? previous
+            : null;
     }
 
     /// <summary>
@@ -1743,6 +1786,13 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         if (ShouldBlockActiveSprintRepeatPress(thisPtr, actionType, actionId))
             return false;
 
+        // A successful local Guard press is recorded only at its exact native
+        // boundary. While that same Guard is visibly active, suppress only an
+        // exact second Guard request during the first second. This applies to
+        // manual and automatic Guard alike and never blocks another action.
+        if (ShouldBlockRecentOwnGuardRepeatPress(thisPtr, actionType, actionId))
+            return false;
+
         // This runs before redirect/token work. A random action cannot both
         // cancel an automatically owned Guard and consume a macro one-shot.
         if (TryConsumeExplicitAutoGuardBreak(
@@ -2586,7 +2636,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 TryRetractClientRejectedLocalGuardAttempt(
                     localGuardBoundary.LocalGameObjectId,
                     localGuardBoundary.LocalEntityId,
-                    localGuardBoundary.GenerationBeforeCall);
+                    localGuardBoundary.GenerationBeforeCall,
+                    localGuardBoundary.PreviousAttempt);
             }
         }
 
@@ -3420,6 +3471,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         if (ShouldBlockActiveSprintRepeatPress(thisPtr, actionType, actionId))
             return false;
 
+        if (ShouldBlockRecentOwnGuardRepeatPress(thisPtr, actionType, actionId))
+            return false;
+
         if (TryConsumeExplicitAutoGuardBreak(
                 actionType,
                 actionId,
@@ -3652,6 +3706,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             lock (guardAttemptGate)
             {
                 var generationBeforeCall = localGuardActionAttemptGeneration;
+                var previousAttempt = latestLocalGuardActionAttempt;
                 localGuardActionAttemptGeneration =
                     localGuardActionAttemptGeneration == long.MaxValue
                         ? 1
@@ -3664,6 +3719,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                     local.GameObjectId,
                     local.EntityId,
                     generationBeforeCall,
+                    previousAttempt,
                     boundaryBefore);
             }
         }
@@ -3715,6 +3771,55 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             LogFailure(
                 exception,
                 "Seiton Sense automatic Guard protection failed open for one action.");
+            return false;
+        }
+    }
+
+    private bool ShouldBlockRecentOwnGuardRepeatPress(
+        ActionManager* actionManager,
+        ActionType actionType,
+        uint actionId)
+    {
+        try
+        {
+            var context = ResolveContext();
+            var supportedActionType = IsSupportedActionType(actionType);
+            var resolvedActionId = supportedActionType
+                ? ResolveActionId(actionManager, actionType, actionId)
+                : 0;
+            var exactGuardRequest = supportedActionType &&
+                                    (actionId == EnemyCombatConstants.GuardActionId ||
+                                     resolvedActionId == EnemyCombatConstants.GuardActionId);
+            var local = objectTable.LocalPlayer;
+            var localLive = IsLivePlayer(local);
+            var exactLocalGuardActive = localLive && HasActiveGuardStatus(local!);
+            var now = Environment.TickCount64;
+            var attemptAt = -1L;
+            var exactAttemptObserved = localLive &&
+                                       TryGetRecentExactLocalGuardAttempt(
+                                           clientState.TerritoryType,
+                                           local!.GameObjectId,
+                                           local.EntityId,
+                                           now,
+                                           GuardRepeatProtectionRules.ProtectionMilliseconds,
+                                           out attemptAt);
+            if (!exactAttemptObserved) attemptAt = -1;
+
+            return GuardRepeatProtectionRules.ShouldBlock(
+                new GuardRepeatProtectionObservation(
+                    configuration.Enabled && clientState.IsLoggedIn,
+                    context != SupportedPvPContext.None,
+                    exactGuardRequest,
+                    exactLocalGuardActive,
+                    exactAttemptObserved,
+                    attemptAt,
+                    now));
+        }
+        catch (Exception exception)
+        {
+            LogFailure(
+                exception,
+                "Seiton Sense Guard repeat protection failed open for one action.");
             return false;
         }
     }

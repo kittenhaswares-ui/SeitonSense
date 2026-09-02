@@ -17,8 +17,10 @@ internal sealed partial class SettingsWindow : Window
     private readonly IsolationAwarenessService isolationAwareness;
     private readonly PressureCounterWindow pressureCounter;
     private readonly CrystallineConflictInstantLeaveService crystallineConflictInstantLeave;
+    private readonly CrystallineConflictPvpStatsHistoryImportService pvpStatsHistoryImport;
     private readonly Action resetBufferLearningWindowPosition;
     private readonly Action resetWolvesDenRotationWindowPosition;
+    private readonly Action resetCrystallineConflictPredictionWindowPosition;
     private readonly Func<bool> resetCrystallineConflictMapStatistics;
     private string crystallineConflictMapStatisticsResetFeedback = string.Empty;
     private bool crystallineConflictMapStatisticsResetSucceeded;
@@ -34,9 +36,11 @@ internal sealed partial class SettingsWindow : Window
         IsolationAwarenessService isolationAwareness,
         PressureCounterWindow pressureCounter,
         CrystallineConflictInstantLeaveService crystallineConflictInstantLeave,
+        CrystallineConflictPvpStatsHistoryImportService pvpStatsHistoryImport,
         Action? resetBufferLearningWindowPosition = null,
         Action? resetWolvesDenRotationWindowPosition = null,
-        Func<bool>? resetCrystallineConflictMapStatistics = null)
+        Func<bool>? resetCrystallineConflictMapStatistics = null,
+        Action? resetCrystallineConflictPredictionWindowPosition = null)
         : base("Seiton Sense###SeitonSenseSettings")
     {
         this.configuration = configuration;
@@ -47,10 +51,13 @@ internal sealed partial class SettingsWindow : Window
         this.isolationAwareness = isolationAwareness;
         this.pressureCounter = pressureCounter;
         this.crystallineConflictInstantLeave = crystallineConflictInstantLeave;
+        this.pvpStatsHistoryImport = pvpStatsHistoryImport;
         this.resetBufferLearningWindowPosition =
             resetBufferLearningWindowPosition ?? (() => { });
         this.resetWolvesDenRotationWindowPosition =
             resetWolvesDenRotationWindowPosition ?? (() => { });
+        this.resetCrystallineConflictPredictionWindowPosition =
+            resetCrystallineConflictPredictionWindowPosition ?? (() => { });
         this.resetCrystallineConflictMapStatistics =
             resetCrystallineConflictMapStatistics ?? (() => false);
         Size = new Vector2(880f, 760f);

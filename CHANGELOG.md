@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.44.0.0
+
+- Added a movable **CC Win Prediction** panel. Unknown players count as 50%,
+  both teams affect the opening estimate, and the optional live estimate reacts
+  to observed deaths and crystal progress without claiming to be a real rating.
+- The panel switches between all five allies and enemies. It shows locally
+  saved player W/L plus current-match deaths, damage, healing, and crystal time;
+  the exact result screen replaces incomplete live totals at match end.
+- Added an explicit one-time **PvpStats history import**. It reads completed
+  Casual/Ranked 5v5 history through an exclusive read-only lock, stores no raw
+  player names, and never copies or modifies the PvpStats database.
+- The importer is bounded, cancellable, character-specific, atomic, and
+  protected against double imports, concurrent reset/store changes, timezone
+  drift, and overlap with newly recorded Seiton history.
+- Added a global one-second own-Guard repeat safety. Manual and automatic Guard
+  both ignore only a second Guard press during that window; other actions remain
+  unaffected. At the exact boundary Guard works again.
+- Added ten plugin self-tests for import overlap and timestamp bounds,
+  stale writes, one-time markers, schema-1 migration, safe schema-2 discard,
+  pseudonymous storage, full-store eviction, LiteDB time conversion, and
+  repeated rejected Guard presses preserving the original accepted attempt.
+  They run together with all 624 Core tests during local releases.
+- Legacy schema-2 files keep map and own overall W/L, but their unresolvable
+  Content-ID-keyed player rows are discarded instead of appearing as current
+  player history. The local plugin log reports that compatibility discard.
+- Automated checks and package verification are separate from live-game
+  confirmation.
+
 ## 0.43.0.9
 
 - Fixed `/nearhelp` casted heals falling back to self before ally selection.

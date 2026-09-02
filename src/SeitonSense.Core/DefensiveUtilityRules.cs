@@ -115,8 +115,8 @@ public static class DefensiveUtilityRules
     public const int GuardianProactiveAllyHpPercent = 50;
     public const long GuardianMaximumPressureAgeMilliseconds = 250;
     public const long GuardianTriggerPopupDurationMilliseconds = 1_500;
-    public const long AutoGuardTriggerPopupDurationMilliseconds =
-        AutoGuardProtectionRules.GuardReuseProtectionMilliseconds;
+    // Presentation remains independent from the one-second Guard-repeat gate.
+    public const long AutoGuardTriggerPopupDurationMilliseconds = 2_000;
     public const long PostPurifyGuardWindowMilliseconds = 2_000;
     // Covers the normal client/server status-propagation and action-queue window
     // without turning one Guard request into an unbounded helper lockout.

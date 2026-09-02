@@ -9,6 +9,7 @@ $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $resolvedOutput = [System.IO.Path]::GetFullPath($OutputDirectory)
 $solution = Join-Path $projectRoot 'SeitonSense.slnx'
 $testProject = Join-Path $projectRoot 'tests\SeitonSense.Core.SelfTest\SeitonSense.Core.SelfTest.csproj'
+$pluginTestAssembly = Join-Path $projectRoot 'tests\SeitonSense.Plugin.SelfTest\bin\Release\SeitonSense.Plugin.SelfTest.dll'
 $sourceZip = Join-Path $projectRoot 'src\SeitonSense.Plugin\bin\Release\SeitonSense.Plugin\latest.zip'
 $repo = @(Get-Content -LiteralPath (Join-Path $projectRoot 'repo.json') -Raw | ConvertFrom-Json)
 if ($repo.Count -ne 1) { throw 'repo.json must contain exactly one plugin.' }
@@ -29,6 +30,12 @@ if ($LASTEXITCODE -ne 0) { throw 'Release build failed.' }
 
 dotnet run --project $testProject -c Release --no-build
 if ($LASTEXITCODE -ne 0) { throw 'Core self-tests failed.' }
+
+if (-not (Test-Path -LiteralPath $pluginTestAssembly -PathType Leaf)) {
+    throw "Plugin persistence self-test assembly not found: $pluginTestAssembly"
+}
+dotnet $pluginTestAssembly
+if ($LASTEXITCODE -ne 0) { throw 'Plugin persistence self-tests failed.' }
 
 if (-not (Test-Path -LiteralPath $sourceZip -PathType Leaf)) {
     throw "Dalamud packager output not found: $sourceZip"

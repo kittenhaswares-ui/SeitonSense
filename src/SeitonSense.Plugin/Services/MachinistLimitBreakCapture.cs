@@ -84,6 +84,7 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
     private readonly IGameInteropProvider interop;
     private readonly IPluginLog log;
     private readonly CombatLimitBreakCaptureBuffer combatLimitBreakCaptureBuffer = new();
+    private readonly CrystallineConflictPredictionCaptureBuffer predictionCaptureBuffer = new();
     private readonly ConcurrentQueue<MachinistLimitBreakWarning> pendingWarnings = new();
     private readonly ConcurrentQueue<AllyRescueCleanseEffect> pendingAllyRescueCleanses = new();
     private readonly ConcurrentQueue<MiracleInterceptThreatEvent> pendingMiracleInterceptThreats = new();
@@ -172,6 +173,7 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
     public long DroppedSamuraiReactiveActionEffects =>
         Interlocked.Read(ref droppedSamuraiReactiveActionEffects);
     internal CombatLimitBreakCaptureBuffer CombatLimitBreakCaptureBuffer => combatLimitBreakCaptureBuffer;
+    internal CrystallineConflictPredictionCaptureBuffer PredictionCaptureBuffer => predictionCaptureBuffer;
 
     public void Start()
     {
@@ -390,6 +392,7 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         Interlocked.Exchange(ref samuraiReactiveLocalEntityIdBits, 0);
         Interlocked.Increment(ref samuraiReactiveGeneration);
         combatLimitBreakCaptureBuffer.SetEnabled(false);
+        predictionCaptureBuffer.SetEnabled(false);
         actionEffectHook?.Dispose();
         IsRunning = false;
         ClearWarnings();
@@ -476,6 +479,19 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
                 try
                 {
                     combatLimitBreakCaptureBuffer.Capture(
+                        casterEntityId,
+                        header,
+                        effects,
+                        targetEntityIds);
+                }
+                catch (Exception exception)
+                {
+                    RecordCaptureError(exception);
+                }
+
+                try
+                {
+                    predictionCaptureBuffer.Capture(
                         casterEntityId,
                         header,
                         effects,

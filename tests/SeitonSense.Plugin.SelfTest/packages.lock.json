@@ -15,13 +15,20 @@
         "contentHash": "fcFN01tDTIQqDuTwr1jUQK/geofiwjG5DycJQOnC72i1SsLAk1ELe+apBOuZ11UMQG8YKFZG1FgvjZPbqHyatg=="
       },
       "LiteDB": {
-        "type": "Direct",
-        "requested": "[5.0.16, )",
+        "type": "Transitive",
         "resolved": "5.0.16",
         "contentHash": "DMUYdRlgNbrSlyWzdQ4GqW934ntNHBGWMTNQlOL4hWz8WnveY6V9ZGo2ntPrSATW7kat8v5VoCXGSzToPiwZWw=="
       },
       "seitonsense.core": {
         "type": "Project"
+      },
+      "seitonsense.plugin": {
+        "type": "Project",
+        "dependencies": {
+          "DalamudPackager": "[15.0.0, )",
+          "LiteDB": "[5.0.16, )",
+          "SeitonSense.Core": "[1.0.0, )"
+        }
       }
     }
   }

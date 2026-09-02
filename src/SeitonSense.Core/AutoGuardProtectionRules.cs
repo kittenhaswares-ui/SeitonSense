@@ -14,7 +14,36 @@ public enum AutoGuardProtectionDecisionReason : byte
     GuardEnded = 9,
     MaximumDurationReached = 10,
     HardReset = 11,
-    GuardReuseProtected = 12,
+}
+
+public readonly record struct GuardRepeatProtectionObservation(
+    bool RuntimeEnabled,
+    bool IsSupportedPvpContext,
+    bool ExactGuardRequest,
+    bool ExactLocalGuardActive,
+    bool ExactOwnGuardAttemptObserved,
+    long OwnGuardAttemptAtMilliseconds,
+    long NowMilliseconds);
+
+/// <summary>
+/// Suppresses only an exact second local Guard request during the first second
+/// after the original request crossed the native boundary and exact local
+/// Guard became visible. Other actions are deliberately outside this policy.
+/// </summary>
+public static class GuardRepeatProtectionRules
+{
+    public const long ProtectionMilliseconds = 1_000;
+
+    public static bool ShouldBlock(GuardRepeatProtectionObservation observation) =>
+        observation.RuntimeEnabled &&
+        observation.IsSupportedPvpContext &&
+        observation.ExactGuardRequest &&
+        observation.ExactLocalGuardActive &&
+        observation.ExactOwnGuardAttemptObserved &&
+        observation.OwnGuardAttemptAtMilliseconds >= 0 &&
+        observation.NowMilliseconds >= observation.OwnGuardAttemptAtMilliseconds &&
+        observation.NowMilliseconds - observation.OwnGuardAttemptAtMilliseconds <
+            ProtectionMilliseconds;
 }
 
 public readonly record struct AutoGuardProtectionState(
@@ -63,7 +92,6 @@ public readonly record struct AutoGuardProtectionDecision(
 /// </summary>
 public static class AutoGuardProtectionRules
 {
-    public const long GuardReuseProtectionMilliseconds = 2_000;
     public const long MaximumOwnedDurationMilliseconds = 6_000;
 
     public static bool CanArmFromConfirmedAttempt(
@@ -144,21 +172,7 @@ public static class AutoGuardProtectionRules
             return Released(AutoGuardProtectionDecisionReason.GuardEnded);
 
         if (observation.IsExplicitGuardReuse)
-        {
-            var reuseProtectionEndsAt = SaturatingAdd(
-                previous.ConfirmedAtMilliseconds,
-                GuardReuseProtectionMilliseconds);
-            if (observation.NowMilliseconds < reuseProtectionEndsAt)
-            {
-                return new AutoGuardProtectionDecision(
-                    previous,
-                    ShouldBlockAction: true,
-                    Math.Max(0, reuseProtectionEndsAt - observation.NowMilliseconds),
-                    AutoGuardProtectionDecisionReason.GuardReuseProtected);
-            }
-
             return Released(AutoGuardProtectionDecisionReason.ExplicitGuardReuse);
-        }
 
         var remaining = previous.MaximumExpiresAtMilliseconds - observation.NowMilliseconds;
         return new AutoGuardProtectionDecision(

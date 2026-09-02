@@ -1,0 +1,24 @@
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>SeitonSense.Plugin.SelfTest</AssemblyName>
+    <RootNamespace>SeitonSense.Plugin.SelfTest</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <UseAppHost>false</UseAppHost>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\SeitonSense.Plugin\SeitonSense.Plugin.csproj" />
+    <Reference Include="Dalamud">
+      <HintPath>$(APPDATA)\XIVLauncher\addon\Hooks\dev\Dalamud.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Serilog">
+      <HintPath>$(APPDATA)\XIVLauncher\addon\Hooks\dev\Serilog.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

@@ -42,14 +42,17 @@ if ($expectedSourceFingerprint -ne $actualSourceFingerprint) { throw 'Published 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $archive = [System.IO.Compression.ZipFile]::OpenRead($resolvedArchive)
 $temporaryDll = [System.IO.Path]::GetTempFileName()
+$temporaryLiteDbDll = [System.IO.Path]::GetTempFileName()
 try {
     $entryNames = @($archive.Entries | ForEach-Object FullName)
     $required = @(
         'SeitonSense.Core.dll',
         'SeitonSense.Core.pdb',
+        'LiteDB.dll',
         'SeitonSense.Plugin.deps.json',
         'SeitonSense.Plugin.dll',
-        'SeitonSense.Plugin.json'
+        'SeitonSense.Plugin.json',
+        'THIRD_PARTY_NOTICES.md'
     )
     if ($entryNames.Count -ne $required.Count) {
         throw "Release must contain exactly $($required.Count) files; found $($entryNames.Count)."
@@ -89,10 +92,33 @@ try {
     if ($assemblyVersion -ne $entry.AssemblyVersion) {
         throw "DLL version $assemblyVersion differs from repository version $($entry.AssemblyVersion)."
     }
+
+    $liteDbEntry = $archive.GetEntry('LiteDB.dll')
+    if ($null -eq $liteDbEntry) { throw 'Packed LiteDB dependency is missing.' }
+    $liteDbInput = $liteDbEntry.Open()
+    $liteDbOutput = [System.IO.File]::Create($temporaryLiteDbDll)
+    try { $liteDbInput.CopyTo($liteDbOutput) }
+    finally { $liteDbOutput.Dispose(); $liteDbInput.Dispose() }
+    $liteDbVersion = [System.Reflection.AssemblyName]::GetAssemblyName($temporaryLiteDbDll).Version.ToString()
+    if ($liteDbVersion -ne '5.0.16.0') {
+        throw "Unexpected LiteDB assembly version: $liteDbVersion"
+    }
+
+    $noticeEntry = $archive.GetEntry('THIRD_PARTY_NOTICES.md')
+    if ($null -eq $noticeEntry) { throw 'Packed third-party notice is missing.' }
+    $noticeReader = [System.IO.StreamReader]::new($noticeEntry.Open())
+    try { $notice = $noticeReader.ReadToEnd() }
+    finally { $noticeReader.Dispose() }
+    if ($notice -notmatch [regex]::Escape('LiteDB 5.0.16') -or
+        $notice -notmatch [regex]::Escape('Copyright (c) 2014-2022 Mauricio David') -or
+        $notice -notmatch [regex]::Escape('Permission is hereby granted, free of charge')) {
+        throw 'Packed LiteDB MIT notice is incomplete.'
+    }
 }
 finally {
     $archive.Dispose()
     Remove-Item -LiteralPath $temporaryDll -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $temporaryLiteDbDll -Force -ErrorAction SilentlyContinue
 }
 
 $hash = (Get-FileHash -LiteralPath $resolvedArchive -Algorithm SHA256).Hash.ToLowerInvariant()

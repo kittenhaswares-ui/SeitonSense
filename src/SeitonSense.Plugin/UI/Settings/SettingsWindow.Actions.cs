@@ -310,8 +310,9 @@ internal sealed partial class SettingsWindow
             "Crystalline Conflict only and off by default. At 3+ enemies, Seiton can Purify a selected Stun and use " +
             "Guard after Resilience confirms the cleanse. The card, sound, and press protection start only after Guard " +
             "is visibly active. While it is active, Seiton blocks its other automatic actions so they cannot cancel it. " +
-            "A second Guard press is ignored for two seconds; after that you can end Guard normally. /panicshu remains " +
-            "an intentional emergency override.");
+            "For every own Guard, a repeated Guard press is ignored for one second; other actions are unaffected by that " +
+            "repeat-only safety. After one second you can end Guard normally. /panicshu remains an intentional emergency " +
+            "override for automatically protected Guard.");
         ImGui.PopTextWrapPos();
         return changed;
     }

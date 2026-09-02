@@ -3,7 +3,28 @@
 Seiton Sense is a local PvP awareness HUD with pressure tracking, nameplate
 cues, warnings, job helpers, Smart Action, and target highlights.
 
-Version 0.43.0.9 fixes `/nearhelp` casted heals falling back to self before
+Version 0.44.0.0 adds a movable **CC Win Prediction** panel. Unknown players
+count as a neutral 50%; locally observed W/L from all five allies and enemies
+shapes the opening estimate. An optional playful live estimate reacts to
+observed deaths and crystal progress. Switch the panel between both teams to
+see local W/L and the current match's deaths, damage, healing, and crystal time.
+Live damage/healing is intentionally incomplete; the exact result screen fills
+the final values when the match ends.
+
+If PvpStats is installed, **Import old PvpStats player history** can read its
+completed Casual and Ranked 5v5 matches once for the logged-in character.
+Unload PvpStats first so Seiton can take a proven exclusive read-only lock. The
+import never copies or modifies `data.db`, never uploads anything, and persists
+only install-specific HMAC player keys plus aggregate W/L—not raw names or
+worlds. A five-minute boundary margin and store-generation check prevent old
+and newly recorded history from being counted twice.
+Legacy schema-2 files keep their map and own overall W/L, but discard old
+per-player rows: their Content-ID-based one-way keys cannot be mapped safely to
+the current name/world keys.
+
+Every exact own Guard activation also receives a one-second repeat-only safety:
+pressing Guard again during that window is ignored without blocking any other
+action. Version 0.43.0.9 fixed `/nearhelp` casted heals falling back to self before
 ally selection. Friendly PvP casts now use the same reachable-ally HP and
 pressure selection as instant Near Help actions. The ally is chosen once before
 the native cast request; the visible target is unchanged, and the cast is never
@@ -131,7 +152,7 @@ Recuperate retain their exact episode through temporary native blocks and retry
 only inside the original bounded window after every safety recheck. High-
 pressure Stun Auto-Guard is now keyless and confirmed-only: one readiness-proven
 retry may occur inside its original lease, while the card, sound, action
-suppression, and two-second Guard-reuse protection begin only after the exact
+suppression and the then-current Guard-reuse protection begin only after the exact
 live Guard status appears. Rejected requests therefore cannot create phantom
 protection or block manual Guard. The release also adds exact SAM Chiten and SMN
 Bahamut/Phoenix danger warnings plus an experimental opponent LB-ready strip
@@ -186,8 +207,10 @@ target-circle safety, with Guard permitted only for exact Guard-ignoring damage
 or the closed ordinary hostile-movement catalog,
 plus v0.34.0.3's Smart Tab line-of-sight and ranked-cycle
 fixes. Confirmed Auto-Guard can show a card/sound and protects an accidental
-second Guard press for two seconds; provisional or rejected requests do not arm
-either effect. `/panicshu` now reaches its one location call
+second Guard press through the global one-second repeat-only gate; provisional
+or rejected requests do not arm either effect. Manual Guard uses the same
+repeat-only gate without acquiring Auto-Guard's separate all-action ownership.
+`/panicshu` now reaches its one location call
 only after exact native Shukuchi recast and resource readiness. It retains
 Emergency Teleport plus v0.31's ranged Smart Tab, direct Viper carrier handling,
 and explicit Wolves' Den testing additions. `/smarttab`
@@ -495,7 +518,8 @@ and Super Focus Glow into one configurable custom-repository plugin.
   from HP/pressure prediction. One readiness-proven confirmation retry may occur
   only inside the original two-second lease. A native return remains provisional:
   only the matching exact live Guard status arms the card, sound, cancellation
-  shield, and two-second Guard-reuse protection. Clean rejection retracts the
+  shield. The separate global one-second repeat-only gate covers Guard reuse.
+  Clean rejection retracts the
   generation, so it cannot block manual Guard or higher-priority recovery.
 - **Experimental Paladin Guardian job tool:** an independent default-off held-key
   option can attempt Guardian on one exact reachable ally. The original critical
@@ -1337,9 +1361,10 @@ still alive; a clean rejection retracts the generation. After exact status
 confirmation, the boundaries block metadata-resolved PvP `Action`/`PvPAction`
 calls that can cancel Guard, including deferred or ground-location requests,
 until the first exact status absence or hard cap. An incoming or resolved second
-Guard press is also blocked during the first two seconds from confirmation. At
-the exact two-second boundary it again passes as the deliberate release path and
-atomically drops ownership. A manual Guard never arms it.
+Guard press is handled by the separate global one-second repeat-only gate. At
+its exact boundary the press passes as the deliberate release path and
+atomically drops automatic ownership. Manual Guard never arms that all-action
+ownership, but it receives the same one-second repeat-only safety.
 The dedicated exact command scope releases this ownership only for the matching
 NIN location boundary or reviewed directional self-dash boundary, even if the
 native action rejects it. Unsupported or unknown actions,
@@ -2109,7 +2134,9 @@ with the RDM fresh-Guard engage. Reset Defaults clears previews and restores
 every action, target-
 write, and party-visible communication master to off.
 
-Configuration schema 50 is current. It replaces the held-only chase with the
+Configuration schema 51 is current. It adds the local CC prediction/history
+panel settings while retaining the release-independent tap-to-land chase that
+replaced the held-only chase with the
 release-independent tap-to-land wait, protects active PvP Sprint from a second
 Sprint press by default, and adds the separate optional idle Smart Sprint.
 Smart Sprint measures action-bar activity; WASD, camera movement, and targeting
@@ -2364,9 +2391,10 @@ Auto-Guard request, the short latch still blocks lower helpers, but Purify and
 Recuperate yield only to exact live Guard so a failed request cannot suppress
 higher-priority recovery. The central `UseAction` and `UseActionLocation` hooks
 arm cancellation ownership
-only after the matching exact live Guard status, block a second Guard press
-during the first two seconds from that confirmation, restore deliberate Guard
-reuse afterward, and fail open on clean rejection, drift, or their six-second
+only after the matching exact live Guard status. A separate global gate blocks
+only a second Guard press during the first second after the exact own request,
+restores deliberate Guard reuse afterward, and fails open on clean rejection,
+drift, or the automatic ownership's six-second
 cap. Auto-Guard cannot dispatch if either protection hook is unavailable;
 the dedicated exact command scope releases ownership only for the matching NIN
 location request or reviewed directional self-action request.
@@ -2550,8 +2578,8 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 618-test Core registry and source checks pin
-configuration schema 50, the shared monotonic response clock and framework
+For the current source, the exact 624-test Core registry, ten plugin self-tests,
+and source checks pin configuration schema 51, the shared monotonic response clock and framework
 epoch, true not-ready-to-ready wakeups, strict unchanged-queue critical recovery,
 the immutable release-independent tap-to-land buffer, active-Sprint repeat
 protection, optional action-bar-idle Smart Sprint, the default-off exact public-CC instant-leave state

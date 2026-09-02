@@ -43,7 +43,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 50;
+    public int Version { get; set; } = 51;
     public string LastSeenReleaseNotesVersion { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
@@ -107,6 +107,13 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public float WolvesDenRotationPanelScale { get; set; } = 1f;
     public float WolvesDenRotationPanelBackgroundOpacity { get; set; } = 0.88f;
     public int WolvesDenRotationOffsetSlots { get; set; }
+    public bool ShowCrystallineConflictPredictionPanel { get; set; } = true;
+    public bool EnableLocalCrystallineConflictPlayerHistory { get; set; } = true;
+    public bool EnableDynamicCrystallineConflictPrediction { get; set; } = true;
+    public bool CrystallineConflictPredictionPanelLocked { get; set; }
+    public bool CrystallineConflictPredictionPanelShowBackground { get; set; } = true;
+    public float CrystallineConflictPredictionPanelScale { get; set; } = 1f;
+    public float CrystallineConflictPredictionPanelBackgroundOpacity { get; set; } = 0.88f;
     public bool ShowPvpRangeHelper { get; set; } = true;
     public bool PvpRangeHelperDrawInForeground { get; set; }
     public bool PvpRangeHelperShowLabels { get; set; } = true;
@@ -326,7 +333,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 50)
+        if (Version >= 51)
         {
             if (repaired) Save();
             return;
@@ -859,7 +866,18 @@ public sealed class PluginConfiguration : IPluginConfiguration
                 SmartSprintRules.DefaultInactivityMilliseconds;
         }
 
-        Version = 50;
+        if (Version < 51)
+        {
+            ShowCrystallineConflictPredictionPanel = true;
+            EnableLocalCrystallineConflictPlayerHistory = true;
+            EnableDynamicCrystallineConflictPrediction = true;
+            CrystallineConflictPredictionPanelLocked = false;
+            CrystallineConflictPredictionPanelShowBackground = true;
+            CrystallineConflictPredictionPanelScale = 1f;
+            CrystallineConflictPredictionPanelBackgroundOpacity = 0.88f;
+        }
+
+        Version = 51;
         ClampSettings();
         Save();
     }
@@ -868,7 +886,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 50;
+        Version = 51;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -928,6 +946,13 @@ public sealed class PluginConfiguration : IPluginConfiguration
         WolvesDenRotationPanelScale = 1f;
         WolvesDenRotationPanelBackgroundOpacity = 0.88f;
         WolvesDenRotationOffsetSlots = 0;
+        ShowCrystallineConflictPredictionPanel = true;
+        EnableLocalCrystallineConflictPlayerHistory = true;
+        EnableDynamicCrystallineConflictPrediction = true;
+        CrystallineConflictPredictionPanelLocked = false;
+        CrystallineConflictPredictionPanelShowBackground = true;
+        CrystallineConflictPredictionPanelScale = 1f;
+        CrystallineConflictPredictionPanelBackgroundOpacity = 0.88f;
         ShowPvpRangeHelper = true;
         PvpRangeHelperDrawInForeground = false;
         PvpRangeHelperShowLabels = true;
@@ -1239,6 +1264,18 @@ public sealed class PluginConfiguration : IPluginConfiguration
             1f,
             0.88f,
             value => WolvesDenRotationPanelBackgroundOpacity = value);
+        changed |= Clamp(
+            CrystallineConflictPredictionPanelScale,
+            0.75f,
+            1.75f,
+            1f,
+            value => CrystallineConflictPredictionPanelScale = value);
+        changed |= Clamp(
+            CrystallineConflictPredictionPanelBackgroundOpacity,
+            0f,
+            1f,
+            0.88f,
+            value => CrystallineConflictPredictionPanelBackgroundOpacity = value);
         changed |= Clamp(
             CrystallineConflictMedicineKitOverlayScale,
             0.6f,

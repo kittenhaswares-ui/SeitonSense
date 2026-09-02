@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.43.0.9";
+    private const string CurrentReleaseVersion = "0.44.0.0";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -52,7 +52,10 @@ public sealed class Plugin : IDalamudPlugin
     private readonly IntegratedInputRuntime integratedInput;
     private readonly BufferLearningWindow bufferLearningWindow;
     private readonly CrystallineConflictMapStatisticsService crystallineConflictMapStatistics;
+    private readonly CrystallineConflictPvpStatsHistoryImportService pvpStatsHistoryImport;
+    private readonly CrystallineConflictPredictionService crystallineConflictPrediction;
     private readonly CrystallineConflictInstantLeaveService crystallineConflictInstantLeave;
+    private readonly CrystallineConflictPredictionWindow crystallineConflictPredictionWindow;
     private readonly WolvesDenRotationWindow wolvesDenRotationWindow;
     private readonly SmartTabTargetingService smartTabTargeting;
     private readonly MovementDirectedEnAvantTracker movementDirectedEnAvant;
@@ -386,7 +389,30 @@ public sealed class Plugin : IDalamudPlugin
             log,
             () => configuration.Enabled,
             () => configuration.EnableLocalCrystallineConflictMapStatisticsCapture,
-            () => configuration.EnableInstantLeaveAfterCrystallineConflict);
+            () => configuration.EnableInstantLeaveAfterCrystallineConflict,
+            () => configuration.EnableLocalCrystallineConflictPlayerHistory,
+            () => configuration.ShowCrystallineConflictPredictionPanel);
+        crystallineConflictPrediction = new CrystallineConflictPredictionService(
+            configuration,
+            clientState,
+            playerState,
+            objectTable,
+            partyList,
+            framework,
+            dutyState,
+            crystallineConflictMapStatistics,
+            machinistLimitBreakCapture.PredictionCaptureBuffer,
+            log);
+        pvpStatsHistoryImport = new CrystallineConflictPvpStatsHistoryImportService(
+            pluginInterface,
+            clientState,
+            playerState,
+            objectTable,
+            dataManager,
+            framework,
+            condition,
+            crystallineConflictMapStatistics,
+            log);
         crystallineConflictInstantLeave = new CrystallineConflictInstantLeaveService(
             configuration,
             clientState,
@@ -396,6 +422,11 @@ public sealed class Plugin : IDalamudPlugin
             dutyState,
             crystallineConflictMapStatistics,
             log);
+        crystallineConflictPredictionWindow = new CrystallineConflictPredictionWindow(
+            configuration,
+            crystallineConflictPrediction,
+            gameGui,
+            textureProvider);
         wolvesDenRotationWindow = new WolvesDenRotationWindow(
             configuration,
             clientState,
@@ -430,10 +461,11 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Fixed /nearhelp casted heals falling back to yourself instead of selecting an ally.",
-                "Casted heals now use the same reachable-ally HP and pressure selection as instant heals.",
-                "The chosen ally stays fixed for that cast; your visible target is not changed.",
-                "Near Assist and Far Help are unchanged.",
+                "New CC Win Prediction panel: a playful local estimate using saved W/L from both teams.",
+                "Switch between allies and enemies to see W/L plus this match's deaths, damage, healing, and crystal time.",
+                "Optional one-time PvpStats import reads old CC history locally without changing its database.",
+                "Guard cannot be cancelled by pressing Guard again during its first second.",
+                "No gameplay or player history is uploaded.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
@@ -453,12 +485,19 @@ public sealed class Plugin : IDalamudPlugin
             isolationAwareness,
             pressureCounter,
             crystallineConflictInstantLeave,
+            pvpStatsHistoryImport,
             bufferLearningWindow.ResetWindowPosition,
             wolvesDenRotationWindow.ResetWindowPosition,
-            crystallineConflictMapStatistics.TryReset);
+            () =>
+            {
+                pvpStatsHistoryImport.Cancel();
+                return crystallineConflictMapStatistics.TryReset();
+            },
+            crystallineConflictPredictionWindow.ResetWindowPosition);
         windowSystem.AddWindow(pressureCounter);
         windowSystem.AddWindow(bufferLearningWindow);
         windowSystem.AddWindow(wolvesDenRotationWindow);
+        windowSystem.AddWindow(crystallineConflictPredictionWindow);
         windowSystem.AddWindow(autoSeitonToggle);
         windowSystem.AddWindow(whatsNew);
         windowSystem.AddWindow(settingsWindow);
@@ -724,6 +763,8 @@ public sealed class Plugin : IDalamudPlugin
             movementDirectedEnAvant.Start();
             panicShukuchi.Start();
             combatLimitBreakRuntime.Start();
+            pvpStatsHistoryImport.Start();
+            crystallineConflictPrediction.Start();
         }
         catch (Exception startException)
         {
@@ -778,6 +819,8 @@ public sealed class Plugin : IDalamudPlugin
         if (pressureCommandRegistered) Safe(() => commandManager.RemoveHandler(PressureCommand));
 
         Safe(() => crystallineConflictInstantLeave?.Dispose());
+        Safe(() => crystallineConflictPrediction?.Dispose());
+        Safe(() => pvpStatsHistoryImport?.Dispose());
         Safe(() => crystallineConflictMapStatistics?.Dispose());
         Safe(() => combatLimitBreakRuntime?.Dispose());
         Safe(() => integratedInput?.Dispose());
@@ -830,6 +873,8 @@ public sealed class Plugin : IDalamudPlugin
         commandManager.RemoveHandler(Command);
         commandManager.RemoveHandler(AliasCommand);
         crystallineConflictInstantLeave.Dispose();
+        crystallineConflictPrediction.Dispose();
+        pvpStatsHistoryImport.Dispose();
         crystallineConflictMapStatistics.Dispose();
         combatLimitBreakRuntime.Dispose();
         integratedInput.Dispose();

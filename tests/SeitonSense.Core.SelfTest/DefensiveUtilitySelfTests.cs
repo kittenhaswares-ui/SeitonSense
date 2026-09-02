@@ -312,7 +312,48 @@ internal static class DefensiveUtilitySelfTests
     {
         var local = new TargetPressureActorIdentity(0x1001, 0x2001);
         var armed = AutoGuardProtectionRules.ArmConfirmed(42, 250, local, 1_000, true);
-        var protectedReuse = AutoGuardProtectionRules.Observe(
+
+        var exactRepeat = new GuardRepeatProtectionObservation(
+            RuntimeEnabled: true,
+            IsSupportedPvpContext: true,
+            ExactGuardRequest: true,
+            ExactLocalGuardActive: true,
+            ExactOwnGuardAttemptObserved: true,
+            OwnGuardAttemptAtMilliseconds: 1_000,
+            NowMilliseconds: 1_999);
+        True(
+            GuardRepeatProtectionRules.ShouldBlock(exactRepeat),
+            "manual or automatic Guard repeat is blocked before one second");
+        False(
+            GuardRepeatProtectionRules.ShouldBlock(
+                exactRepeat with { NowMilliseconds = 2_000 }),
+            "Guard repeat passes at the exact one-second boundary");
+        False(
+            GuardRepeatProtectionRules.ShouldBlock(
+                exactRepeat with { ExactGuardRequest = false }),
+            "a different action is never blocked by the repeat-only policy");
+        False(
+            GuardRepeatProtectionRules.ShouldBlock(
+                exactRepeat with { ExactLocalGuardActive = false }),
+            "a provisional or rejected request cannot create a phantom block");
+        False(
+            GuardRepeatProtectionRules.ShouldBlock(
+                exactRepeat with { ExactOwnGuardAttemptObserved = false }),
+            "missing exact own attempt fails open");
+        False(
+            GuardRepeatProtectionRules.ShouldBlock(
+                exactRepeat with { IsSupportedPvpContext = false }),
+            "unsupported context fails open");
+        False(
+            GuardRepeatProtectionRules.ShouldBlock(
+                exactRepeat with { RuntimeEnabled = false }),
+            "disabled runtime fails open");
+        False(
+            GuardRepeatProtectionRules.ShouldBlock(
+                exactRepeat with { NowMilliseconds = 999 }),
+            "clock rollback fails open");
+
+        var explicitRelease = AutoGuardProtectionRules.Observe(
             armed,
             ProtectionObservation(
                 local,
@@ -320,24 +361,8 @@ internal static class DefensiveUtilitySelfTests
                 actionCanCancelGuard: false,
                 now: 1_100,
                 explicitGuardReuse: true));
-        True(protectedReuse.ShouldBlockAction, "Guard reuse is suppressed in the two-second safety window");
-        True(protectedReuse.NextState.IsArmed, "protected Guard reuse retains ownership");
-        Equal(
-            AutoGuardProtectionDecisionReason.GuardReuseProtected,
-            protectedReuse.Reason,
-            "protected reuse reason");
-        Equal(1_900L, protectedReuse.RemainingMilliseconds, "reuse lock reports its exact remaining time");
-
-        var explicitRelease = AutoGuardProtectionRules.Observe(
-            protectedReuse.NextState,
-            ProtectionObservation(
-                local,
-                exactGuardActive: true,
-                actionCanCancelGuard: false,
-                now: 3_000,
-                explicitGuardReuse: true));
-        False(explicitRelease.ShouldBlockAction, "Guard reuse releases at the exact two-second boundary");
-        False(explicitRelease.NextState.IsArmed, "allowed Guard reuse atomically releases ownership");
+        False(explicitRelease.ShouldBlockAction, "the independent repeat gate owns the one-second block");
+        False(explicitRelease.NextState.IsArmed, "an allowed Guard reuse atomically releases automatic ownership");
         Equal(
             AutoGuardProtectionDecisionReason.ExplicitGuardReuse,
             explicitRelease.Reason,
