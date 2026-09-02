@@ -126,6 +126,31 @@ internal static class SmartActionContextSelfTests
     public static void NativeSelectedTargetCarrierRequiresResolvedHardTarget()
     {
         True(
+            SmartActionContextRules.IsEligibleExactVisibleWolvesDenTarget(
+                isPlayerCharacter: true,
+                hostileFlag: true,
+                exactVerifiedStrikingDummy: false),
+            "an exact hostile player hard target needs no duel-manager slot");
+        False(
+            SmartActionContextRules.IsEligibleExactVisibleWolvesDenTarget(
+                isPlayerCharacter: true,
+                hostileFlag: false,
+                exactVerifiedStrikingDummy: false),
+            "a non-hostile player cannot enter the direct Wolves' Den lane");
+        False(
+            SmartActionContextRules.IsEligibleExactVisibleWolvesDenTarget(
+                isPlayerCharacter: false,
+                hostileFlag: true,
+                exactVerifiedStrikingDummy: false),
+            "an unverified hostile non-player cannot enter the direct lane");
+        True(
+            SmartActionContextRules.IsEligibleExactVisibleWolvesDenTarget(
+                isPlayerCharacter: false,
+                hostileFlag: false,
+                exactVerifiedStrikingDummy: true),
+            "the separately verified exact dummy remains eligible");
+
+        True(
             SmartActionContextRules.IsExactCurrentTargetCarrier(
                 SupportedPvPContext.WolvesDen,
                 wolvesDenTestingEnabled: true,

@@ -21,15 +21,16 @@ public readonly record struct GuardRepeatProtectionObservation(
     bool IsSupportedPvpContext,
     bool ExactGuardRequest,
     bool ExactLocalGuardActive,
-    bool ExactOwnGuardAttemptObserved,
-    long OwnGuardAttemptAtMilliseconds,
+    bool ExactOwnGuardActivationObserved,
+    long OwnGuardActivatedAtMilliseconds,
     long NowMilliseconds);
 
 /// <summary>
 /// Suppresses only an exact second local Guard request during the first second
-/// after the original request crossed the native boundary and exact local
-/// Guard became visible. A provisional or ambiguous attempt always fails open;
-/// other actions are deliberately outside this policy.
+/// after exact local Guard first became visible for a recent hook-observed
+/// request. A provisional or ambiguous attempt always fails open; network/UI
+/// propagation can no longer consume part of the protection window. Other
+/// actions are deliberately outside this policy.
 /// </summary>
 public static class GuardRepeatProtectionRules
 {
@@ -41,10 +42,10 @@ public static class GuardRepeatProtectionRules
         observation.IsSupportedPvpContext &&
         observation.ExactGuardRequest &&
         observation.ExactLocalGuardActive &&
-        observation.ExactOwnGuardAttemptObserved &&
-        observation.OwnGuardAttemptAtMilliseconds >= 0 &&
-        observation.NowMilliseconds >= observation.OwnGuardAttemptAtMilliseconds &&
-        observation.NowMilliseconds - observation.OwnGuardAttemptAtMilliseconds <
+        observation.ExactOwnGuardActivationObserved &&
+        observation.OwnGuardActivatedAtMilliseconds >= 0 &&
+        observation.NowMilliseconds >= observation.OwnGuardActivatedAtMilliseconds &&
+        observation.NowMilliseconds - observation.OwnGuardActivatedAtMilliseconds <
             ProtectionMilliseconds;
 }
 

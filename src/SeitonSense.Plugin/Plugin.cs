@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.44.0.2";
+    private const string CurrentReleaseVersion = "0.44.0.3";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -462,10 +462,11 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Guard works normally again; repeat protection starts only after Guard is visibly active.",
-                "BRD Mannstopper avoids Chiten, Guard, Purify protection, Meikyo, and other real CC immunity.",
-                "Mannstopper may still target PLD or DRK damage-only invulnerability because their CC still works.",
-                "CC Win Prediction stays visible during preparation while the exact 5v5 roster loads.",
+                "Smart Action works in Wolves' Den duels again and uses your exact visible hostile target.",
+                "It no longer waits for an unreliable hidden duel slot before allowing the action.",
+                "Casts and instant attacks keep the same visible target; no automatic target switching was added in the Den.",
+                "Chiten, Guard, Cover, and invulnerability safety checks remain active.",
+                "Guard's repeat protection now starts when Guard is visible, so latency cannot shorten its full one-second window.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

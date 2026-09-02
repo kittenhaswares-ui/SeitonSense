@@ -5,8 +5,8 @@
     "Punchline": "PvP cues, Smart Tab, responsive helpers, and survival tools.",
     "Description": "A local PvP HUD with CC prediction and player history, nameplate cues, Limit Break alerts, pressure and CC information, Ping Helpers, medicine-kit beacons, range rings, a Wolves' Den map panel, recovery and job helpers, Smart Tab, assist macros, MP sounds, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.44.0.2",
-    "Changelog": "Hotfix: Guard can activate normally again. BRD Mannstopper now avoids Chiten and real CC immunity while allowing PLD/DRK damage-only invulnerability. CC Win Prediction stays visible during preparation while the exact roster loads. Automated checks are separate from live in-game confirmation.",
+    "AssemblyVersion": "0.44.0.3",
+    "Changelog": "Hotfix: Smart Action works in Wolves' Den duels again without depending on the unreliable hidden duel slot. Guard repeat protection now starts when Guard is visibly active, so network/UI delay cannot shorten its full one-second window. Existing target and protection checks stay intact. Automated checks are separate from live in-game confirmation.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -36,6 +36,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1788373259"
+    "LastUpdate": "1788374918"
   }
 ]

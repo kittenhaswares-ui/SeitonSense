@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.44.0.3
+
+- Fixed `/smartaction` doing nothing in Wolves' Den duels when the client did
+  not expose its optional hidden duel-opponent slot.
+- The Den path now proves only the exact visible native hard target: a live,
+  targetable hostile player with matching object/entity identity, or the
+  separately verified striking dummy. It never selects another target.
+- Both instant actions and casts use this same exact-target path. Chiten, Guard,
+  Cover, invulnerability, range, line-of-sight, target stability, and the Den
+  testing toggle remain required.
+- Guard repeat protection now starts at the first exact live Guard frame rather
+  than at the earlier request. A failed or ambiguous first press still cannot
+  be blocked, while status propagation no longer consumes part of the full
+  one-second protection window after Guard actually activates.
+- Automated checks remain separate from live in-game confirmation.
+
 ## 0.44.0.2
 
 - Fixed Guard being swallowed by its own one-second repeat protection. An

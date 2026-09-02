@@ -3,7 +3,17 @@
 Seiton Sense is a local PvP awareness HUD with pressure tracking, nameplate
 cues, warnings, job helpers, Smart Action, and target highlights.
 
-Version 0.44.0.2 fixes a Guard regression: the one-second repeat protection now
+Version 0.44.0.3 fixes **Smart Action in Wolves' Den duels**. It now proves the
+exact visible hostile `<t>` directly instead of depending on a hidden duel slot
+that is not present on every valid frame. It does not select another Den target
+or write target/facing state. Instant attacks and casts keep the same Chiten,
+Guard, Cover, invulnerability, range, and line-of-sight checks. Guard repeat
+protection now starts on the first confirmed live Guard frame instead of the
+earlier request, so network/UI propagation cannot shorten its full one-second
+window. Before Guard is visible, a failed or ambiguous first press remains free
+to retry.
+
+Version 0.44.0.2 fixed a Guard regression: the one-second repeat protection now
 starts only after Guard is visibly active, so an uncertain first attempt cannot
 block the retry that actually activates it. BRD **Mannstopper** keeps Smart
 Action ranking but avoids Chiten, Guard, Purify protection, Meikyo, Paean, and

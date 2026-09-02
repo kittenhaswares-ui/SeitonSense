@@ -1791,6 +1791,8 @@ if ($smartTabConfiguration -notmatch '(?m)^\s*public bool EnableSmartTabTargetin
 $normalizedNearAssistForSmartAction = (Read-RequiredSource $nearAssistPath 'Smart Action shared redirector') -replace '\s+', ' '
 $smartActionContextRules = Read-RequiredSource $smartActionContextRulesPath 'Smart Action closed context rules'
 $smartActionContextSelfTests = Read-RequiredSource $smartActionContextSelfTestsPath 'Smart Action context self-tests'
+$smartActionWolvesDenTargetResolver = Read-RequiredSource $darkKnightWolvesDenCurrentTargetResolverPath 'Smart Action Wolves Den exact-target resolver'
+$normalizedSmartActionWolvesDenTargetResolver = $smartActionWolvesDenTargetResolver -replace '\s+', ' '
 Assert-Literals $smartActionContextRules @(
     'public static bool IsSupported(',
     'context == SupportedPvPContext.CrystallineConflict ||',
@@ -1799,6 +1801,8 @@ Assert-Literals $smartActionContextRules @(
     'context == SupportedPvPContext.CrystallineConflict;',
     'public const ulong NativeSelectedTargetSentinel = 0xE0000000UL;',
     'public static bool IsNativeSelectedTargetCarrier(ulong targetId)',
+    'public static bool IsEligibleExactVisibleWolvesDenTarget(',
+    'exactVerifiedStrikingDummy || isPlayerCharacter && hostileFlag;',
     'public static bool CanUseExactVisibleTargetTestFallback(',
     'combatPriorityMode;',
     'public static bool CanInspectExactVisibleTargetTestFallback(',
@@ -1835,6 +1839,25 @@ foreach ($test in @(
 }
 if ([regex]::Matches($smartActionContextSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 5) {
     throw 'Exactly five Smart Action context regressions must remain implemented.'
+}
+Assert-Literals $smartActionContextSelfTests @(
+    'an exact hostile player hard target needs no duel-manager slot',
+    'a non-hostile player cannot enter the direct Wolves'' Den lane',
+    'an unverified hostile non-player cannot enter the direct lane',
+    'the separately verified exact dummy remains eligible'
+) 'Direct Wolves Den visible-target admission regression assertions'
+$directWolvesDenTargetResolver = [regex]::Match(
+    $normalizedSmartActionWolvesDenTargetResolver,
+    'internal static bool TryResolveExactCurrentHardTargetDirect\(.*?internal static bool TryResolveExactCurrentHardTarget\(')
+if (!$directWolvesDenTargetResolver.Success -or
+    $directWolvesDenTargetResolver.Value -match '\b(?:WolvesDenOpponentResolver|PvPDuelManager)\b' -or
+    $directWolvesDenTargetResolver.Value -notmatch 'StrictWolvesDenStrikingDummyResolver\.TryResolveExactCurrentHardTarget\(' -or
+    $directWolvesDenTargetResolver.Value -notmatch 'SmartActionContextRules\.IsEligibleExactVisibleWolvesDenTarget\(' -or
+    $directWolvesDenTargetResolver.Value -notmatch 'nativeHardTargetId = GetNativeHardTargetId\(localPlayer!\);.*?objectTable\.SearchById\(nativeHardTargetId\).*?objectTable\.SearchByEntityId\(\(uint\)nativeHardTargetId\).*?!HasSameNativeIdentity\(byObjectId, byEntityId\)' -or
+    $directWolvesDenTargetResolver.Value -notmatch 'candidate\.StatusFlags & StatusFlags\.Hostile.*?!ActorIdMatches\(nativeHardTargetId, candidate!\).*?HasSameNativeIdentity\(localPlayer, candidate\).*?!IsLiveTargetablePlayer\(localPlayer!, candidate!\)' -or
+    $directWolvesDenTargetResolver.Value -notmatch 'objectTable\.SearchById\(candidate!\.GameObjectId\).*?objectTable\.SearchByEntityId\(candidate\.EntityId\).*?!HasSameNativeIdentity\(candidate, canonicalByObjectId\).*?!HasSameNativeIdentity\(candidate, canonicalByEntityId\).*?GetNativeHardTargetId\(localPlayer!\) != nativeHardTargetId.*?!IsLiveTargetablePlayer\(localPlayer!, candidate\)' -or
+    $directWolvesDenTargetResolver.Value -notmatch 'new TargetPressureActorIdentity\( candidate\.GameObjectId, candidate\.EntityId\).*?kind = DarkKnightWolvesDenTargetKind\.DuelOpponent; return true;') {
+    throw 'Wolves Den Smart Action must resolve only the exact stable native hard target or verified dummy, without depending on the optional duel-manager enemy slot.'
 }
 $smartActionArmMethod = [regex]::Match(
     $normalizedNearAssistForSmartAction,
@@ -2220,7 +2243,7 @@ if ([regex]::Matches($normalizedSmartActionRuntime, 'SmartActionProtectionRules\
     $normalizedSmartActionRuntime -notmatch 'private bool ShouldVetoExactAutomaticSmartActionAtFinalBoundary\(.*?scope\.Intent\.RequiresSmartActionProtectionRecheck.*?TryValidateExactHeldSmartActionTarget\( actionId, targetId, expectedSlot: 0, expectedTarget: default, out _, out _\).*?context != SupportedPvPContext\.WolvesDen.*?actionId != BardRepellingShotRules\.RepellingShotActionId.*?DarkKnightWolvesDenCurrentTargetResolver\.TryResolveExactCurrentHardTarget\(.*?IsExactCrowdControlUtilityTargetStatusSafe\(actionId, player\).*?protectionKind & ~SmartActionProtectionKind\.Invulnerability' -or
     $normalizedSmartActionRuntime -notmatch 'forwardedTargetId = TryResolveSmartTargetRedirect\( thisPtr, actionType, actionId, mode, targetId, smartToken, heldActionSelection: false, out var rewritten, out var smartWinnerSelected, out var selectedSlot, out var reason\);.*?useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId,' -or
     $normalizedSmartActionRuntime -notmatch 'private ulong TryResolveSmartTargetRedirect\(.*?bool heldActionSelection, out bool rewritten, out bool smartWinnerSelected,.*?smartWinnerSelected = true;.*?var frozenIntentStillValid = spatialChaseSelection.*?if \(!frozenIntentStillValid\).*?rewritten = true; selectedSlot = intent\.EnemySlot;.*?return intent\.Target\.GameObjectId;' -or
-    $normalizedSmartActionRuntime -notmatch 'private bool TryEvaluateExactSmartActionTargetProtection\(.*?if \(context == SupportedPvPContext\.CrystallineConflict\).*?exactMatches\.Length != 1.*?IsSmartActionProtectionSafe\(.*?canonicalTargetId = target\.Player\.GameObjectId;.*?SmartActionContextRules\.CanInspectExactVisibleTargetTestFallback\( context, configuration\.EnableWolvesDenTesting, combatPriorityMode: true, attackShape\).*?TryResolveExactCurrentHardTarget\(.*?TryBuildWolvesDenSmartActionProtectionSnapshot\( localPlayer, wolvesTarget, targetGeometry, attackShape, protectionKind, out var wolvesProtectedActors\).*?IsSmartActionProtectionSafe\(' -or
+    $normalizedSmartActionRuntime -notmatch 'private bool TryEvaluateExactSmartActionTargetProtection\(.*?if \(context == SupportedPvPContext\.CrystallineConflict\).*?exactMatches\.Length != 1.*?IsSmartActionProtectionSafe\(.*?canonicalTargetId = target\.Player\.GameObjectId;.*?SmartActionContextRules\.CanInspectExactVisibleTargetTestFallback\( context, configuration\.EnableWolvesDenTesting, combatPriorityMode: true, attackShape\).*?TryResolveExactCurrentHardTargetDirect\(.*?TryBuildWolvesDenSmartActionProtectionSnapshot\( localPlayer, wolvesTarget, targetGeometry, attackShape, protectionKind, out var wolvesProtectedActors\).*?IsSmartActionProtectionSafe\(' -or
     $normalizedSmartActionRuntime -notmatch 'private bool TryBuildWolvesDenSmartActionProtectionSnapshot\(.*?SmartActionProtectionRules\.RequiresCompleteHostileSnapshot\(attackShape\).*?player\.StatusFlags & StatusFlags\.Hostile.*?status\.StatusId != SmartActionProtectionRules\.ChitenStatusId.*?nextSyntheticSlot > EnemySlotRules\.LastSlot.*?protectedActors = protections\.ToArray\(\); return true;' -or
     $normalizedSmartActionRuntime -notmatch '\$"\{displayName\} arm failed closed: protection metadata unverified"') {
     throw 'Smart Action must replace its target only after candidate-local protection proof, retain conservative Chiten completeness for area/unknown shapes, permit only reviewed movement actions through Guard, exclude unverified SAM conservatively, and revalidate the one frozen actor without reranking.'
@@ -7113,7 +7136,8 @@ Assert-Literals $autoGuardProtectionRules @(
     'ProtectionMilliseconds = 1_000',
     'ExactGuardRequest',
     'ExactLocalGuardActive',
-    'ExactOwnGuardAttemptObserved',
+    'ExactOwnGuardActivationObserved',
+    'OwnGuardActivatedAtMilliseconds',
     'MaximumOwnedDurationMilliseconds = 6_000',
     'CanArmFromConfirmedAttempt(',
     'bool exactGuardActive)',
@@ -7143,9 +7167,9 @@ Assert-Literals $settingsActions @(
     "Auto-Guard's separate protection from other actions."
 ) 'Visible independent Guard repeat-protection setting and scope copy'
 if ($autoGuardProtectionRules -match '\b(?:UseAction|UseActionLocation|ActionManager|IPlayerCharacter|HookFromAddress|ITargetManager|TargetManager|SetTarget|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b' -or
-    $normalizedAutoGuardProtectionRules -notmatch 'public static bool ShouldBlock\(GuardRepeatProtectionObservation observation\) => observation\.RuntimeEnabled && observation\.IsSupportedPvpContext && observation\.ExactGuardRequest && observation\.ExactLocalGuardActive && observation\.ExactOwnGuardAttemptObserved && observation\.OwnGuardAttemptAtMilliseconds >= 0 && observation\.NowMilliseconds >= observation\.OwnGuardAttemptAtMilliseconds && observation\.NowMilliseconds - observation\.OwnGuardAttemptAtMilliseconds < ProtectionMilliseconds;' -or
+    $normalizedAutoGuardProtectionRules -notmatch 'public static bool ShouldBlock\(GuardRepeatProtectionObservation observation\) => observation\.RuntimeEnabled && observation\.IsSupportedPvpContext && observation\.ExactGuardRequest && observation\.ExactLocalGuardActive && observation\.ExactOwnGuardActivationObserved && observation\.OwnGuardActivatedAtMilliseconds >= 0 && observation\.NowMilliseconds >= observation\.OwnGuardActivatedAtMilliseconds && observation\.NowMilliseconds - observation\.OwnGuardActivatedAtMilliseconds < ProtectionMilliseconds;' -or
     $normalizedAutoGuardProtectionRules -notmatch 'if \(!previous\.IsArmed\).*?if \(observation\.HardReset\).*?if \(observation\.NowMilliseconds < 0 \|\| observation\.NowMilliseconds < previous\.ConfirmedAtMilliseconds\).*?if \(!observation\.RuntimeEnabled\).*?if \(observation\.TerritoryId != previous\.TerritoryId\).*?if \(!observation\.LocalPlayerLive\).*?if \(observation\.LocalPlayer != previous\.LocalPlayer\).*?if \(observation\.NowMilliseconds >= previous\.MaximumExpiresAtMilliseconds\).*?if \(!observation\.ExactGuardActive\).*?if \(observation\.IsExplicitGuardReuse\) return Released\(AutoGuardProtectionDecisionReason\.ExplicitGuardReuse\);.*?observation\.ActionCanCancelGuard') {
-    throw 'Guard-repeat Core must fail open for provisional or ambiguous attempts and block only exact own Guard reuse while the real Guard status is visibly active; Auto-Guard ownership remains pure and bounded.'
+    throw 'Guard-repeat Core must fail open for provisional or ambiguous attempts and block only exact own Guard reuse for one second from confirmed visible activation; Auto-Guard ownership remains pure and bounded.'
 }
 $autoGuardProtectionTestMethods = @(
     'AutoGuardProtectionOwnershipRequiresTheExactConfirmedAttempt',
@@ -7220,6 +7244,10 @@ Assert-Literals $nearAssistAutoGuard @(
     'ShouldBlockRecentOwnGuardRepeatPress(',
     'configuration.ProtectOwnGuardFromRepeatPress',
     'GuardRepeatProtectionRules.ProtectionMilliseconds',
+    'TryGetRecentExactLocalGuardActivation(',
+    'UpdateGuardRepeatProtectionLifecycle(Environment.TickCount64);',
+    'GuardActivatedAtMilliseconds: -1',
+    'GuardActivatedAtMilliseconds = now',
     'ClearAutoGuardProtection("Action classification failed open")',
     'ClearAutoGuardProtection("Released: explicit Panic Shukuchi command override")',
     'ClearAutoGuardProtection("Released: explicit camera-back dash command override")'
@@ -7232,11 +7260,16 @@ if ($normalizedNearAssistAutoGuard -notmatch 'internal bool CanProtectAutomaticG
     $normalizedNearAssistAutoGuard -notmatch 'private bool UseActionDetour\(.*?var bypassRedirect = internalRedirectBypassDepth > 0;.*?ShouldBlockRecentOwnGuardRepeatPress\(thisPtr, actionType, actionId\).*?if \(TryConsumeExplicitAutoGuardBreak\( actionType, actionId, ExplicitAutoGuardBreakBoundary\.StandardAction\)\).*?ClearAutoGuardProtection\("Released: explicit camera-back dash command override"\);.*?else if \(TryBlockOwnedAutoGuardCancellation\(thisPtr, actionType, actionId\)\).*?return false;.*?var forwardedTargetId' -or
     $normalizedNearAssistAutoGuard -notmatch 'private bool UseActionLocationDetour\(.*?var bypassRedirect = internalRedirectBypassDepth > 0; if \(actionBarActivitySuppressionDepth == 0 && actionType is \(ActionType\.Action or ActionType\.PvPAction\)\) \{ RecordActionBarActivity\(\); \}.*?if \(!bypassRedirect && integratedInputRuntime is \{ \} integratedRuntime && actionType is \(ActionType\.Action or ActionType\.PvPAction\)\) \{ integratedRuntime\.ActionBuffer\.Cancel\( SmartActionBufferCancelReason\.Replaced, "Replaced by a newer external location action request"\); \}.*?ShouldBlockRecentOwnGuardRepeatPress\(thisPtr, actionType, actionId\).*?if \(TryConsumeExplicitAutoGuardBreak\( actionType, actionId, ExplicitAutoGuardBreakBoundary\.LocationAction\)\).*?ClearAutoGuardProtection\("Released: explicit Panic Shukuchi command override"\);.*?else if \(TryBlockOwnedAutoGuardCancellation\(thisPtr, actionType, actionId\)\).*?return false;.*?return useActionLocationHook!\.Original' -or
     [regex]::Matches($nearAssistAutoGuard, '\bconfiguration\.ProtectOwnGuardFromRepeatPress\b').Count -ne 1 -or
-    $normalizedNearAssistAutoGuard -notmatch 'private bool ShouldBlockRecentOwnGuardRepeatPress\( ActionManager\* actionManager, ActionType actionType, uint actionId\).*?var exactGuardRequest = supportedActionType && \(actionId == EnemyCombatConstants\.GuardActionId \|\| resolvedActionId == EnemyCombatConstants\.GuardActionId\);.*?exactLocalGuardActive = localLive && HasActiveGuardStatus\(local!\);.*?TryGetRecentExactLocalGuardAttempt\( clientState\.TerritoryType, local!\.GameObjectId, local\.EntityId, now, GuardRepeatProtectionRules\.ProtectionMilliseconds, out attemptAt\);.*?GuardRepeatProtectionRules\.ShouldBlock\( new GuardRepeatProtectionObservation\( configuration\.Enabled && configuration\.ProtectOwnGuardFromRepeatPress && clientState\.IsLoggedIn,' -or
+    $normalizedNearAssistAutoGuard -notmatch 'private bool ShouldBlockRecentOwnGuardRepeatPress\( ActionManager\* actionManager, ActionType actionType, uint actionId\).*?var exactGuardRequest = supportedActionType && \(actionId == EnemyCombatConstants\.GuardActionId \|\| resolvedActionId == EnemyCombatConstants\.GuardActionId\);.*?exactLocalGuardActive = localLive && HasActiveGuardStatus\(local!\); var now = Environment\.TickCount64; if \(exactLocalGuardActive\) UpdateGuardRepeatProtectionLifecycle\(now\);.*?TryGetRecentExactLocalGuardActivation\( clientState\.TerritoryType, local!\.GameObjectId, local\.EntityId, now, out activatedAt\);.*?if \(!exactActivationObserved\) activatedAt = -1;.*?GuardRepeatProtectionRules\.ShouldBlock\( new GuardRepeatProtectionObservation\( configuration\.Enabled && configuration\.ProtectOwnGuardFromRepeatPress && clientState\.IsLoggedIn, context != SupportedPvPContext\.None, exactGuardRequest, exactLocalGuardActive, exactActivationObserved, activatedAt, now\)\);' -or
     $normalizedNearAssistAutoGuard -notmatch 'private bool TryConsumeExplicitAutoGuardBreak\( ActionType actionType, uint actionId, ExplicitAutoGuardBreakBoundary boundary\).*?var scope = Volatile\.Read\(ref explicitAutoGuardBreakScope\); if \(scope is null \|\| !ReferenceEquals\(scope\.Owner, this\) \|\| scope\.ManagedThreadId != Environment\.CurrentManagedThreadId \|\| scope\.Boundary != boundary \|\| actionType != ActionType\.Action \|\| actionId != scope\.ExpectedActionId \|\| !scope\.TryConsume\(\)\).*?return false;.*?return ReferenceEquals\( Interlocked\.CompareExchange\( ref explicitAutoGuardBreakScope, value: null, comparand: scope\), scope\);' -or
     $normalizedNearAssistAutoGuard -notmatch 'private static bool IsSupportedActionType\(ActionType actionType\) => actionType is ActionType\.Action or ActionType\.PvPAction;' -or
     $normalizedNearAssistAutoGuard -notmatch 'var explicitGuardReuse = supportedActionType && \(actionId == EnemyCombatConstants\.GuardActionId \|\| resolvedActionId == EnemyCombatConstants\.GuardActionId\);.*?var actionCanCancelGuard = supportedActionType && resolvedActionId != 0 && TryGetActionMetadata\(.*?action\.IsPvP && !explicitGuardReuse;.*?ApplyAutoGuardProtectionObservation') {
     throw 'Both central action boundaries must retire older tap intent and record external player activity before any owned-Guard veto, allow raw/resolved Guard reuse, cover location calls, and fail open for unknown or non-PvP actions.'
+}
+if ($normalizedNearAssistAutoGuard -notmatch 'private bool TryGetRecentExactLocalGuardActivation\( uint territoryId, ulong localGameObjectId, uint localEntityId, long nowMilliseconds, out long activatedAtMilliseconds\).*?activatedAtMilliseconds = -1; if \(nowMilliseconds < 0 \|\| !IsNetworkObjectId\(localGameObjectId\) \|\| !IsNetworkEntityId\(localEntityId\)\).*?lock \(guardAttemptGate\).*?latestLocalGuardActionAttempt is not \{ \} attempt \|\| attempt\.TerritoryId != territoryId \|\| attempt\.LocalGameObjectId != localGameObjectId \|\| attempt\.LocalEntityId != localEntityId \|\| attempt\.GuardActivatedAtMilliseconds < 0 \|\| attempt\.GuardActivatedAtMilliseconds > nowMilliseconds \|\| nowMilliseconds - attempt\.GuardActivatedAtMilliseconds >= GuardRepeatProtectionRules\.ProtectionMilliseconds.*?activatedAtMilliseconds = attempt\.GuardActivatedAtMilliseconds; return true;' -or
+    $normalizedNearAssistAutoGuard -notmatch 'private void UpdateGuardRepeatProtectionLifecycle\(long now\).*?var local = objectTable\.LocalPlayer; if \(now < 0 \|\| !IsLivePlayer\(local\) \|\| !HasActiveGuardStatus\(local!\)\).*?lock \(guardAttemptGate\).*?latestLocalGuardActionAttempt is not \{ \} attempt \|\| attempt\.GuardActivatedAtMilliseconds >= 0 \|\| attempt\.TerritoryId != clientState\.TerritoryType \|\| attempt\.LocalGameObjectId != local!\.GameObjectId \|\| attempt\.LocalEntityId != local\.EntityId \|\| attempt\.ObservedAtMilliseconds < 0 \|\| attempt\.ObservedAtMilliseconds > now \|\| now - attempt\.ObservedAtMilliseconds >= DefensiveUtilityRules\.GuardPropagationLatchMilliseconds.*?latestLocalGuardActionAttempt = attempt with \{ GuardActivatedAtMilliseconds = now, \};' -or
+    $normalizedNearAssistAutoGuard -notmatch 'private void OnFrameworkUpdate\(IFramework _\).*?UpdateGuardRepeatProtectionLifecycle\(Environment\.TickCount64\);.*?UpdateAutoGuardProtectionLifecycle\(\);') {
+    throw 'Guard repeat protection must confirm only the same live local identity and territory within the bounded propagation latch, write the first visible activation once, poll it every framework frame, and expose it for exactly the remaining one-second activation window.'
 }
 $runWithoutRedirectRegion = [regex]::Match(
     $normalizedNearAssistAutoGuard,
@@ -8963,6 +8996,7 @@ Assert-Literals $nearAssist @(
     'HookFromAddress<ActionManager.Delegates.UseAction>',
     'ActionManager.MemberFunctionPointers.UseAction',
     'TryGetRecentExactLocalGuardAttempt(',
+    'TryGetRecentExactLocalGuardActivation(',
     'var localGuardBoundary = ObserveExactLocalGuardActivationAttempt(',
     'ResolveActionId(actionManager, actionType, actionId) !=',
     'EnemyCombatConstants.GuardActionId',
@@ -8970,6 +9004,7 @@ Assert-Literals $nearAssist @(
     'clientState.TerritoryType',
     'local!.GameObjectId',
     'local.EntityId',
+    'long GuardActivatedAtMilliseconds,',
     'NearAssistOneShotRules.Arm',
     'NearAssistOneShotRules.ArmFallback',
     'NearAssistOneShotRules.Observe',
@@ -9042,9 +9077,14 @@ if ($normalizedCastedMacroRedirectRules -notmatch
 Assert-Literals $defensiveUtilitySelfTests @(
     'new GuardRepeatProtectionObservation(',
     'NowMilliseconds = 2_000',
+    'NowMilliseconds = 2_250',
     'ExactGuardRequest = false',
     'ExactLocalGuardActive = false',
-    'ExactOwnGuardAttemptObserved = false',
+    'ExactOwnGuardActivationObserved = false',
+    'OwnGuardActivatedAtMilliseconds: -1',
+    'request-to-status propagation does not shorten the confirmed window',
+    'confirmed Guard gets a full second independent of request propagation',
+    'status alone cannot borrow an unconfirmed local request',
     'IsSupportedPvpContext = false',
     'RuntimeEnabled = false',
     'clock rollback fails open'
@@ -9213,8 +9253,8 @@ if ([regex]::Matches($nearAssist, '\bTryConsumeCastedMacroRedirect\s*\(').Count 
     $normalizedNearAssist -notmatch
         'if \(CastedMacroRedirectRules\.ShouldContinueThroughTargetRanking\(decision\)\) \{ if \(decision == CastedMacroRedirectDecision\.RedirectNearHelpCast\) continuingNearHelpCastClaim = claim; return decision; \} if \(!TryConsumeCastedMacroRedirectClaim\(claim, decision\)\) return CastedMacroRedirectDecision\.SuppressStaleOwnership;.*?consumedSmartActionToken = claim\.SmartTarget;.*?return decision;' -or
     $normalizedNearAssist -notmatch
-        'private bool IsExactCurrentHardTarget\(.*?var incomingIsNativeSelectedTargetCarrier = SmartActionContextRules\.IsNativeSelectedTargetCarrier\(authoredTargetId\);.*?SmartActionContextRules\.CanUseExactVisibleTargetTestFallback\( ResolveContext\(\), configuration\.EnableWolvesDenTesting, combatPriorityMode: true\);.*?TryResolveExactCurrentHardTarget\( objectTable, wolvesDenStrikingDummyMetadataVerified, local, out _, out _, out _, out var exactNativeHardTargetId\).*?exactNativeHardTargetId == hardTargetId;.*?SmartActionContextRules\.IsExactCurrentTargetCarrier\( ResolveContext\(\), configuration\.EnableWolvesDenTesting, combatPriorityMode: true, incomingIsNativeSelectedTargetCarrier: true, exactNativeHardTargetResolved: exactWolvesDenHardTargetResolved, explicitTargetMatchesNativeHardTarget: false\);.*?if \(!IsNetworkObjectId\(authoredTargetId\)\) return false;.*?if \(hardTargetId == authoredTargetId\) return true;.*?SmartActionContextRules\.IsExactCurrentTargetCarrier\( ResolveContext\(\), configuration\.EnableWolvesDenTesting, combatPriorityMode: true, incomingIsNativeSelectedTargetCarrier: false, exactNativeHardTargetResolved: hardTarget is not null, explicitTargetMatchesNativeHardTarget: HasSameNativeIdentity\(hardTarget, authoredTarget\)\)') {
-    throw 'Casted macro actions must let exact Smart Action-owned hostile PvP casts and Near Help-owned friendly PvP casts continue into their normal ranking, retain authored-target anti-spin for Near Assist, validate and consume only the exact live route-owned generation, preserve newer arms, resolve the native Wolves Den zero/default selected-target carrier only through one exact current duel/dummy hard target, preserve exact explicit-target identity, and leave instant redirects unchanged.'
+        'private bool IsExactCurrentHardTarget\(.*?var incomingIsNativeSelectedTargetCarrier = SmartActionContextRules\.IsNativeSelectedTargetCarrier\(authoredTargetId\);.*?SmartActionContextRules\.CanUseExactVisibleTargetTestFallback\( ResolveContext\(\), configuration\.EnableWolvesDenTesting, combatPriorityMode: true\);.*?TryResolveExactCurrentHardTargetDirect\( objectTable, wolvesDenStrikingDummyMetadataVerified, local, out _, out _, out _, out var exactNativeHardTargetId\).*?exactNativeHardTargetId == hardTargetId;.*?SmartActionContextRules\.IsExactCurrentTargetCarrier\( ResolveContext\(\), configuration\.EnableWolvesDenTesting, combatPriorityMode: true, incomingIsNativeSelectedTargetCarrier: true, exactNativeHardTargetResolved: exactWolvesDenHardTargetResolved, explicitTargetMatchesNativeHardTarget: false\);.*?if \(!IsNetworkObjectId\(authoredTargetId\)\) return false;.*?if \(hardTargetId == authoredTargetId\) return true;.*?SmartActionContextRules\.IsExactCurrentTargetCarrier\( ResolveContext\(\), configuration\.EnableWolvesDenTesting, combatPriorityMode: true, incomingIsNativeSelectedTargetCarrier: false, exactNativeHardTargetResolved: hardTarget is not null, explicitTargetMatchesNativeHardTarget: HasSameNativeIdentity\(hardTarget, authoredTarget\)\)') {
+    throw 'Casted macro actions must let exact Smart Action-owned hostile PvP casts and Near Help-owned friendly PvP casts continue into their normal ranking, retain authored-target anti-spin for Near Assist, validate and consume only the exact live route-owned generation, preserve newer arms, resolve the native Wolves Den zero/default selected-target carrier only through one exact direct hostile hard target or reviewed dummy, preserve exact explicit-target identity, and leave instant redirects unchanged.'
 }
 Assert-Literals $nearAssistOneShotSelfTests @(
     '"adjusted cast keeps authored target"',
@@ -9324,11 +9364,16 @@ if ($normalizedUseActionDetour -notmatch 'var localGuardBoundary = ObserveExactL
     $normalizedUseActionDetour -notmatch 'catch \{ integratedRuntime\?\.ActionBuffer\.AbandonExactStandardHotbarRoot\( integratedAttempt, "Native action boundary threw; buffer observation retired"\); throw; \}' -or
     $normalizedUseActionDetour -notmatch 'if \(localGuardBoundary\.IsObserved\).*?ClientActionAttemptBoundaryRules\.Classify\( clientAccepted, EnemyCombatConstants\.GuardActionId, localGuardBoundary\.BoundaryBefore, ClientActionAttemptBoundary\.Capture\( thisPtr, EnemyCombatConstants\.GuardActionId\)\);.*?TryRetractClientRejectedLocalGuardAttempt\( localGuardBoundary\.LocalGameObjectId, localGuardBoundary\.LocalEntityId, localGuardBoundary\.GenerationBeforeCall, localGuardBoundary\.PreviousAttempt\);' -or
     $normalizedUseActionDetour -notmatch 'CompleteExactStandardHotbarRoot\( thisPtr, integratedAttempt, clientAccepted\);.*?ClearSmartActionSafetyLease\(\);.*?smartWardensPaean\.RecordNativeResult\(smartPaeanResult, clientAccepted\);.*?ArmAcceptedSmartKardiaTrigger\(smartKardiaPreflight\); return clientAccepted;' -or
-    $normalizedGuardAttemptObserver -notmatch 'ResolveActionId\(actionManager, actionType, actionId\) != EnemyCombatConstants\.GuardActionId.*?var local = objectTable\.LocalPlayer; if \(!IsLivePlayer\(local\) \|\| DefensiveUtilityProbe\.HasActiveGuard\(local\)\) return default; var boundaryBefore = ClientActionAttemptBoundary\.Capture\( actionManager, EnemyCombatConstants\.GuardActionId\); if \(!boundaryBefore\.Captured\) return default; var attempt = new LocalGuardActionAttempt\( clientState\.TerritoryType, local!\.GameObjectId, local\.EntityId, Environment\.TickCount64, 0\); lock \(guardAttemptGate\).*?var generationBeforeCall = localGuardActionAttemptGeneration; var previousAttempt = latestLocalGuardActionAttempt; localGuardActionAttemptGeneration = localGuardActionAttemptGeneration == long\.MaxValue \? 1 : localGuardActionAttemptGeneration \+ 1; latestLocalGuardActionAttempt = attempt with \{ Generation = localGuardActionAttemptGeneration, \}; return new LocalGuardActionBoundaryObservation\( local\.GameObjectId, local\.EntityId, generationBeforeCall, previousAttempt, boundaryBefore\);' -or
+    $normalizedGuardAttemptObserver -notmatch 'ResolveActionId\(actionManager, actionType, actionId\) != EnemyCombatConstants\.GuardActionId.*?var local = objectTable\.LocalPlayer; if \(!IsLivePlayer\(local\) \|\| DefensiveUtilityProbe\.HasActiveGuard\(local\)\) return default; var boundaryBefore = ClientActionAttemptBoundary\.Capture\( actionManager, EnemyCombatConstants\.GuardActionId\); if \(!boundaryBefore\.Captured\) return default; var attempt = new LocalGuardActionAttempt\( clientState\.TerritoryType, local!\.GameObjectId, local\.EntityId, Environment\.TickCount64, GuardActivatedAtMilliseconds: -1, Generation: 0\); lock \(guardAttemptGate\).*?var generationBeforeCall = localGuardActionAttemptGeneration; var previousAttempt = latestLocalGuardActionAttempt; localGuardActionAttemptGeneration = localGuardActionAttemptGeneration == long\.MaxValue \? 1 : localGuardActionAttemptGeneration \+ 1; latestLocalGuardActionAttempt = attempt with \{ Generation = localGuardActionAttemptGeneration, \}; return new LocalGuardActionBoundaryObservation\( local\.GameObjectId, local\.EntityId, generationBeforeCall, previousAttempt, boundaryBefore\);' -or
     $normalizedNearAssist -notmatch 'private bool TryRetractClientRejectedLocalGuardAttempt\( ulong localGameObjectId, uint localEntityId, long generationBeforeCall, LocalGuardActionAttempt\? previousAttempt\).*?latestLocalGuardActionAttempt = RestorePreviousLocalGuardAttempt\( previousAttempt, attempt\.TerritoryId, localGameObjectId, localEntityId\); return true;.*?internal static LocalGuardActionAttempt\? RestorePreviousLocalGuardAttempt\( LocalGuardActionAttempt\? previousAttempt, uint territoryId, ulong localGameObjectId, uint localEntityId\).*?previous\.Generation > 0 && previous\.ObservedAtMilliseconds >= 0 && previous\.TerritoryId == territoryId && previous\.LocalGameObjectId == localGameObjectId && previous\.LocalEntityId == localEntityId \? previous : null;' -or
     $normalizedNearAssist -notmatch 'TryGetRecentExactLocalGuardAttempt\( uint territoryId, ulong localGameObjectId, uint localEntityId, long nowMilliseconds, long maximumAgeMilliseconds, out long observedAtMilliseconds\).*?attempt\.TerritoryId != territoryId \|\| attempt\.LocalGameObjectId != localGameObjectId \|\| attempt\.LocalEntityId != localEntityId.*?nowMilliseconds - attempt\.ObservedAtMilliseconds >= maximumAgeMilliseconds.*?observedAtMilliseconds = attempt\.ObservedAtMilliseconds; return true;') {
-    throw 'The detour must observe exact Guard 29054 immediately before its sole Original, restore the exact prior attempt after a clean rejected spam press, and expose it only to the same live local identity in the same territory within the bounded age.'
+    throw 'The detour must observe exact Guard 29054 immediately before its sole Original, initialize the six-field attempt without an activation timestamp, restore the exact prior attempt after a clean rejected spam press, and expose it only to the same live local identity in the same territory within the bounded age.'
 }
+Assert-Literals $pluginPersistenceSelfTests @(
+    'GuardActivatedAtMilliseconds: 1_150',
+    'afterSecondPress is { GuardActivatedAtMilliseconds: 1_150 }',
+    'second rejected press preserves the original activation timestamp'
+) 'Rejected Guard spam preserves the original confirmed activation timestamp'
 if (-not $guardStateObserverMatch.Success -or
     ($guardStateObserverMatch.Value -replace '\s+', ' ') -notmatch 'var local = objectTable\.LocalPlayer; if \(!IsLivePlayer\(local\)\) return false; if \(DefensiveUtilityProbe\.HasActiveGuard\(local\)\) return true; return TryGetRecentExactLocalGuardAttempt\( clientState\.TerritoryType, local!\.GameObjectId, local\.EntityId, Environment\.TickCount64, DefensiveUtilityRules\.GuardPropagationLatchMilliseconds, out _\);.*?catch.*?return true;') {
     throw 'Smart Paean own-Guard suppression must use exact live Guard or the bounded same-identity/territory propagation latch and fail closed on an uncertain Guard view.'
@@ -12203,17 +12248,18 @@ $whatsNewWindow = Read-RequiredSource $whatsNewWindowPath 'What''s New window'
 $releaseNotesContentRules = Read-RequiredSource $releaseNotesContentRulesPath 'Release-note content rules'
 $releaseNotesContentSelfTests = Read-RequiredSource $releaseNotesContentSelfTestsPath 'Release-note content self-tests'
 Assert-Literals $projectFile @(
-    '<Version>0.44.0.2</Version>',
-    '<AssemblyVersion>0.44.0.2</AssemblyVersion>',
-    '<FileVersion>0.44.0.2</FileVersion>'
-) 'v0.44.0.2 project version'
+    '<Version>0.44.0.3</Version>',
+    '<AssemblyVersion>0.44.0.3</AssemblyVersion>',
+    '<FileVersion>0.44.0.3</FileVersion>'
+) 'v0.44.0.3 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.44.0.2";',
-    'Guard works normally again; repeat protection starts only after Guard is visibly active.',
-    'BRD Mannstopper avoids Chiten, Guard, Purify protection, Meikyo, and other real CC immunity.',
-    'Mannstopper may still target PLD or DRK damage-only invulnerability because their CC still works.',
-    'CC Win Prediction stays visible during preparation while the exact 5v5 roster loads.'
-) 'v0.44.0.2 version-acknowledged player-facing What''s New content'
+    'private const string CurrentReleaseVersion = "0.44.0.3";',
+    'Smart Action works in Wolves'' Den duels again and uses your exact visible hostile target.',
+    'It no longer waits for an unreliable hidden duel slot before allowing the action.',
+    'Casts and instant attacks keep the same visible target; no automatic target switching was added in the Den.',
+    'Chiten, Guard, Cover, and invulnerability safety checks remain active.',
+    'Guard''s repeat protection now starts when Guard is visible, so latency cannot shorten its full one-second window.'
+) 'v0.44.0.3 version-acknowledged player-facing What''s New content'
 Assert-Literals $releaseNotesContentRules @(
     'public const int MaximumBulletCount = 5;',
     'if (bullets is null) return [];',
@@ -12266,23 +12312,22 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.44.0.2 plugin manifest metadata'
+) 'v0.44.0.3 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.44.0.2"',
-    'Hotfix: Guard can activate normally again.',
-    'BRD Mannstopper now avoids Chiten and real CC immunity',
-    'allowing PLD/DRK damage-only invulnerability.',
-    'CC Win Prediction stays visible during preparation',
+    '"AssemblyVersion": "0.44.0.3"',
+    'Hotfix: Smart Action works in Wolves'' Den duels again without depending on the unreliable hidden duel slot.',
+    'Guard repeat protection now starts when Guard is visibly active, so network/UI delay cannot shorten its full one-second window.',
+    'Existing target and protection checks stay intact.',
     'Automated checks are separate from live in-game confirmation.',
     '"IsHide": false',
     '"IsTestingExclusive": false',
     '"DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"',
     '"DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"',
     '"DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"'
-) 'v0.44.0.2 custom-repository metadata'
+) 'v0.44.0.3 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -12637,7 +12682,14 @@ Assert-Literals $normalizedReadme @(
     'release-independent tap-to-land wait',
     'protects active PvP Sprint from a second Sprint press by default',
     'adds the separate optional idle Smart Sprint.',
-    'Version 0.44.0.2 fixes a Guard regression',
+    'Version 0.44.0.3 fixes **Smart Action in Wolves'' Den duels**.',
+    'exact visible hostile `<t>` directly instead of depending on a hidden duel slot',
+    'It does not select another Den target or write target/facing state.',
+    'Instant attacks and casts keep the same Chiten, Guard, Cover, invulnerability, range, and line-of-sight checks.',
+    'Guard repeat protection now starts on the first confirmed live Guard frame instead of the earlier request',
+    'network/UI propagation cannot shorten its full one-second window.',
+    'Before Guard is visible, a failed or ambiguous first press remains free to retry.',
+    'Version 0.44.0.2 fixed a Guard regression',
     'BRD **Mannstopper** keeps Smart Action ranking but avoids Chiten, Guard, Purify protection, Meikyo, Paean, and other real CC immunity.',
     'PLD and DRK damage-only invulnerability remains a valid Mannstopper target',
     'The CC prediction panel now stays visible during preparation while the exact 5v5 roster is still loading.',
@@ -12656,8 +12708,14 @@ Assert-Literals $normalizedReadme @(
     'constructs fifteen reviewed request shapes across seventeen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.44.0.2 Guard, Mannstopper, preparation prediction, and retained safety history'
+) 'v0.44.0.3 Wolves Den Smart Action direct-target hotfix and retained safety history'
 Assert-Literals $normalizedChangelog @(
+    '## 0.44.0.3',
+    'Fixed `/smartaction` doing nothing in Wolves'' Den duels',
+    'exact visible native hard target',
+    'Both instant actions and casts use this same exact-target path.',
+    'Guard repeat protection now starts at the first exact live Guard frame rather than at the earlier request.',
+    'status propagation no longer consumes part of the full one-second protection window after Guard actually activates.',
     '## 0.44.0.2',
     'Fixed Guard being swallowed by its own one-second repeat protection.',
     'BRD Mannstopper still uses Smart Action target ranking',
@@ -14488,4 +14546,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 53 and the exact 636-test Core registry. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, PLD Guardian, Recuperate, then Auto-Guard own priority in that order. Guardian requires exact Guard and Guardian metadata/readiness through the final boundary: <=20% is unconditional, <=40% needs fresh exact 2+ focus, and <=50% needs fresh exact 3+ focus. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-actor reservation from either a certified direct standard hotbar press, an exact lease/generation-backed /smartaction visible-<t> fallback, or a target-independent CC Smart Action S1-S5 winner; only the first two bind the visible hard target. Queue stays rejected. Release cannot cancel it; new action, context, Guard, CC, identity, protection, or exact-action/actor drift does, only a post-revalidated clean native range/LoS false may retry, accepted or ambiguous outcomes are terminal, and it never reranks or writes target/facing. /seitonfar remains reachable-only. Enabled Wolves Den Smart Action may resolve only FFXIV's native zero/default selected-target carrier through the exact current duel opponent or reviewed dummy, and every current damaging non-ground-target shape shares the same closed admission and final-protection path. Current-name semantic protection metadata tolerates removed historical duplicate rows while still requiring Guard, Covered, Hallowed Ground, and Undead Redemption. Metadata-verified Shield Smite and Chain Stratagem may select Guard; other primary protections remain candidate-local blockers and only incidental/global Chiten vetoes AoE. Every exact Smart Action-owned harmful non-ground-target PvP cast uses reachable S1-S5 ranking only in CC; in enabled Wolves Den it preserves the exact visible duel/dummy target through the same closed protection path. Exact Near Help-owned friendly PvP casts use one-shot current ally ranking after atomic exact-generation consumption, while Near Assist retains authored-target anti-spin. A Smart Action fallback transfers only an exactly consumed live token into the same bounded reservation. Auto-Zantetsuken uses an identity/context-bound 500-ms no-target collection from the first exact own-source Kuzushi, ranks the fresh live cluster only after maturity, and rechecks collection, frozen identity, current Kuzushi, protection, Bind, readiness, range, and line of sight at the final boundary. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not reset it, Guard/CC/cast/priority/native waits do not spend, and automatic Sprint/replay cannot rearm themselves. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."
+Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 53 and the exact 636-test Core registry. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, PLD Guardian, Recuperate, then Auto-Guard own priority in that order. Guardian requires exact Guard and Guardian metadata/readiness through the final boundary: <=20% is unconditional, <=40% needs fresh exact 2+ focus, and <=50% needs fresh exact 3+ focus. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-actor reservation from either a certified direct standard hotbar press, an exact lease/generation-backed /smartaction visible-<t> fallback, or a target-independent CC Smart Action S1-S5 winner; only the first two bind the visible hard target. Queue stays rejected. Release cannot cancel it; new action, context, Guard, CC, identity, protection, or exact-action/actor drift does, only a post-revalidated clean native range/LoS false may retry, accepted or ambiguous outcomes are terminal, and it never reranks or writes target/facing. /seitonfar remains reachable-only. Enabled Wolves Den Smart Action resolves FFXIV's native zero/default selected-target carrier through the exact stable visible hostile hard target or reviewed dummy without depending on the optional duel-manager enemy slot, and every current damaging non-ground-target shape shares the same closed admission and final-protection path. Exact repeat-Guard protection is identity- and territory-bound: a recent hook-observed request may record its first visible Guard frame only once within the 1500-ms propagation latch, then blocks only exact Guard reuse for the full 1000-ms activation window. Current-name semantic protection metadata tolerates removed historical duplicate rows while still requiring Guard, Covered, Hallowed Ground, and Undead Redemption. Metadata-verified Shield Smite and Chain Stratagem may select Guard; other primary protections remain candidate-local blockers and only incidental/global Chiten vetoes AoE. Every exact Smart Action-owned harmful non-ground-target PvP cast uses reachable S1-S5 ranking only in CC; in enabled Wolves Den it preserves the exact visible hostile/dummy target through the same closed protection path. Exact Near Help-owned friendly PvP casts use one-shot current ally ranking after atomic exact-generation consumption, while Near Assist retains authored-target anti-spin. A Smart Action fallback transfers only an exactly consumed live token into the same bounded reservation. Auto-Zantetsuken uses an identity/context-bound 500-ms no-target collection from the first exact own-source Kuzushi, ranks the fresh live cluster only after maturity, and rechecks collection, frozen identity, current Kuzushi, protection, Bind, readiness, range, and line of sight at the final boundary. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not reset it, Guard/CC/cast/priority/native waits do not spend, and automatic Sprint/replay cannot rearm themselves. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."

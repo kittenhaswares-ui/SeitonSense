@@ -12,6 +12,18 @@ public static class SmartActionContextRules
     public static bool IsNativeSelectedTargetCarrier(ulong targetId) =>
         targetId is 0 or NativeSelectedTargetSentinel;
 
+    /// <summary>
+    /// The Wolves' Den Smart Action test path may prove its exact visible
+    /// target directly from the native hard target. The PvP duel-manager slot
+    /// is deliberately not part of this admission rule because it is not
+    /// populated consistently for every duel frame.
+    /// </summary>
+    public static bool IsEligibleExactVisibleWolvesDenTarget(
+        bool isPlayerCharacter,
+        bool hostileFlag,
+        bool exactVerifiedStrikingDummy) =>
+        exactVerifiedStrikingDummy || isPlayerCharacter && hostileFlag;
+
     public static bool IsSupported(
         SupportedPvPContext context,
         bool wolvesDenTestingEnabled) =>

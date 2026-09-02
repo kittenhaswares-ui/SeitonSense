@@ -22,6 +22,101 @@ internal enum DarkKnightWolvesDenTargetKind : byte
 /// </summary>
 internal static unsafe class DarkKnightWolvesDenCurrentTargetResolver
 {
+    /// <summary>
+    /// Resolves Smart Action's exact visible Wolves' Den target without relying
+    /// on PvPDuelManager.EnemyEntityId. Some valid duel frames do not expose
+    /// that slot, while the native hard target, dual object-table identity and
+    /// hostile flag still provide one stable exact actor. This path never
+    /// selects an alternate target.
+    /// </summary>
+    internal static bool TryResolveExactCurrentHardTargetDirect(
+        IObjectTable objectTable,
+        bool strikingDummyMetadataVerified,
+        IPlayerCharacter? localPlayer,
+        out IBattleChara? target,
+        out TargetPressureActorIdentity identity,
+        out DarkKnightWolvesDenTargetKind kind,
+        out ulong nativeHardTargetId)
+    {
+        target = null;
+        identity = default;
+        kind = DarkKnightWolvesDenTargetKind.None;
+        nativeHardTargetId = 0;
+        if (!HasValidNativeIdentity(localPlayer)) return false;
+
+        if (StrictWolvesDenStrikingDummyResolver.TryResolveExactCurrentHardTarget(
+                objectTable,
+                strikingDummyMetadataVerified,
+                localPlayer,
+                out var dummy,
+                out var dummyIdentity,
+                out nativeHardTargetId) &&
+            SmartActionContextRules.IsEligibleExactVisibleWolvesDenTarget(
+                isPlayerCharacter: false,
+                hostileFlag: false,
+                exactVerifiedStrikingDummy: true))
+        {
+            target = dummy;
+            identity = dummyIdentity;
+            kind = DarkKnightWolvesDenTargetKind.StrikingDummy;
+            return true;
+        }
+
+        nativeHardTargetId = GetNativeHardTargetId(localPlayer!);
+        if (!IsNetworkObjectId(nativeHardTargetId)) return false;
+
+        var byObjectId = objectTable.SearchById(nativeHardTargetId)
+            as IPlayerCharacter;
+        var byEntityId = nativeHardTargetId <= uint.MaxValue
+            ? objectTable.SearchByEntityId((uint)nativeHardTargetId)
+                as IPlayerCharacter
+            : null;
+        if (HasValidNativeIdentity(byObjectId) &&
+            HasValidNativeIdentity(byEntityId) &&
+            !HasSameNativeIdentity(byObjectId, byEntityId))
+        {
+            return false;
+        }
+
+        var candidate = HasValidNativeIdentity(byObjectId)
+            ? byObjectId
+            : byEntityId;
+        var hostileFlag = candidate is not null &&
+                          (candidate.StatusFlags & StatusFlags.Hostile) != 0;
+        if (!HasValidNativeIdentity(candidate) ||
+            !SmartActionContextRules.IsEligibleExactVisibleWolvesDenTarget(
+                isPlayerCharacter: true,
+                hostileFlag,
+                exactVerifiedStrikingDummy: false) ||
+            !ActorIdMatches(nativeHardTargetId, candidate!) ||
+            HasSameNativeIdentity(localPlayer, candidate) ||
+            !IsLiveTargetablePlayer(localPlayer!, candidate!))
+        {
+            return false;
+        }
+
+        var canonicalByObjectId = objectTable.SearchById(candidate!.GameObjectId)
+            as IPlayerCharacter;
+        var canonicalByEntityId = objectTable.SearchByEntityId(candidate.EntityId)
+            as IPlayerCharacter;
+        if (!HasSameNativeIdentity(candidate, canonicalByObjectId) ||
+            !HasSameNativeIdentity(candidate, canonicalByEntityId) ||
+            GetNativeHardTargetId(localPlayer!) != nativeHardTargetId ||
+            !IsLiveTargetablePlayer(localPlayer!, candidate))
+        {
+            return false;
+        }
+
+        identity = new TargetPressureActorIdentity(
+            candidate.GameObjectId,
+            candidate.EntityId);
+        if (!identity.IsValid) return false;
+
+        target = candidate;
+        kind = DarkKnightWolvesDenTargetKind.DuelOpponent;
+        return true;
+    }
+
     internal static bool TryResolveExactCurrentHardTarget(
         IObjectTable objectTable,
         bool strikingDummyMetadataVerified,

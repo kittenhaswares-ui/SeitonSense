@@ -318,16 +318,24 @@ internal static class DefensiveUtilitySelfTests
             IsSupportedPvpContext: true,
             ExactGuardRequest: true,
             ExactLocalGuardActive: true,
-            ExactOwnGuardAttemptObserved: true,
-            OwnGuardAttemptAtMilliseconds: 1_000,
-            NowMilliseconds: 1_999);
+            ExactOwnGuardActivationObserved: true,
+            OwnGuardActivatedAtMilliseconds: 1_250,
+            NowMilliseconds: 2_249);
         True(
             GuardRepeatProtectionRules.ShouldBlock(exactRepeat),
             "manual or automatic Guard repeat is blocked before one second");
-        False(
+        True(
+            GuardRepeatProtectionRules.ShouldBlock(
+                exactRepeat with { NowMilliseconds = 1_250 }),
+            "the first exact visible Guard frame is protected without a clock race");
+        True(
             GuardRepeatProtectionRules.ShouldBlock(
                 exactRepeat with { NowMilliseconds = 2_000 }),
-            "Guard repeat passes at the exact one-second boundary");
+            "request-to-status propagation does not shorten the confirmed window");
+        False(
+            GuardRepeatProtectionRules.ShouldBlock(
+                exactRepeat with { NowMilliseconds = 2_250 }),
+            "Guard repeat passes at the exact one-second activation boundary");
         False(
             GuardRepeatProtectionRules.ShouldBlock(
                 exactRepeat with { ExactGuardRequest = false }),
@@ -338,8 +346,8 @@ internal static class DefensiveUtilitySelfTests
             "Guard repeat protection fails open until exact Guard is active");
         False(
             GuardRepeatProtectionRules.ShouldBlock(
-                exactRepeat with { ExactOwnGuardAttemptObserved = false }),
-            "a provisional or rejected request without an accepted exact attempt fails open");
+                exactRepeat with { ExactOwnGuardActivationObserved = false }),
+            "a provisional request without confirmed Guard activation fails open");
         False(
             GuardRepeatProtectionRules.ShouldBlock(
                 exactRepeat with { IsSupportedPvpContext = false }),
@@ -350,7 +358,7 @@ internal static class DefensiveUtilitySelfTests
             "disabled runtime fails open");
         False(
             GuardRepeatProtectionRules.ShouldBlock(
-                exactRepeat with { NowMilliseconds = 999 }),
+                exactRepeat with { NowMilliseconds = 1_249 }),
             "clock rollback fails open");
 
         var explicitRelease = AutoGuardProtectionRules.Observe(
@@ -395,8 +403,8 @@ internal static class DefensiveUtilitySelfTests
             IsSupportedPvpContext: true,
             ExactGuardRequest: true,
             ExactLocalGuardActive: true,
-            ExactOwnGuardAttemptObserved: true,
-            OwnGuardAttemptAtMilliseconds: 1_000,
+            ExactOwnGuardActivationObserved: true,
+            OwnGuardActivatedAtMilliseconds: 1_200,
             NowMilliseconds: 1_500);
         True(
             GuardRepeatProtectionRules.ShouldBlock(repeat),
@@ -429,8 +437,8 @@ internal static class DefensiveUtilitySelfTests
             IsSupportedPvpContext: true,
             ExactGuardRequest: true,
             ExactLocalGuardActive: false,
-            ExactOwnGuardAttemptObserved: true,
-            OwnGuardAttemptAtMilliseconds: 1_000,
+            ExactOwnGuardActivationObserved: false,
+            OwnGuardActivatedAtMilliseconds: -1,
             NowMilliseconds: 1_001);
 
         False(
@@ -438,8 +446,22 @@ internal static class DefensiveUtilitySelfTests
             "an ambiguous or unconfirmed Guard attempt cannot suppress the immediate retry");
         True(
             GuardRepeatProtectionRules.ShouldBlock(
-                immediateRetryAfterAmbiguousAttempt with { ExactLocalGuardActive = true }),
-            "the same recent attempt blocks only after exact local Guard becomes active");
+                immediateRetryAfterAmbiguousAttempt with
+                {
+                    ExactLocalGuardActive = true,
+                    ExactOwnGuardActivationObserved = true,
+                    OwnGuardActivatedAtMilliseconds = 1_100,
+                    NowMilliseconds = 2_099,
+                }),
+            "confirmed Guard gets a full second independent of request propagation");
+        False(
+            GuardRepeatProtectionRules.ShouldBlock(
+                immediateRetryAfterAmbiguousAttempt with
+                {
+                    ExactLocalGuardActive = true,
+                    ExactOwnGuardActivationObserved = false,
+                }),
+            "status alone cannot borrow an unconfirmed local request");
     }
 
     public static void AutoGuardProtectionContextDriftAlwaysFailsOpen()

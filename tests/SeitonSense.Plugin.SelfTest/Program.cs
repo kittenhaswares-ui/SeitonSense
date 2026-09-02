@@ -412,6 +412,7 @@ static void RejectedGuardSpamRestoresOriginalAttempt()
         localGameObjectId,
         localEntityId,
         ObservedAtMilliseconds: 1_000,
+        GuardActivatedAtMilliseconds: 1_150,
         Generation: 1);
 
     var afterSecondPress = NearAssistRedirector.RestorePreviousLocalGuardAttempt(
@@ -420,6 +421,9 @@ static void RejectedGuardSpamRestoresOriginalAttempt()
         localGameObjectId,
         localEntityId);
     True(afterSecondPress is { Generation: 1 }, "second rejected press restores original attempt");
+    True(
+        afterSecondPress is { GuardActivatedAtMilliseconds: 1_150 },
+        "second rejected press preserves the original activation timestamp");
 
     // A rejected replacement advances the global generation even though the
     // accepted original is restored. A third press must therefore preserve the

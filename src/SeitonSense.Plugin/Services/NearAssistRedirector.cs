@@ -121,6 +121,7 @@ internal readonly record struct LocalGuardActionAttempt(
     ulong LocalGameObjectId,
     uint LocalEntityId,
     long ObservedAtMilliseconds,
+    long GuardActivatedAtMilliseconds,
     long Generation);
 
 internal readonly record struct LocalGuardActionBoundaryObservation(
@@ -618,6 +619,40 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 attempt.TerritoryId,
                 localGameObjectId,
                 localEntityId);
+            return true;
+        }
+    }
+
+    private bool TryGetRecentExactLocalGuardActivation(
+        uint territoryId,
+        ulong localGameObjectId,
+        uint localEntityId,
+        long nowMilliseconds,
+        out long activatedAtMilliseconds)
+    {
+        activatedAtMilliseconds = -1;
+        if (nowMilliseconds < 0 ||
+            !IsNetworkObjectId(localGameObjectId) ||
+            !IsNetworkEntityId(localEntityId))
+        {
+            return false;
+        }
+
+        lock (guardAttemptGate)
+        {
+            if (latestLocalGuardActionAttempt is not { } attempt ||
+                attempt.TerritoryId != territoryId ||
+                attempt.LocalGameObjectId != localGameObjectId ||
+                attempt.LocalEntityId != localEntityId ||
+                attempt.GuardActivatedAtMilliseconds < 0 ||
+                attempt.GuardActivatedAtMilliseconds > nowMilliseconds ||
+                nowMilliseconds - attempt.GuardActivatedAtMilliseconds >=
+                    GuardRepeatProtectionRules.ProtectionMilliseconds)
+            {
+                return false;
+            }
+
+            activatedAtMilliseconds = attempt.GuardActivatedAtMilliseconds;
             return true;
         }
     }
@@ -3048,7 +3083,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             var exactWolvesDenHardTargetResolved =
                 nativeSelectedTargetCarrierAllowed &&
                 DarkKnightWolvesDenCurrentTargetResolver
-                    .TryResolveExactCurrentHardTarget(
+                    .TryResolveExactCurrentHardTargetDirect(
                         objectTable,
                         wolvesDenStrikingDummyMetadataVerified,
                         local,
@@ -3270,7 +3305,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 configuration.EnableWolvesDenTesting,
                 combatPriorityMode: true,
                 attackShape) ||
-            !DarkKnightWolvesDenCurrentTargetResolver.TryResolveExactCurrentHardTarget(
+            !DarkKnightWolvesDenCurrentTargetResolver.TryResolveExactCurrentHardTargetDirect(
                 objectTable,
                 wolvesDenStrikingDummyMetadataVerified,
                 localPlayer,
@@ -3719,7 +3754,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 local!.GameObjectId,
                 local.EntityId,
                 Environment.TickCount64,
-                0);
+                GuardActivatedAtMilliseconds: -1,
+                Generation: 0);
             lock (guardAttemptGate)
             {
                 var generationBeforeCall = localGuardActionAttemptGeneration;
@@ -3811,16 +3847,17 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             var localLive = IsLivePlayer(local);
             var exactLocalGuardActive = localLive && HasActiveGuardStatus(local!);
             var now = Environment.TickCount64;
-            var attemptAt = -1L;
-            var exactAttemptObserved = localLive &&
-                                       TryGetRecentExactLocalGuardAttempt(
-                                           clientState.TerritoryType,
-                                           local!.GameObjectId,
-                                           local.EntityId,
-                                           now,
-                                           GuardRepeatProtectionRules.ProtectionMilliseconds,
-                                           out attemptAt);
-            if (!exactAttemptObserved) attemptAt = -1;
+            if (exactLocalGuardActive)
+                UpdateGuardRepeatProtectionLifecycle(now);
+            var activatedAt = -1L;
+            var exactActivationObserved = localLive &&
+                                          TryGetRecentExactLocalGuardActivation(
+                                              clientState.TerritoryType,
+                                              local!.GameObjectId,
+                                              local.EntityId,
+                                              now,
+                                              out activatedAt);
+            if (!exactActivationObserved) activatedAt = -1;
 
             return GuardRepeatProtectionRules.ShouldBlock(
                 new GuardRepeatProtectionObservation(
@@ -3830,8 +3867,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                     context != SupportedPvPContext.None,
                     exactGuardRequest,
                     exactLocalGuardActive,
-                    exactAttemptObserved,
-                    attemptAt,
+                    exactActivationObserved,
+                    activatedAt,
                     now));
         }
         catch (Exception exception)
@@ -5038,6 +5075,17 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
         try
         {
+            UpdateGuardRepeatProtectionLifecycle(Environment.TickCount64);
+        }
+        catch (Exception exception)
+        {
+            LogFailure(
+                exception,
+                "Seiton Sense Guard repeat-protection lifecycle failed open.");
+        }
+
+        try
+        {
             UpdateAutoGuardProtectionLifecycle();
         }
         catch (Exception exception)
@@ -5341,6 +5389,43 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             }
 
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Binds the repeat-only window to the first exact live Guard frame, not to
+    /// the earlier native request. This leaves pre-status retries untouched and
+    /// still gives a confirmed Guard the complete configured protection time.
+    /// </summary>
+    private void UpdateGuardRepeatProtectionLifecycle(long now)
+    {
+        var local = objectTable.LocalPlayer;
+        if (now < 0 ||
+            !IsLivePlayer(local) ||
+            !HasActiveGuardStatus(local!))
+        {
+            return;
+        }
+
+        lock (guardAttemptGate)
+        {
+            if (latestLocalGuardActionAttempt is not { } attempt ||
+                attempt.GuardActivatedAtMilliseconds >= 0 ||
+                attempt.TerritoryId != clientState.TerritoryType ||
+                attempt.LocalGameObjectId != local!.GameObjectId ||
+                attempt.LocalEntityId != local.EntityId ||
+                attempt.ObservedAtMilliseconds < 0 ||
+                attempt.ObservedAtMilliseconds > now ||
+                now - attempt.ObservedAtMilliseconds >=
+                    DefensiveUtilityRules.GuardPropagationLatchMilliseconds)
+            {
+                return;
+            }
+
+            latestLocalGuardActionAttempt = attempt with
+            {
+                GuardActivatedAtMilliseconds = now,
+            };
         }
     }
 
