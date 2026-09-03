@@ -809,24 +809,12 @@ movement action. Only Guardian `29066`, Thunderclap `29484`, Aetherial
 Manipulation `29660`, Icarus `29261`, and Slither `39184` are accepted.
 
 Candidates must be live, targetable, non-self exact party members and pass the
-actual action's native range and line-of-sight result. At action time, all five
-native `<e1>`-`<e5>` slots must resolve to exact, unique, valid opponent
-identities. Confirmed dead opponents are ignored for clearance; every live
-opponent counts even while temporarily untargetable. Each candidate must have
-strictly more than 10 yalms of horizontal hitbox-edge clearance from every live
-opponent to enter the preferred backline group. Missing, ambiguous, invalid, or
-no-live-enemy observations make that preference unavailable instead of being
-treated as proof that a destination is clear.
-
-If any candidates pass this conservative, map-agnostic backline heuristic, the
-farthest of those actors from the local player wins. If none pass or the enemy
-snapshot cannot certify them, the farthest otherwise valid reachable ally wins
-instead. Only at exactly equal measured distance does role break the tie, in
-healer, ranged/caster, then other-job order. Native party order and stable actor
-identity resolve any remaining tie. Guardian uses FFXIV's native 20-yalm
+actual action's native range and line-of-sight result. The farthest valid
+reachable ally always wins. Job, role, and nearby-enemy observations do not
+alter selection. Native party order and stable actor identity resolve an exact
+measured-distance tie. Guardian uses FFXIV's native 20-yalm
 action-range and line-of-sight result without a custom center-distance cap. Its
 10-yalm condition governs staying close enough for protection after the jump.
-This is a preference and does not guarantee tactical safety.
 Only having no valid reachable ally produces no movement.
 
 The recommended macro has exactly three lines: `/mlock`, `/farhelp`, and one

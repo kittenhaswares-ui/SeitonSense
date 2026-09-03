@@ -26,29 +26,22 @@ internal static class FarHelpSelectionSelfTests
         Equal(3, FarHelpSelectionRules.SelectBestIndex(candidates), "globally farthest valid ally");
     }
 
-    public static void EqualDistanceUsesExactRoleOrder()
+    public static void EqualDistanceIgnoresRoleAndUsesStablePartyOrder()
     {
-        var healerWins = new[]
+        var roleNeutralTie = new[]
         {
             Candidate(10, distance: 10f, jobId: 20, partySlot: 2),
             Candidate(20, distance: 10f, jobId: 23, partySlot: 3),
             Candidate(30, distance: 10f, jobId: 24, partySlot: 4),
         };
-        Equal(2, FarHelpSelectionRules.SelectBestIndex(healerWins), "healer wins exact-distance tie");
-
-        var rangedWins = new[]
-        {
-            Candidate(10, distance: 10f, jobId: 20, partySlot: 2),
-            Candidate(20, distance: 10f, jobId: 25, partySlot: 3),
-        };
-        Equal(1, FarHelpSelectionRules.SelectBestIndex(rangedWins), "ranged/caster beats other on exact tie");
+        Equal(0, FarHelpSelectionRules.SelectBestIndex(roleNeutralTie), "role never changes an exact-distance tie");
 
         var barelyFartherOther = new[]
         {
             Candidate(10, distance: 10.0001f, jobId: 20, partySlot: 2),
             Candidate(20, distance: 10f, jobId: 24, partySlot: 3),
         };
-        Equal(0, FarHelpSelectionRules.SelectBestIndex(barelyFartherOther), "role applies only to exact distance");
+        Equal(0, FarHelpSelectionRules.SelectBestIndex(barelyFartherOther), "any measurable distance advantage wins regardless of role");
     }
 
     public static void EqualDistanceUsesStablePartyAndActorIdentity()
@@ -71,6 +64,9 @@ internal static class FarHelpSelectionSelfTests
     public static void ExactPartyReachabilityAndLivenessFailClosed()
     {
         var valid = Candidate(90, distance: 8f, jobId: 24, partySlot: 2);
+        True(
+            FarHelpSelectionRules.IsEligible(valid with { Role = (FarHelpAllyRole)99 }),
+            "role observations never change action eligibility");
         var candidates = new[]
         {
             valid with { GameObjectId = 0 },
@@ -81,7 +77,6 @@ internal static class FarHelpSelectionSelfTests
             valid with { CurrentHp = 101 },
             valid with { DistanceSquared = float.NaN },
             valid with { DistanceSquared = -1f },
-            valid with { Role = (FarHelpAllyRole)99 },
             valid with { IsExactPartyMember = false },
             valid with { IsSelf = true },
             valid with { IsTargetable = false },
@@ -94,7 +89,7 @@ internal static class FarHelpSelectionSelfTests
         Equal(-1, FarHelpSelectionRules.SelectBestIndex([]), "empty snapshot fails closed");
     }
 
-    public static void BacklineSafetyIsPreferredButNeverRequired()
+    public static void BacklineSafetyNeverOverridesDistance()
     {
         var exactBoundary = Candidate(
             10,
@@ -119,7 +114,7 @@ internal static class FarHelpSelectionSelfTests
             partySlot: 4,
             minimumEnemyEdgeDistance: 12f);
         var candidates = new[] { exactBoundary, justSafe, shorterSafe };
-        Equal(1, FarHelpSelectionRules.SelectBestIndex(candidates), "safe backline beats a farther frontline candidate");
+        Equal(0, FarHelpSelectionRules.SelectBestIndex(candidates), "the farthest ally wins regardless of backline safety");
 
         Equal(
             0,
@@ -128,7 +123,7 @@ internal static class FarHelpSelectionSelfTests
                     exactBoundary,
                     shorterSafe with { HasCompleteCanonicalEnemySnapshot = false },
                 ]),
-            "without a safe candidate the farthest reachable ally still wins");
+            "backline diagnostics never change the farthest reachable ally");
 
         var unknownSnapshot = new[]
         {
@@ -155,7 +150,7 @@ internal static class FarHelpSelectionSelfTests
             "ambiguous oversized enemy set fails closed");
     }
 
-    public static void CurrentPvpJobsUseExactRoleTiers()
+    public static void CurrentPvpJobsHaveDiagnosticRoleLabels()
     {
         uint[] healers = [24, 28, 33, 40];
         uint[] rangedOrCasters = [23, 25, 27, 31, 35, 38, 42];

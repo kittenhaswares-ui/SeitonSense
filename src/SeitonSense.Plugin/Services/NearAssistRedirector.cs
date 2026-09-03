@@ -1822,6 +1822,13 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         if (ShouldBlockActiveSprintRepeatPress(thisPtr, actionType, actionId))
             return false;
 
+        // A buffered retry or attributable held-hotbar repeat may help the
+        // first Guard request land, but it is never fresh player intent to
+        // toggle an active or still-propagating Guard off. A released and
+        // freshly pressed physical Guard key remains the deliberate cancel.
+        if (ShouldBlockSyntheticOwnGuardRepeat(thisPtr, actionType, actionId))
+            return false;
+
         // A successful local Guard press is recorded only at its exact native
         // boundary. While that same Guard is visibly active, suppress only an
         // exact second Guard request during the first second. This applies to
@@ -3880,6 +3887,56 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         }
     }
 
+    private bool ShouldBlockSyntheticOwnGuardRepeat(
+        ActionManager* actionManager,
+        ActionType actionType,
+        uint actionId)
+    {
+        var syntheticRequest = integratedBufferReplayDepth > 0 ||
+                               integratedInputRuntime?.IsSyntheticHotbarRepeatExecution == true;
+        if (!syntheticRequest || !IsSupportedActionType(actionType)) return false;
+
+        var exactGuardRequest = actionId == EnemyCombatConstants.GuardActionId;
+        if (!exactGuardRequest)
+        {
+            try
+            {
+                exactGuardRequest =
+                    ResolveActionId(actionManager, actionType, actionId) ==
+                    EnemyCombatConstants.GuardActionId;
+            }
+            catch (Exception exception)
+            {
+                LogFailure(
+                    exception,
+                    "Seiton Sense synthetic Guard-repeat classification failed open for a non-Guard carrier.");
+                return false;
+            }
+        }
+
+        if (!exactGuardRequest) return false;
+
+        try
+        {
+            return GuardRepeatProtectionRules.ShouldBlockSyntheticRepeat(
+                new SyntheticGuardRepeatProtectionObservation(
+                    configuration.Enabled && clientState.IsLoggedIn,
+                    ResolveContext() != SupportedPvPContext.None,
+                    IsSyntheticRequest: true,
+                    ExactGuardRequest: true,
+                    OwnGuardActiveOrPropagating: IsLocalGuardActiveOrPropagating()));
+        }
+        catch (Exception exception)
+        {
+            // Once the exact synthetic Guard action is known, uncertainty must
+            // not turn a retry into an accidental Guard cancel.
+            LogFailure(
+                exception,
+                "Seiton Sense synthetic Guard-repeat protection failed closed for one exact Guard request.");
+            return true;
+        }
+    }
+
     private bool ApplyAutoGuardProtectionObservation(
         bool actionCanCancelGuard,
         bool explicitGuardReuse,
@@ -5010,21 +5067,21 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             var clearance = float.IsFinite(selected.MinimumCanonicalEnemyEdgeDistance)
                 ? $"{selected.MinimumCanonicalEnemyEdgeDistance:0.0}y"
                 : "unknown";
-            var selectionTier = GetFarHelpSelectionTier(selected, backlineSafe);
+            var clearanceDiagnostic = GetFarHelpClearanceDiagnostic(selected, backlineSafe);
             reason = $"Redirected farthest reachable ally P{selected.PartySlot}, " +
                      $"distance={selectedDistance:0.0}y, enemy-clearance={clearance}, " +
                      $"live-enemies={selected.CanonicalLiveEnemyCount}, " +
                      $"snapshot={(selected.HasCompleteCanonicalEnemySnapshot ? "complete" : "incomplete")}, " +
-                     $"tier={selectionTier}, role={selected.Role}";
+                     $"clearance-diagnostic={clearanceDiagnostic}, role-diagnostic={selected.Role}";
         }
         else
         {
             var actionValidCandidates = candidates.Count(FarHelpSelectionRules.IsEligible);
-            var safeCandidates = candidates.Count(candidate =>
+            var clearCandidates = candidates.Count(candidate =>
                 FarHelpSelectionRules.IsEligible(candidate) &&
                 FarHelpSelectionRules.IsBacklineSafe(candidate));
             reason = $"Suppressed: {decision.Reason}, candidates={candidates.Count}, " +
-                     $"action-valid={actionValidCandidates}, safe-backline={safeCandidates}, " +
+                     $"action-valid={actionValidCandidates}, clearance-observed={clearCandidates}, " +
                      $"enemy-snapshot={(enemySnapshot.IsComplete ? "complete" : "incomplete")}, " +
                      $"live-enemies={enemySnapshot.LiveEnemies.Length}, resolved={resolvedActionId}";
         }
@@ -5032,19 +5089,19 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         return decision.ForwardTargetId;
     }
 
-    private static string GetFarHelpSelectionTier(
+    private static string GetFarHelpClearanceDiagnostic(
         FarHelpSelectionCandidate selected,
         bool backlineSafe)
     {
-        if (backlineSafe) return "safe-backline(clearance>10y)";
+        if (backlineSafe) return "clearance-observed(clearance>10y)";
         if (!selected.HasCompleteCanonicalEnemySnapshot)
-            return "reachable-fallback(snapshot-incomplete)";
+            return "clearance-unverified(snapshot-incomplete)";
         if (selected.CanonicalLiveEnemyCount == 0)
-            return "reachable-fallback(no-live-enemy-clearance)";
+            return "clearance-unverified(no-live-enemy-clearance)";
         if (!float.IsFinite(selected.MinimumCanonicalEnemyEdgeDistance))
-            return "reachable-fallback(clearance-unknown)";
+            return "clearance-unverified(clearance-unknown)";
 
-        return $"reachable-fallback(clearance<={FarHelpSelectionRules.MinimumBacklineEnemyEdgeClearance:0.#}y)";
+        return $"clearance-observed(clearance<={FarHelpSelectionRules.MinimumBacklineEnemyEdgeClearance:0.#}y)";
     }
 
     private void OnFrameworkUpdate(IFramework _)

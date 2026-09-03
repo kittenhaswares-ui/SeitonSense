@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.44.0.5
+
+- Guard remains eligible for the timing/action buffer when its first request
+  does not land.
+- Attributable timing-buffer, Turbo, and delegated held repeats can no longer
+  press Guard again while it is active or still propagating from the server.
+  Releasing and freshly pressing Guard remains an intentional cancel.
+- `/farhelp` now always chooses the farthest reachable friendly party member.
+  Healer, role, job, and nearby-enemy observations never change that choice.
+- Exact-distance ties remain deterministic through party and actor identity.
+- Automated checks remain separate from live in-game confirmation.
+
 ## 0.44.0.4
 
 - Added a dedicated **Player Stats** page. Search the current character's local

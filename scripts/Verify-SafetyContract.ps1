@@ -7258,6 +7258,10 @@ $autoGuardProtectionRules = Read-RequiredSource $autoGuardProtectionRulesPath 'A
 $normalizedAutoGuardProtectionRules = $autoGuardProtectionRules -replace '\s+', ' '
 Assert-Literals $autoGuardProtectionRules @(
     'public static class GuardRepeatProtectionRules',
+    'SyntheticGuardRepeatProtectionObservation',
+    'IsSyntheticRequest',
+    'OwnGuardActiveOrPropagating',
+    'ShouldBlockSyntheticRepeat(',
     'DefaultEnabled = true',
     'ProtectionMilliseconds = 1_000',
     'ExactGuardRequest',
@@ -7294,8 +7298,9 @@ Assert-Literals $settingsActions @(
 ) 'Visible independent Guard repeat-protection setting and scope copy'
 if ($autoGuardProtectionRules -match '\b(?:UseAction|UseActionLocation|ActionManager|IPlayerCharacter|HookFromAddress|ITargetManager|TargetManager|SetTarget|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b' -or
     $normalizedAutoGuardProtectionRules -notmatch 'public static bool ShouldBlock\(GuardRepeatProtectionObservation observation\) => observation\.RuntimeEnabled && observation\.IsSupportedPvpContext && observation\.ExactGuardRequest && observation\.ExactLocalGuardActive && observation\.ExactOwnGuardActivationObserved && observation\.OwnGuardActivatedAtMilliseconds >= 0 && observation\.NowMilliseconds >= observation\.OwnGuardActivatedAtMilliseconds && observation\.NowMilliseconds - observation\.OwnGuardActivatedAtMilliseconds < ProtectionMilliseconds;' -or
+    $normalizedAutoGuardProtectionRules -notmatch 'public static bool ShouldBlockSyntheticRepeat\( SyntheticGuardRepeatProtectionObservation observation\) => observation\.RuntimeEnabled && observation\.IsSupportedPvpContext && observation\.IsSyntheticRequest && observation\.ExactGuardRequest && observation\.OwnGuardActiveOrPropagating;' -or
     $normalizedAutoGuardProtectionRules -notmatch 'if \(!previous\.IsArmed\).*?if \(observation\.HardReset\).*?if \(observation\.NowMilliseconds < 0 \|\| observation\.NowMilliseconds < previous\.ConfirmedAtMilliseconds\).*?if \(!observation\.RuntimeEnabled\).*?if \(observation\.TerritoryId != previous\.TerritoryId\).*?if \(!observation\.LocalPlayerLive\).*?if \(observation\.LocalPlayer != previous\.LocalPlayer\).*?if \(observation\.NowMilliseconds >= previous\.MaximumExpiresAtMilliseconds\).*?if \(!observation\.ExactGuardActive\).*?if \(observation\.IsExplicitGuardReuse\) return Released\(AutoGuardProtectionDecisionReason\.ExplicitGuardReuse\);.*?observation\.ActionCanCancelGuard') {
-    throw 'Guard-repeat Core must fail open for provisional or ambiguous attempts and block only exact own Guard reuse for one second from confirmed visible activation; Auto-Guard ownership remains pure and bounded.'
+    throw 'Guard-repeat Core must keep fresh physical Guard toggles separate from synthetic Turbo/buffer repeats: an initial synthetic retry may land Guard, but no synthetic request may cancel active or propagating Guard.'
 }
 $autoGuardProtectionTestMethods = @(
     'AutoGuardProtectionOwnershipRequiresTheExactConfirmedAttempt',
@@ -7309,6 +7314,14 @@ foreach ($method in $autoGuardProtectionTestMethods) {
     Assert-Literals $defensiveUtilitySelfTests @("public static void $method()") "Auto-Guard self-test $method"
     Assert-Literals $coreSelfTestProgramForGuardian @("DefensiveUtilitySelfTests.$method") "Auto-Guard registration $method"
 }
+Assert-Literals $defensiveUtilitySelfTests @(
+    'a synthetic repeat cannot toggle an active or propagating Guard off',
+    'a fresh physical Guard press remains a deliberate toggle request',
+    'a synthetic retry remains available to land the first Guard',
+    'synthetic protection never blocks another action',
+    'synthetic protection fails open while the runtime is disabled',
+    'synthetic protection fails open outside supported PvP'
+) 'Source-scoped synthetic Guard-repeat regressions'
 $autoGuardConfirmationRules = Read-RequiredSource $autoGuardConfirmationRulesPath 'Auto-Guard provisional confirmation rules'
 $normalizedAutoGuardConfirmationRules = $autoGuardConfirmationRules -replace '\s+', ' '
 Assert-Literals $autoGuardConfirmationRules @(
@@ -7367,6 +7380,10 @@ Assert-Literals $nearAssistAutoGuard @(
     'useActionLocationHook?.IsEnabled == true',
     'TryGetActionMetadata(',
     'action.IsPvP',
+    'ShouldBlockSyntheticOwnGuardRepeat(',
+    'GuardRepeatProtectionRules.ShouldBlockSyntheticRepeat(',
+    'integratedBufferReplayDepth > 0',
+    'IsSyntheticHotbarRepeatExecution',
     'ShouldBlockRecentOwnGuardRepeatPress(',
     'configuration.ProtectOwnGuardFromRepeatPress',
     'GuardRepeatProtectionRules.ProtectionMilliseconds',
@@ -7378,12 +7395,39 @@ Assert-Literals $nearAssistAutoGuard @(
     'ClearAutoGuardProtection("Released: explicit Panic Shukuchi command override")',
     'ClearAutoGuardProtection("Released: explicit camera-back dash command override")'
 ) 'Dual-hook automatic Guard cancellation protector'
+Assert-Literals $integratedInputRuntime @(
+    'private static int syntheticHotbarRepeatExecutionDepth;',
+    'internal bool IsSyntheticHotbarRepeatExecution =>',
+    'Kind: IntegratedHotbarActivationKind.InjectedRepeat or',
+    'IntegratedHotbarActivationKind.DelegatedRepeat',
+    'if (syntheticRepeatExecution) syntheticHotbarRepeatExecutionDepth++;',
+    'if (syntheticRepeatExecution) syntheticHotbarRepeatExecutionDepth--;'
+) 'Exact held-hotbar synthetic-repeat provenance'
+if ([regex]::Matches($integratedInputRuntime, 'syntheticHotbarRepeatExecutionDepth\+\+').Count -ne 2 -or
+    [regex]::Matches($integratedInputRuntime, 'syntheticHotbarRepeatExecutionDepth--').Count -ne 2 -or
+    [regex]::Matches($integratedInputRuntime, 'IntegratedHotbarActivationKind\.InjectedRepeat or\s+IntegratedHotbarActivationKind\.DelegatedRepeat').Count -ne 2) {
+    throw 'Both native hotbar execution paths must expose only attributable injected or delegated repeats as synthetic; fresh physical presses remain deliberate input.'
+}
+$syntheticGuardRepeatMatch = [regex]::Match(
+    $nearAssistAutoGuard,
+    '(?s)private bool ShouldBlockSyntheticOwnGuardRepeat\(.*?\n    \}\r?\n\r?\n    private bool ApplyAutoGuardProtectionObservation')
+if (-not $syntheticGuardRepeatMatch.Success) {
+    throw 'The exact synthetic Guard-repeat protection boundary is missing.'
+}
+$normalizedSyntheticGuardRepeat = $syntheticGuardRepeatMatch.Value -replace '\s+', ' '
+if ($normalizedNearAssistAutoGuard -notmatch 'if \(ShouldBlockSyntheticOwnGuardRepeat\(thisPtr, actionType, actionId\)\) return false;.*?if \(ShouldBlockRecentOwnGuardRepeatPress\(thisPtr, actionType, actionId\)\) return false;' -or
+    $normalizedSyntheticGuardRepeat -notmatch 'var syntheticRequest = integratedBufferReplayDepth > 0 \|\| integratedInputRuntime\?\.IsSyntheticHotbarRepeatExecution == true; if \(!syntheticRequest \|\| !IsSupportedActionType\(actionType\)\) return false;' -or
+    $normalizedSyntheticGuardRepeat -notmatch 'exactGuardRequest = ResolveActionId\(actionManager, actionType, actionId\) == EnemyCombatConstants\.GuardActionId;' -or
+    $normalizedSyntheticGuardRepeat -notmatch 'if \(!exactGuardRequest\) return false;.*?GuardRepeatProtectionRules\.ShouldBlockSyntheticRepeat\( new SyntheticGuardRepeatProtectionObservation\( configuration\.Enabled && clientState\.IsLoggedIn, ResolveContext\(\) != SupportedPvPContext\.None, IsSyntheticRequest: true, ExactGuardRequest: true, OwnGuardActiveOrPropagating: IsLocalGuardActiveOrPropagating\(\)\)\);' -or
+    $normalizedSyntheticGuardRepeat -notmatch 'synthetic Guard-repeat protection failed closed for one exact Guard request\."\); return true;') {
+    throw 'Synthetic timing-buffer and held-hotbar Guard retries must remain available before activation, then fail closed only for an exact active or propagating Guard; fresh physical presses stay outside this policy.'
+}
 if ($normalizedDefensiveUtility -notmatch 'var guardActionSpecificallyReady = guardMetadataVerified && nearAssist\.CanProtectAutomaticGuard && IsActionSpecificallyReady' -or
     $normalizedDefensiveUtility -notmatch 'private unsafe GuardUseAttemptResult TryUseGuardOnce\(.*?if \(!guardMetadataVerified \|\| !nearAssist\.CanProtectAutomaticGuard') {
     throw 'Automatic Guard must fail closed before dispatch unless both central protection hooks are enabled.'
 }
 if ($normalizedNearAssistAutoGuard -notmatch 'internal bool CanProtectAutomaticGuard => !disposed && started && useActionHook\?\.IsEnabled == true && useActionLocationHook\?\.IsEnabled == true;' -or
-    $normalizedNearAssistAutoGuard -notmatch 'private bool UseActionDetour\(.*?var bypassRedirect = internalRedirectBypassDepth > 0;.*?ShouldBlockRecentOwnGuardRepeatPress\(thisPtr, actionType, actionId\).*?if \(TryConsumeExplicitAutoGuardBreak\( actionType, actionId, ExplicitAutoGuardBreakBoundary\.StandardAction\)\).*?ClearAutoGuardProtection\("Released: explicit camera-back dash command override"\);.*?else if \(TryBlockOwnedAutoGuardCancellation\(thisPtr, actionType, actionId\)\).*?return false;.*?var forwardedTargetId' -or
+    $normalizedNearAssistAutoGuard -notmatch 'private bool UseActionDetour\(.*?var bypassRedirect = internalRedirectBypassDepth > 0;.*?ShouldBlockSyntheticOwnGuardRepeat\(thisPtr, actionType, actionId\).*?ShouldBlockRecentOwnGuardRepeatPress\(thisPtr, actionType, actionId\).*?if \(TryConsumeExplicitAutoGuardBreak\( actionType, actionId, ExplicitAutoGuardBreakBoundary\.StandardAction\)\).*?ClearAutoGuardProtection\("Released: explicit camera-back dash command override"\);.*?else if \(TryBlockOwnedAutoGuardCancellation\(thisPtr, actionType, actionId\)\).*?return false;.*?var forwardedTargetId' -or
     $normalizedNearAssistAutoGuard -notmatch 'private bool UseActionLocationDetour\(.*?var bypassRedirect = internalRedirectBypassDepth > 0; if \(actionBarActivitySuppressionDepth == 0 && actionType is \(ActionType\.Action or ActionType\.PvPAction\)\) \{ RecordActionBarActivity\(\); \}.*?if \(!bypassRedirect && integratedInputRuntime is \{ \} integratedRuntime && actionType is \(ActionType\.Action or ActionType\.PvPAction\)\) \{ integratedRuntime\.ActionBuffer\.Cancel\( SmartActionBufferCancelReason\.Replaced, "Replaced by a newer external location action request"\); \}.*?ShouldBlockRecentOwnGuardRepeatPress\(thisPtr, actionType, actionId\).*?if \(TryConsumeExplicitAutoGuardBreak\( actionType, actionId, ExplicitAutoGuardBreakBoundary\.LocationAction\)\).*?ClearAutoGuardProtection\("Released: explicit Panic Shukuchi command override"\);.*?else if \(TryBlockOwnedAutoGuardCancellation\(thisPtr, actionType, actionId\)\).*?return false;.*?return useActionLocationHook!\.Original' -or
     [regex]::Matches($nearAssistAutoGuard, '\bconfiguration\.ProtectOwnGuardFromRepeatPress\b').Count -ne 1 -or
     $normalizedNearAssistAutoGuard -notmatch 'private bool ShouldBlockRecentOwnGuardRepeatPress\( ActionManager\* actionManager, ActionType actionType, uint actionId\).*?var exactGuardRequest = supportedActionType && \(actionId == EnemyCombatConstants\.GuardActionId \|\| resolvedActionId == EnemyCombatConstants\.GuardActionId\);.*?exactLocalGuardActive = localLive && HasActiveGuardStatus\(local!\); var now = Environment\.TickCount64; if \(exactLocalGuardActive\) UpdateGuardRepeatProtectionLifecycle\(now\);.*?TryGetRecentExactLocalGuardActivation\( clientState\.TerritoryType, local!\.GameObjectId, local\.EntityId, now, out activatedAt\);.*?if \(!exactActivationObserved\) activatedAt = -1;.*?GuardRepeatProtectionRules\.ShouldBlock\( new GuardRepeatProtectionObservation\( configuration\.Enabled && configuration\.ProtectOwnGuardFromRepeatPress && clientState\.IsLoggedIn, context != SupportedPvPContext\.None, exactGuardRequest, exactLocalGuardActive, exactActivationObserved, activatedAt, now\)\);' -or
@@ -9950,7 +9994,6 @@ Assert-Literals $farHelpSelection @(
     'FarHelpAllyRole.Healer',
     'FarHelpAllyRole.RangedOrCaster',
     'FarHelpAllyRole.Other',
-    'candidate.Role > current.Role',
     'candidate.DistanceSquared.CompareTo(current.DistanceSquared)',
     'return distance > 0',
     'candidate.IsExactPartyMember',
@@ -9962,17 +10005,17 @@ Assert-Literals $farHelpSelection @(
     'MinimumBacklineEnemyEdgeClearance = 10f',
     'candidate.HasCompleteCanonicalEnemySnapshot',
     'candidate.CanonicalLiveEnemyCount is >= 1 and <= MaximumCanonicalEnemyCount',
-    'candidate.MinimumCanonicalEnemyEdgeDistance > MinimumBacklineEnemyEdgeClearance',
-    'var candidateBacklineSafe = IsBacklineSafe(candidate)',
-    'var currentBacklineSafe = IsBacklineSafe(current)'
-) 'Far Help safe-backline preference, distance, and exact-tie role selection rules'
+    'candidate.MinimumCanonicalEnemyEdgeDistance > MinimumBacklineEnemyEdgeClearance'
+) 'Far Help distance-only selection with diagnostic role and enemy-clearance observations'
 $normalizedFarHelpSelection = $farHelpSelection -replace '\s+', ' '
 if ($normalizedFarHelpSelection -notmatch 'candidate\.HasRangeAndLineOfSight;.*?public static bool IsBacklineSafe' -or
-    $normalizedFarHelpSelection -match 'candidate\.HasRangeAndLineOfSight\s*&&\s*IsBacklineSafe') {
-    throw 'Far Help action eligibility must remain independent of the optional backline heuristic so unknown/frontline candidates remain valid fallbacks.'
+    $normalizedFarHelpSelection -match 'candidate\.HasRangeAndLineOfSight\s*&&\s*IsBacklineSafe' -or
+    $normalizedFarHelpSelection -match 'public static bool IsEligible\(FarHelpSelectionCandidate candidate\) =>.*?candidate\.Role.*?public static bool IsBacklineSafe') {
+    throw 'Far Help action eligibility must remain independent of role and the diagnostic backline observation.'
 }
-if ($normalizedFarHelpSelection -notmatch 'var candidateBacklineSafe = IsBacklineSafe\(candidate\); var currentBacklineSafe = IsBacklineSafe\(current\); if \(candidateBacklineSafe != currentBacklineSafe\) return candidateBacklineSafe; var distance = candidate\.DistanceSquared\.CompareTo\(current\.DistanceSquared\); if \(distance != 0\) return distance > 0; if \(candidate\.Role != current\.Role\) return candidate\.Role > current\.Role;') {
-    throw 'Far Help must prefer a safe backline candidate, then compare distance, then use healer/ranged/other only as an exact-distance tie-break.'
+if ($normalizedFarHelpSelection -notmatch 'private static bool IsBetter\( FarHelpSelectionCandidate candidate, FarHelpSelectionCandidate current\) \{ var distance = candidate\.DistanceSquared\.CompareTo\(current\.DistanceSquared\); if \(distance != 0\) return distance > 0; if \(candidate\.PartySlot != current\.PartySlot\) return candidate\.PartySlot < current\.PartySlot; if \(candidate\.EntityId != current\.EntityId\) return candidate\.EntityId < current\.EntityId; return candidate\.GameObjectId < current\.GameObjectId; \}' -or
+    $normalizedFarHelpSelection -match 'private static bool IsBetter\(.*?(?:IsBacklineSafe|candidate\.Role|current\.Role).*?private static bool IsValidEntityId') {
+    throw 'Far Help must rank every eligible actor by distance only, then stable party and actor identity; role and backline diagnostics cannot change selection.'
 }
 if ($normalizedFarHelpSelection -notmatch 'candidate\.MinimumCanonicalEnemyEdgeDistance >= 0f && candidate\.MinimumCanonicalEnemyEdgeDistance > MinimumBacklineEnemyEdgeClearance') {
     throw 'Far Help backline safety must require finite nonnegative hitbox-edge clearance strictly greater than 10 yalms.'
@@ -10027,12 +10070,13 @@ Assert-Literals $nearAssist @(
     'HasCompleteCanonicalEnemySnapshot: hasCompleteEnemySnapshot',
     'CanonicalLiveEnemyCount: enemySnapshot.LiveEnemies.Length',
     'MinimumCanonicalEnemyEdgeDistance: minimumEnemyEdgeDistance',
-    'safe-backline(clearance>10y)',
-    'reachable-fallback(snapshot-incomplete)',
-    'reachable-fallback(clearance<=',
+    'clearance-observed(clearance>10y)',
+    'clearance-unverified(snapshot-incomplete)',
+    'clearance-observed(clearance<=',
     'action-valid=',
-    'safe-backline='
-) 'Far Help action-time backline diagnostics and fallback'
+    'clearance-observed=',
+    'role-diagnostic='
+) 'Far Help action-time clearance and role diagnostics without ranking influence'
 
 $farHelpOneShot = Read-RequiredSource (Join-Path $coreRoot 'FarHelpOneShotRules.cs') 'Far Help one-shot rules'
 Assert-Literals $farHelpOneShot @(
@@ -12418,18 +12462,16 @@ $whatsNewWindow = Read-RequiredSource $whatsNewWindowPath 'What''s New window'
 $releaseNotesContentRules = Read-RequiredSource $releaseNotesContentRulesPath 'Release-note content rules'
 $releaseNotesContentSelfTests = Read-RequiredSource $releaseNotesContentSelfTestsPath 'Release-note content self-tests'
 Assert-Literals $projectFile @(
-    '<Version>0.44.0.4</Version>',
-    '<AssemblyVersion>0.44.0.4</AssemblyVersion>',
-    '<FileVersion>0.44.0.4</FileVersion>'
-) 'v0.44.0.4 project version'
+    '<Version>0.44.0.5</Version>',
+    '<AssemblyVersion>0.44.0.5</AssemblyVersion>',
+    '<FileVersion>0.44.0.5</FileVersion>'
+) 'v0.44.0.5 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.44.0.4";',
-    'Player Stats now has its own settings page instead of living under HUD & Nameplates.',
-    'Search local opponents by name or world, then switch between ERZNEMESIS and KANONENFUTTER rankings.',
-    'Your W-L is shown from your point of view, together with win rate, meetings, and last seen.',
-    'An older PvpStats import can add searchable opponent details without counting its original W-L twice.',
-    'Opponent names and match totals stay on this PC and are never uploaded.'
-) 'v0.44.0.4 version-acknowledged player-facing What''s New content'
+    'private const string CurrentReleaseVersion = "0.44.0.5";',
+    'Guard can still use the action buffer when the first press does not land.',
+    'Buffer and Turbo repeats can no longer press Guard again while it is active or still appearing.',
+    'Far Help now always chooses the farthest reachable ally, regardless of healer, job, or nearby enemies.'
+) 'v0.44.0.5 version-acknowledged player-facing What''s New content'
 Assert-Literals $releaseNotesContentRules @(
     'public const int MaximumBulletCount = 5;',
     'if (bullets is null) return [];',
@@ -12483,24 +12525,23 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.44.0.4 plugin manifest metadata'
+) 'v0.44.0.5 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.44.0.4"',
-    'Added a dedicated Player Stats tab.',
-    'Search local Name @ World history',
-    'Erznemesis and Kanonenfutter rankings',
-    'Historical W/L was removed from the live HUD.',
-    'Opponent names, worlds, totals, and last-seen time stay in the local stats file; nothing is uploaded',
-    'Content IDs or full rosters are not saved.',
+    '"AssemblyVersion": "0.44.0.5"',
+    'Guard remains bufferable when the first press does not land',
+    'action-buffer and Turbo repeats can no longer cancel an active or still-appearing Guard.',
+    'A fresh manual press remains an intentional cancel.',
+    'Far Help now always chooses the farthest reachable friendly party member',
+    'regardless of healer, role, job, or nearby enemies.',
     '"IsHide": false',
     '"IsTestingExclusive": false',
     '"DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"',
     '"DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"',
     '"DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"'
-) 'v0.44.0.4 custom-repository metadata'
+) 'v0.44.0.5 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -12665,6 +12706,11 @@ Assert-Literals $normalizedPrivacy @(
     'Automatic Zantetsuken and Auto-Seiton never use this permission.'
 ) 'v0.42.0.8 retained required-Kuzushi Zantetsuken, Auto-Seiton/Namikiri, and safety/privacy disclosure'
 Assert-Literals $normalizedReadme @(
+    'Version 0.44.0.5 keeps Guard usable with the timing/action buffer when the first press does not land',
+    'attributable buffer and Turbo repeats can no longer press Guard again while it is active or still appearing.',
+    'Release and freshly press Guard to cancel it intentionally.',
+    '`/farhelp` now always chooses the farthest reachable friendly party member;',
+    'healer, role, job, and nearby-enemy observations never change that choice.',
     'Version 0.44.0.4 adds a dedicated **Player Stats** page.',
     'Search the opponents saved for your current character by `Name @ World`',
     '**ERZNEMESIS** for the players you lost to most and **KANONENFUTTER** for the players you beat most.',
@@ -12901,8 +12947,15 @@ Assert-Literals $normalizedReadme @(
     'constructs fifteen reviewed request shapes across seventeen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.44.0.4 Player Stats release and retained safety history'
+) 'v0.44.0.5 Guard-buffer and Far Help release with retained safety history'
 Assert-Literals $normalizedChangelog @(
+    '## 0.44.0.5',
+    'Guard remains eligible for the timing/action buffer when its first request does not land.',
+    'Attributable timing-buffer, Turbo, and delegated held repeats can no longer press Guard again while it is active or still propagating from the server.',
+    'Releasing and freshly pressing Guard remains an intentional cancel.',
+    '`/farhelp` now always chooses the farthest reachable friendly party member.',
+    'Healer, role, job, and nearby-enemy observations never change that choice.',
+    'Exact-distance ties remain deterministic through party and actor identity.',
     '## 0.44.0.4',
     'Added a dedicated **Player Stats** page.',
     'Search the current character''s local history by `Name @ World`',

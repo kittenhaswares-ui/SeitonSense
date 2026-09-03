@@ -3,6 +3,13 @@
 Seiton Sense is a local PvP awareness HUD with pressure tracking, nameplate
 cues, warnings, job helpers, Smart Action, and target highlights.
 
+Version 0.44.0.5 keeps Guard usable with the timing/action buffer when the first
+press does not land, but attributable buffer and Turbo repeats can no longer
+press Guard again while it is active or still appearing. Release and freshly
+press Guard to cancel it intentionally. `/farhelp` now always chooses the
+farthest reachable friendly party member; healer, role, job, and nearby-enemy
+observations never change that choice.
+
 Version 0.44.0.4 adds a dedicated **Player Stats** page. Search the opponents
 saved for your current character by `Name @ World`, then switch between
 **ERZNEMESIS** for the players you lost to most and **KANONENFUTTER** for the
@@ -76,7 +83,10 @@ the current name/world keys.
 
 Every exact own Guard activation also receives a one-second repeat-only safety:
 pressing Guard again during that window is ignored without blocking any other
-action. Version 0.43.0.9 fixed `/nearhelp` casted heals falling back to self before
+action. Timing-buffer and Turbo retries can still help the first Guard request
+land, but attributable synthetic repeats cannot toggle an active or still-
+propagating Guard off. Releasing and freshly pressing Guard remains an
+intentional cancel. Version 0.43.0.9 fixed `/nearhelp` casted heals falling back to self before
 ally selection. Friendly PvP casts now use the same reachable-ally HP and
 pressure selection as instant Near Help actions. The ally is chosen once before
 the native cast request; the visible target is unchanged, and the cast is never
@@ -500,14 +510,11 @@ and Super Focus Glow into one configurable custom-repository plugin.
   actor once. It never performs the melee follow-up, substitutes another enemy,
   or reranks. Wolves' Den testing uses only the exact current target.
 - **One-shot Far Help:** `/farhelp` redirects one already incoming, reviewed
-  friendly movement action to a reachable non-self party member. It first
-  prefers destinations with strictly more than 10 yalms of horizontal
-  hitbox-edge clearance from every live enemy, then chooses the farthest one.
-  If none can be certified, it still chooses the farthest valid reachable ally.
-  Only an exact distance tie prefers healer, then ranged/caster, then another
-  job. It supports Guardian, Thunderclap, Aetherial Manipulation, Icarus, and
-  Slither. Only no valid reachable ally means no movement; it never falls back
-  to your target.
+  friendly movement action to the farthest reachable non-self party member.
+  Job, role, and nearby-enemy observations never change that choice. It
+  supports Guardian, Thunderclap, Aetherial Manipulation, Icarus, and Slither.
+  Only no valid reachable ally means no movement; it never falls back to your
+  target.
 - **Manual NIN Panic Shukuchi macro:** `/panicshu` makes one fail-closed
   immediate Shukuchi attempt at the terrain point 19.5 yalms along the
   character's current facing. It is command-only, works from own Guard, is never
@@ -1421,6 +1428,10 @@ Guard press is handled by the separate global one-second repeat-only gate. At
 its exact boundary the press passes as the deliberate release path and
 atomically drops automatic ownership. Manual Guard never arms that all-action
 ownership, but it receives the same one-second repeat-only safety.
+Timing-buffer and attributable Turbo/delegated repeats may retry the initial
+Guard request, but they are suppressed for the full active-or-propagating Guard
+episode so held input cannot toggle Guard off. A released and freshly pressed
+physical Guard key remains the deliberate cancel path.
 The dedicated exact command scope releases this ownership only for the matching
 NIN location boundary or reviewed directional self-dash boundary, even if the
 native action rejects it. Unsupported or unknown actions,
@@ -1929,25 +1940,13 @@ Manipulation `29660`, Icarus `29261`, and Slither `39184`.
 
 `/farhelp` arms one token for at most 750 ms. The immediately following
 supported movement action resolves exact, live, targetable non-self party
-members and checks that action's native range and line of sight. At that action,
-all five native `<e1>`-`<e5>` slots must resolve to exact, unique, valid opponent
-identities. Confirmed dead opponents are ignored for clearance, while every
-live opponent counts even when temporarily untargetable. Each candidate must
-have strictly more than 10 yalms of horizontal hitbox-edge clearance from every
-live opponent to enter the preferred backline group. Missing, ambiguous,
-invalid, or no-live-enemy observations make that preference unavailable; they
-do not cancel an otherwise valid movement destination.
-
-If one or more candidates pass that conservative backline heuristic, the
-farthest of those candidates from you wins. If none pass or the snapshot cannot
-certify them, Far Help falls back to the farthest otherwise valid reachable
-ally. Only at exactly equal measured distance does role break the tie: healer,
-then physical/magical ranged or caster, then every other job. Native party order
-and stable actor identity break any remaining tie. Guardian uses FFXIV's native
+members and checks that action's native range and line of sight. The farthest
+valid reachable ally always wins. Role, job, and nearby-enemy observations do
+not alter selection. Native party order and stable actor identity break an
+exact measured-distance tie. Guardian uses FFXIV's native
 20-yalm action-range and line-of-sight result with no custom center-distance
 cap; its 10-yalm condition applies to staying close enough for protection after
-the jump. The enemy-clearance test is a map-agnostic preference, not a guarantee
-that a destination is tactically safe.
+the jump.
 
 Use exactly those three lines; Far Help deliberately has no selected-target
 fallback. `<me>` is an intrinsically invalid carrier because none of the five
@@ -2342,8 +2341,8 @@ update through the same repository.
 - `/nearhelp` - arm one CC-only survival-target redirect for the next supported
   friendly PvP macro action; exact self is allowed only for self-targetable actions
 - `/sshelp` - collision-free alias for `/nearhelp`
-- `/farhelp` - arm one CC-only, backline-preferred farthest mobility redirect for
-  the next reviewed friendly movement action; no valid reachable ally means no movement
+- `/farhelp` - arm one CC-only redirect to the farthest reachable friendly ally,
+  regardless of healer, role, job, or nearby enemies; no valid ally means no movement
 - `/ssfar` - collision-free alias for `/farhelp`
 - `/panicshu` - on exact PvP NIN, immediately make one Shukuchi attempt at the
   terrain point 19.5 yalms straight ahead in CC or enabled Wolves' Den testing,

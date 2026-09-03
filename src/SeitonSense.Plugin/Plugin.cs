@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.44.0.4";
+    private const string CurrentReleaseVersion = "0.44.0.5";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -462,11 +462,9 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Player Stats now has its own settings page instead of living under HUD & Nameplates.",
-                "Search local opponents by name or world, then switch between ERZNEMESIS and KANONENFUTTER rankings.",
-                "Your W-L is shown from your point of view, together with win rate, meetings, and last seen.",
-                "An older PvpStats import can add searchable opponent details without counting its original W-L twice.",
-                "Opponent names and match totals stay on this PC and are never uploaded.",
+                "Guard can still use the action buffer when the first press does not land.",
+                "Buffer and Turbo repeats can no longer press Guard again while it is active or still appearing.",
+                "Far Help now always chooses the farthest reachable ally, regardless of healer, job, or nearby enemies.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

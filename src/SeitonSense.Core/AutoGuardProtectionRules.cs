@@ -25,6 +25,13 @@ public readonly record struct GuardRepeatProtectionObservation(
     long OwnGuardActivatedAtMilliseconds,
     long NowMilliseconds);
 
+public readonly record struct SyntheticGuardRepeatProtectionObservation(
+    bool RuntimeEnabled,
+    bool IsSupportedPvpContext,
+    bool IsSyntheticRequest,
+    bool ExactGuardRequest,
+    bool OwnGuardActiveOrPropagating);
+
 /// <summary>
 /// Suppresses only an exact second local Guard request during the first second
 /// after exact local Guard first became visible for a recent hook-observed
@@ -47,6 +54,19 @@ public static class GuardRepeatProtectionRules
         observation.NowMilliseconds >= observation.OwnGuardActivatedAtMilliseconds &&
         observation.NowMilliseconds - observation.OwnGuardActivatedAtMilliseconds <
             ProtectionMilliseconds;
+
+    /// <summary>
+    /// A synthetic Turbo or timing-buffer replay may help the first Guard land,
+    /// but it never represents a fresh player decision to toggle an existing
+    /// Guard off. Physical fresh presses remain outside this policy.
+    /// </summary>
+    public static bool ShouldBlockSyntheticRepeat(
+        SyntheticGuardRepeatProtectionObservation observation) =>
+        observation.RuntimeEnabled &&
+        observation.IsSupportedPvpContext &&
+        observation.IsSyntheticRequest &&
+        observation.ExactGuardRequest &&
+        observation.OwnGuardActiveOrPropagating;
 }
 
 public readonly record struct AutoGuardProtectionState(

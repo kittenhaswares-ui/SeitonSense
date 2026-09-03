@@ -108,9 +108,8 @@ internal sealed partial class SettingsWindow
             ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Mobility Ability\" <me>");
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
-                "Works with Guardian, Icarus, Thunderclap, Aetherial Manipulation, and Slither. Far Help prefers the " +
-                "farthest reachable ally with more than 10 yalms of space from every living enemy. If enemy data is " +
-                "unclear, it falls back to the farthest reachable ally. This cannot guarantee that a position is safe. " +
+                "Works with Guardian, Icarus, Thunderclap, Aetherial Manipulation, and Slither. Far Help always picks " +
+                "the farthest reachable ally. Healer, role, job, and nearby-enemy information never change that choice. " +
                 "Use exactly the three lines above: there is no <t> fallback, and no valid ally means no movement. " +
                 "Your visible target does not change. Keep /mlock at the top; /ssfar is an alias.");
             ImGui.PopTextWrapPos();

@@ -39,6 +39,9 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
     private static int hotbarExecutionDepth;
 
     [ThreadStatic]
+    private static int syntheticHotbarRepeatExecutionDepth;
+
+    [ThreadStatic]
     private static ActiveBufferRootScope? activeBufferRoot;
 
     private readonly PluginConfiguration configuration;
@@ -132,6 +135,9 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
     }
 
     internal IntegratedActionBufferRuntime ActionBuffer { get; }
+
+    internal bool IsSyntheticHotbarRepeatExecution =>
+        syntheticHotbarRepeatExecutionDepth > 0;
 
     internal bool CanObserveCompleteActionBarActivity =>
         !disposed &&
@@ -327,6 +333,7 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
         var previousRoot = activeBufferRoot;
         var ownsRoot = false;
         var nativeTurboPulse = false;
+        var syntheticRepeatExecution = false;
         IntegratedHotbarActivation? nativeTurboActivation = null;
         var nativeTurboActionId = 0u;
         try
@@ -346,6 +353,11 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
             nativeTurboPulse = activation is
             {
                 Kind: IntegratedHotbarActivationKind.InjectedRepeat,
+            };
+            syntheticRepeatExecution = activation is
+            {
+                Kind: IntegratedHotbarActivationKind.InjectedRepeat or
+                    IntegratedHotbarActivationKind.DelegatedRepeat,
             };
             if (nativeTurboPulse &&
                 activation is { } turboActivation &&
@@ -368,6 +380,7 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
                 "Seiton Sense ExecuteSlot bookkeeping failed open; native input continues.");
         }
         hotbarExecutionDepth++;
+        if (syntheticRepeatExecution) syntheticHotbarRepeatExecutionDepth++;
         try
         {
             var result = hook.Original(thisPtr, slot);
@@ -383,6 +396,7 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
         }
         finally
         {
+            if (syntheticRepeatExecution) syntheticHotbarRepeatExecutionDepth--;
             hotbarExecutionDepth--;
             if (ownsRoot) activeBufferRoot = previousRoot;
         }
@@ -399,6 +413,7 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
         var previousRoot = activeBufferRoot;
         var ownsRoot = false;
         var nativeTurboPulse = false;
+        var syntheticRepeatExecution = false;
         IntegratedHotbarActivation? nativeTurboActivation = null;
         var nativeTurboActionId = 0u;
         try
@@ -419,6 +434,11 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
             nativeTurboPulse = activation is
             {
                 Kind: IntegratedHotbarActivationKind.InjectedRepeat,
+            };
+            syntheticRepeatExecution = activation is
+            {
+                Kind: IntegratedHotbarActivationKind.InjectedRepeat or
+                    IntegratedHotbarActivationKind.DelegatedRepeat,
             };
             if (nativeTurboPulse &&
                 activation is { } turboActivation &&
@@ -441,6 +461,7 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
                 "Seiton Sense ExecuteSlotById bookkeeping failed open; native input continues.");
         }
         hotbarExecutionDepth++;
+        if (syntheticRepeatExecution) syntheticHotbarRepeatExecutionDepth++;
         try
         {
             var result = hook.Original(thisPtr, hotbarId, slotId);
@@ -456,6 +477,7 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
         }
         finally
         {
+            if (syntheticRepeatExecution) syntheticHotbarRepeatExecutionDepth--;
             hotbarExecutionDepth--;
             if (ownsRoot) activeBufferRoot = previousRoot;
         }

@@ -361,6 +361,36 @@ internal static class DefensiveUtilitySelfTests
                 exactRepeat with { NowMilliseconds = 1_249 }),
             "clock rollback fails open");
 
+        var syntheticRepeat = new SyntheticGuardRepeatProtectionObservation(
+            RuntimeEnabled: true,
+            IsSupportedPvpContext: true,
+            IsSyntheticRequest: true,
+            ExactGuardRequest: true,
+            OwnGuardActiveOrPropagating: true);
+        True(
+            GuardRepeatProtectionRules.ShouldBlockSyntheticRepeat(syntheticRepeat),
+            "a synthetic repeat cannot toggle an active or propagating Guard off");
+        False(
+            GuardRepeatProtectionRules.ShouldBlockSyntheticRepeat(
+                syntheticRepeat with { IsSyntheticRequest = false }),
+            "a fresh physical Guard press remains a deliberate toggle request");
+        False(
+            GuardRepeatProtectionRules.ShouldBlockSyntheticRepeat(
+                syntheticRepeat with { OwnGuardActiveOrPropagating = false }),
+            "a synthetic retry remains available to land the first Guard");
+        False(
+            GuardRepeatProtectionRules.ShouldBlockSyntheticRepeat(
+                syntheticRepeat with { ExactGuardRequest = false }),
+            "synthetic protection never blocks another action");
+        False(
+            GuardRepeatProtectionRules.ShouldBlockSyntheticRepeat(
+                syntheticRepeat with { RuntimeEnabled = false }),
+            "synthetic protection fails open while the runtime is disabled");
+        False(
+            GuardRepeatProtectionRules.ShouldBlockSyntheticRepeat(
+                syntheticRepeat with { IsSupportedPvpContext = false }),
+            "synthetic protection fails open outside supported PvP");
+
         var explicitRelease = AutoGuardProtectionRules.Observe(
             armed,
             ProtectionObservation(

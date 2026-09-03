@@ -29,10 +29,9 @@ public readonly record struct FarHelpSelectionCandidate(
     float MinimumCanonicalEnemyEdgeDistance);
 
 /// <summary>
-/// Prefers backline-safe action-valid party members when at least one exists;
-/// otherwise every otherwise eligible reachable member remains available.
-/// Within that chosen tier the farthest candidate wins. Only at exactly equal
-/// distance does role break the tie: healer, then ranged/caster, then other.
+/// Selects the farthest action-valid party member. Role and enemy-clearance
+/// observations remain available for diagnostics, but never influence target
+/// choice. Exact-distance ties use only stable party and actor identity.
 /// </summary>
 public static class FarHelpSelectionRules
 {
@@ -48,8 +47,8 @@ public static class FarHelpSelectionRules
         // Physical ranged: BRD, MCH, DNC. Casters: BLM, SMN, RDM, PCT.
         23 or 31 or 38 or 25 or 27 or 35 or 42 =>
             FarHelpAllyRole.RangedOrCaster,
-        // Tanks, melee, classes, limited jobs, and unknown future rows remain
-        // the final exact-distance tie-break tier until explicitly reviewed.
+        // Tanks, melee, classes, limited jobs, and unknown future rows use the
+        // neutral diagnostic label. This label never affects eligibility or rank.
         _ => FarHelpAllyRole.Other,
     };
 
@@ -78,7 +77,6 @@ public static class FarHelpSelectionRules
         candidate.MaximumHp >= candidate.CurrentHp &&
         float.IsFinite(candidate.DistanceSquared) &&
         candidate.DistanceSquared >= 0f &&
-        Enum.IsDefined(candidate.Role) &&
         candidate.IsExactPartyMember &&
         !candidate.IsSelf &&
         candidate.IsTargetable &&
@@ -90,8 +88,7 @@ public static class FarHelpSelectionRules
     /// canonical CC enemy. The supplied value is the minimum horizontal
     /// hitbox-edge clearance across that complete set; an empty, oversized,
     /// missing, negative, or non-finite snapshot is not considered safe. This
-    /// is a preference signal only; unknown/frontline candidates remain valid
-    /// when no safe backline candidate exists.
+    /// signal is diagnostic only and never influences selection or eligibility.
     /// </summary>
     public static bool IsBacklineSafe(FarHelpSelectionCandidate candidate) =>
         candidate.HasCompleteCanonicalEnemySnapshot &&
@@ -104,16 +101,8 @@ public static class FarHelpSelectionRules
         FarHelpSelectionCandidate candidate,
         FarHelpSelectionCandidate current)
     {
-        var candidateBacklineSafe = IsBacklineSafe(candidate);
-        var currentBacklineSafe = IsBacklineSafe(current);
-        if (candidateBacklineSafe != currentBacklineSafe)
-            return candidateBacklineSafe;
-
         var distance = candidate.DistanceSquared.CompareTo(current.DistanceSquared);
         if (distance != 0) return distance > 0;
-
-        if (candidate.Role != current.Role)
-            return candidate.Role > current.Role;
 
         if (candidate.PartySlot != current.PartySlot)
             return candidate.PartySlot < current.PartySlot;

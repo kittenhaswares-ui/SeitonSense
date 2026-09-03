@@ -5,8 +5,8 @@
     "Punchline": "PvP cues, Smart Tab, responsive helpers, and survival tools.",
     "Description": "A local PvP HUD with searchable CC player rankings and prediction, nameplate cues, Limit Break alerts, pressure and CC information, Ping Helpers, medicine-kit beacons, range rings, a Wolves' Den map panel, recovery and job helpers, Smart Tab, assist macros, MP sounds, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.44.0.4",
-    "Changelog": "Added a dedicated Player Stats tab. Search local Name @ World history, switch between Erznemesis and Kanonenfutter rankings, and see your enemy-only W/L ratio. Historical W/L was removed from the live HUD. Opponent names, worlds, totals, and last-seen time stay in the local stats file; nothing is uploaded and Content IDs or full rosters are not saved.",
+    "AssemblyVersion": "0.44.0.5",
+    "Changelog": "Guard remains bufferable when the first press does not land, but attributable action-buffer and Turbo repeats can no longer cancel an active or still-appearing Guard. A fresh manual press remains an intentional cancel. Far Help now always chooses the farthest reachable friendly party member, regardless of healer, role, job, or nearby enemies.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -36,6 +36,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1788418390"
+    "LastUpdate": "1788462331"
   }
 ]
