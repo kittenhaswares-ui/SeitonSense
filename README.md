@@ -3,6 +3,22 @@
 Seiton Sense is a local PvP awareness HUD with pressure tracking, nameplate
 cues, warnings, job helpers, Smart Action, and target highlights.
 
+Version 0.44.0.4 adds a dedicated **Player Stats** page. Search the opponents
+saved for your current character by `Name @ World`, then switch between
+**ERZNEMESIS** for the players you lost to most and **KANONENFUTTER** for the
+players you beat most. The table shows your enemy-only W/L, win rate, meetings,
+and last-seen date; leader badges require at least three meetings. Historical
+W/L, import, recording, reset, and prediction settings moved out of **HUD &
+Nameplates**. The movable match panel now keeps only its prediction and live
+match deaths, damage, healing, and crystal time.
+
+Searchable opponent names, Home Worlds, enemy-only totals, and last-seen time
+stay in the local `cc-map-stats.json` file. Seiton never uploads them and does not save
+raw Content IDs, full rosters, or per-match scoreboards. If PvpStats history was
+already imported before 0.44.0.4, press **Import old PvpStats player history**
+once more to add searchable names and opponent W/L without counting the old W/L
+again.
+
 Version 0.44.0.3 fixes **Smart Action in Wolves' Den duels**. It now proves the
 exact visible hostile `<t>` directly instead of depending on a hidden duel slot
 that is not present on every valid frame. It does not select another Den target
@@ -40,7 +56,8 @@ Version 0.44.0.0 added the movable **CC Win Prediction** panel. Unknown players
 count as a neutral 50%; locally observed W/L from all five allies and enemies
 shapes the opening estimate. An optional playful live estimate reacts to
 observed deaths and crystal progress. Switch the panel between both teams to
-see local W/L and the current match's deaths, damage, healing, and crystal time.
+see the current match's deaths, damage, healing, and crystal time. Historical
+per-player W/L moved to the dedicated Player Stats page in v0.44.0.4.
 Live damage/healing is intentionally incomplete; the exact result screen fills
 the final values when the match ends.
 
@@ -48,9 +65,11 @@ If PvpStats is installed, **Import old PvpStats player history** can read its
 completed Casual and Ranked 5v5 matches once for the logged-in character.
 Unload PvpStats first so Seiton can take a proven exclusive read-only lock. The
 import never copies or modifies `data.db`, never uploads anything, and persists
-only install-specific HMAC player keys plus aggregate W/L—not raw names or
-worlds. A five-minute boundary margin and store-generation check prevent old
-and newly recorded history from being counted twice.
+install-specific HMAC player keys, bounded local `Name @ World`, aggregate W/L,
+enemy-only head-to-head W/L, and last-seen time. A five-minute boundary margin
+and store-generation check prevent old and newly recorded history from being
+counted twice. It never stores raw Content IDs, full rosters, or per-match
+scoreboards.
 Legacy schema-2 files keep their map and own overall W/L, but discard old
 per-player rows: their Content-ID-based one-way keys cannot be mapped safely to
 the current name/world keys.
@@ -281,9 +300,12 @@ and Super Focus Glow into one configurable custom-repository plugin.
   `NO DATA`. Only future public CC post-match results with one exact unique local
   Content ID, ten unique participants, valid teams, duration, result, and known
   territory are counted; custom matches, Wolves' Den, ambiguous payloads, and
-  corrupt storage count nothing. The local file stores only salted HMAC keys,
-  per-map totals, and bounded hashed deduplication records—never names or raw
-  Content IDs. The panel downloads no artwork and uses no network endpoint.
+  corrupt storage count nothing. The local file uses salted HMAC keys and stores
+  per-map totals plus bounded hashed deduplication records. When player history
+  is enabled, it also stores bounded local opponent names, Home Worlds, enemy-only W/L,
+  and last-seen time for the Player Stats page. Raw Content IDs, full rosters,
+  and per-match scoreboards are never stored. The panel downloads no artwork
+  and uses no network endpoint.
 - **Public-CC medicine-kit cues:** separate default-on toggles show an opening
   countdown to the assumed 30-second first spawn and green foreground beacons
   for currently detected medicine kits. The beacon scan is limited to Dalamud's
@@ -615,7 +637,8 @@ and Super Focus Glow into one configurable custom-repository plugin.
   the separate low-MP opt-in. The information card can also show team pressure
   and whether the current hard target is pressuring you.
 - **Cleaner settings:** a persistent sidebar separates Start, Alerts, HUD &
-  Nameplates, Action Helpers, Job Tools, Macro Helpers, Targets, and Diagnostics.
+  Nameplates, Player Stats, Action Helpers, Ping Helpers, Job Tools, Macro
+  Helpers, Targets, and Diagnostics.
   Shared-input actions document their real priority order, while visual,
   macro, and job-specific controls stay in their own pages. Configuration schema
   33 separates the new native Smart Tab switch from the previous Smart Action
@@ -748,8 +771,8 @@ evidence is now split into narrow, non-interactive surfaces:
 Every surface requires a fresh exact runtime snapshot. The damage feed accepts
 only a direct ActionEffect event with an exact ally caster, enemy target,
 reviewed LB action, nonzero event/episode token, and decoded positive damage; it
-never infers damage from HP deltas. Names are resolved only for current display,
-never persisted or uploaded. These cues do not accept clicks, set a hard/soft/
+never infers damage from HP deltas. Names are resolved only for current display
+and are never persisted or uploaded by these LB cues. These cues do not accept clicks, set a hard/soft/
 Focus target, publish `<mo>`, calibrate or estimate a remote gauge, or edit/hide
 native UI.
 
@@ -2360,9 +2383,13 @@ standalone plugins' saved configuration.
 ## Privacy and safety
 
 Seiton Sense has no account, independent server, telemetry, or gameplay upload.
-It does not read Home Worlds and does not persist combat, target, character-name,
-or key history. Optional ally LB feed names are resolved only from the current
-exact actors for drawing and are never persisted or uploaded. The separate default-off
+When local CC player history is enabled, the dedicated Player Stats feature
+stores bounded opponent names, Home Worlds, enemy-only W/L, and last-seen time in
+the local statistics file so search works. It never uploads them and does not
+store raw Content IDs, full rosters, or per-match scoreboards. Other combat,
+target, character-name, and key observations are not persisted as history.
+Optional ally LB feed names are resolved only from the current exact actors for
+drawing and are never persisted or uploaded by that feature. The separate default-off
 Guardian communication uses ordinary FFXIV
 Quick Chat and marker commands, so enabling it creates the described party-
 visible in-game side effect through FFXIV. Transient observations and the exact
@@ -2611,7 +2638,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 636-test Core registry, twelve plugin self-tests,
+For the current source, the exact 640-test Core registry, sixteen plugin self-tests,
 and source checks pin configuration schema 53, the shared monotonic response clock and framework
 epoch, true not-ready-to-ready wakeups, strict unchanged-queue critical recovery,
 the immutable release-independent tap-to-land buffer, active-Sprint repeat

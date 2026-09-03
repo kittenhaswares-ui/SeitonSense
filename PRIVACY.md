@@ -1,7 +1,11 @@
 # Privacy
 
 Seiton Sense has no account, independent server, telemetry, or external gameplay
-upload. Optional gameplay helpers can submit ordinary action, target-sign, or
+upload. When local CC player history is enabled, the dedicated Player Stats
+feature intentionally stores bounded opponent names, Home Worlds, enemy-only W/L,
+and last-seen time in Seiton's local statistics file so `Name @ World` search
+works. It never uploads that data and never stores raw Content IDs, full rosters,
+or per-match scoreboards. Optional gameplay helpers can submit ordinary action, target-sign, or
 Quick Chat commands to FFXIV, and the separate default-off Auto Low-MP Focus
 helper can set only an empty local native Focus Target. The retired Combat
 Frames runtime has no target-click or native-mouseover path. Default-off Smart
@@ -34,7 +38,9 @@ and party-visible marker commands through the normal FFXIV service after an
 automatic Guardian request is client-accepted. It embeds no character name or
 free text. The optional ally LB notification cards may display current character
 names read from the live client, but the plugin does not persist or transmit
-those names, Home Worlds,
+those names through the LB notification feature. The separate, explicit local
+CC player-history feature is the only path described below that persists
+bounded names and Home Worlds. The LB notification path does not persist
 combat, target, status, or key history. Ally Rescue attempt,
 client-accepted, and confirmed-cleanse counters exist only in memory for the
 current match/plugin session and are never uploaded. To diagnose the explicitly
@@ -83,12 +89,14 @@ following data already available in the local FFXIV client:
 - when local MP sounds are enabled, exact local identity, a trusted current and
   maximum MP sample, and two in-memory crossing/hysteresis latches for 4,000 and
   2,000 MP; only built-in local FFXIV sound IDs are invoked;
-- when the Wolves' Den rotation panel is enabled, the Patch 7.5 post-match hook
-  transiently copies only the public CC result byte, duration, progress values,
-  and ten numeric participant rows. On the framework thread, exact public-CC
+- when any public-CC result consumer is enabled, the Patch 7.5 post-match hook
+  transiently copies the public CC result byte, duration, progress values, and
+  ten bounded participant rows. On the framework thread, exact public-CC
   context and territory, a nonzero local Content ID, ten unique nonzero Content
   IDs, known jobs, and exactly five members on each valid team must all agree.
-  Character names and name fallback are never read by this path;
+  Player-history capture may also validate the bounded player name and Home
+  World already present in each row; ally-only identities remain HMAC-only and
+  there is no name fallback for proving the local player or match boundary;
 - when either public-CC medicine-kit cue is enabled, exact public PvP context
   and territory plus the native content time remaining; the beacon path also
   checks only Dalamud's bounded event-object and reaction-event-object slices
@@ -1862,35 +1870,52 @@ unavailable hook all record nothing.
 
 Confirmed totals are saved locally in `cc-map-stats.json`. The file contains a
 random salt, install-specific HMAC-SHA256 character and player keys, overall and
-per-map W/L, per-player aggregate W/L, one first-player-history timestamp, and
-at most 32 recent HMAC-SHA256 match fingerprints per character for duplicate
-suppression. A completed optional import also stores only its completion time,
-safe cutoff, and aggregate match/player counts. Raw Content IDs, character
-names, worlds, rosters, ratings, timelines, and per-match scoreboard values are
-not persisted. Because the random salt and HMAC keys live in the same local
-file, these keys are pseudonymous installation-local identifiers, not
-encryption or guaranteed anonymity; a person who already guesses an exact
-name and Home World could test that guess offline.
+per-map W/L, per-player aggregate W/L used by prediction, and the searchable
+Player Stats fields: bounded opponent name, Home World ID, enemy-only wins/losses
+from the local player's point of view, and last-seen time. It also contains one
+first-player-history timestamp and at most 32 recent HMAC-SHA256 match
+fingerprints per character for duplicate suppression. A completed optional
+import stores its completion time, safe cutoff, aggregate match/player counts,
+and whether searchable details were imported. Raw Content IDs, complete team
+rosters, ratings, timelines, and per-match scoreboard values are not persisted.
+The names and Home Worlds are intentionally readable local data, not anonymous
+data. The random salt and HMAC keys remain installation-local lookup and
+deduplication identifiers, not encryption. None of this file is uploaded by
+Seiton Sense.
 
-For live prediction, the exact current 5+5 names, jobs, direct observed damage
-and healing, death edges, and final result rows exist only in memory for that
-match. Unknown historical players contribute a neutral 50%. Live damage and
-healing are explicitly incomplete observations until the exact local result
-packet replaces them at match end. None of this live state is written to disk
-or sent over the network.
+For live prediction, the exact current 5+5 team arrangement, jobs, direct
+observed damage and healing, death edges, and final result rows exist only in
+memory for that match. Unknown historical players contribute a neutral 50%.
+Live damage and healing are explicitly incomplete observations until the exact
+local result packet replaces them at match end. The local history update may
+retain an opponent's bounded `Name @ World` and aggregate counters; ally-only
+identities keep only their HMAC-keyed aggregate used by prediction. It never
+stores the full team arrangement or the live/per-match scoreboard. Nothing is
+sent over the network by Seiton Sense.
 
-The optional **Import old PvpStats player history** button is a one-time local
-action for the currently logged-in character. It is allowed only outside PvP,
-combat, and duties. Seiton opens the sibling PvpStats `data.db` through an
+The optional **Import old PvpStats player history** button is a bounded local
+action for the currently logged-in character. It is allowed only outside
+combat and duties; Wolves' Den is supported while out of combat. Seiton opens
+the sibling PvpStats `data.db` through an
 exclusive read-only stream; if PvpStats is still using the file, the import
 stops before reading. It does not copy, modify, compact, or replace that
 database. The reader accepts only completed, non-deleted, non-quarantined
 Casual or Ranked 5v5 matches with one exact local alias and a known winner. A
 persisted first-history boundary plus a five-minute safety margin prevents old
-and newly recorded rows from overlapping. Raw aliases exist only in memory
-during the import; only the bounded HMAC player keys and aggregate W/L are merged. Cancelling,
-resetting local W/L, changing character, entering a duty, or any store change
-before completion prevents the pending result from being saved.
+and newly recorded rows from overlapping. Raw PvpStats documents exist only in
+memory during the read. The merge stores bounded normalized opponent names and
+Home Worlds for search, the HMAC player keys, aggregate W/L used by prediction, enemy-only
+head-to-head W/L, and last-seen time. Cancelling, resetting local W/L, changing
+character, entering a duty, or any store change before completion prevents the
+pending result from being saved.
+
+Schema-4 files intentionally contain only one-way HMAC player keys and cannot
+display their older player names by themselves. If that history originally came
+from PvpStats, the same import button may scan the original pre-history interval
+once more to attach searchable names and enemy-only counters. The already
+imported aggregate W/L is not added again, and a saved details marker makes the
+backfill one-time. Without the original database, a legacy hash-only player
+becomes searchable only after a later exact match observes the same identity.
 
 When a legacy schema-2 statistics file is loaded, its map W/L and own overall
 W/L remain usable. Its per-player rows are explicitly discarded and the count

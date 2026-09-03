@@ -3,10 +3,10 @@
     "Author": "kittenhaswares-ui",
     "Name": "Seiton Sense",
     "Punchline": "PvP cues, Smart Tab, responsive helpers, and survival tools.",
-    "Description": "A local PvP HUD with CC prediction and player history, nameplate cues, Limit Break alerts, pressure and CC information, Ping Helpers, medicine-kit beacons, range rings, a Wolves' Den map panel, recovery and job helpers, Smart Tab, assist macros, MP sounds, and target highlights.",
+    "Description": "A local PvP HUD with searchable CC player rankings and prediction, nameplate cues, Limit Break alerts, pressure and CC information, Ping Helpers, medicine-kit beacons, range rings, a Wolves' Den map panel, recovery and job helpers, Smart Tab, assist macros, MP sounds, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.44.0.3",
-    "Changelog": "Hotfix: Smart Action works in Wolves' Den duels again without depending on the unreliable hidden duel slot. Guard repeat protection now starts when Guard is visibly active, so network/UI delay cannot shorten its full one-second window. Existing target and protection checks stay intact. Automated checks are separate from live in-game confirmation.",
+    "AssemblyVersion": "0.44.0.4",
+    "Changelog": "Added a dedicated Player Stats tab. Search local Name @ World history, switch between Erznemesis and Kanonenfutter rankings, and see your enemy-only W/L ratio. Historical W/L was removed from the live HUD. Opponent names, worlds, totals, and last-seen time stay in the local stats file; nothing is uploaded and Content IDs or full rosters are not saved.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -36,6 +36,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1788374918"
+    "LastUpdate": "1788418390"
   }
 ]

@@ -106,6 +106,10 @@ internal sealed class CrystallineConflictMapStatisticsService : IDisposable
             currentlyAllied,
             out statistics);
 
+    internal CrystallineConflictPlayerStatisticsCatalogSnapshot GetPlayerStatisticsSnapshot(
+        ulong localContentId) =>
+        store.GetPlayerStatisticsSnapshot(localContentId);
+
     internal bool TryGetPvpStatsImportPlan(
         ulong localContentId,
         out PvpStatsHistoryImportPlan plan) =>
@@ -425,9 +429,24 @@ internal readonly record struct PvpStatsHistoryMergeResult(
     bool ImportedLocalRecord,
     string Status);
 
+internal readonly record struct CrystallineConflictStoredPlayerStatistics(
+    string PlayerName,
+    ushort WorldId,
+    long WinsAgainst,
+    long LossesAgainst,
+    long LastSeenUnixSeconds);
+
+internal sealed record CrystallineConflictPlayerStatisticsCatalogSnapshot(
+    long Generation,
+    CrystallineConflictStoredPlayerStatistics[] Players)
+{
+    internal static CrystallineConflictPlayerStatisticsCatalogSnapshot Empty(long generation) =>
+        new(generation, []);
+}
+
 internal sealed class CrystallineConflictMapStatisticsStore
 {
-    private const int CurrentSchema = 4;
+    private const int CurrentSchema = 5;
     private const int SaltLength = 32;
     private const int MaximumCharacters = 128;
     private const int MaximumRecentResults = 32;
@@ -448,6 +467,10 @@ internal sealed class CrystallineConflictMapStatisticsStore
     private ulong cachedContentId;
     private string cachedCharacterKey = string.Empty;
     private long mutationGeneration;
+    private ulong cachedPlayerStatisticsContentId;
+    private long cachedPlayerStatisticsGeneration = -1;
+    private CrystallineConflictPlayerStatisticsCatalogSnapshot cachedPlayerStatistics =
+        CrystallineConflictPlayerStatisticsCatalogSnapshot.Empty(-1);
 
     internal CrystallineConflictMapStatisticsStore(string configDirectory, IPluginLog log)
     {
@@ -518,7 +541,47 @@ internal sealed class CrystallineConflictMapStatisticsStore
                    record.Wins,
                    record.Losses,
                    out statistics) &&
-                   statistics.HasData;
+               statistics.HasData;
+    }
+
+    internal CrystallineConflictPlayerStatisticsCatalogSnapshot GetPlayerStatisticsSnapshot(
+        ulong localContentId)
+    {
+        if (!StorageAvailable || localContentId == 0)
+            return CrystallineConflictPlayerStatisticsCatalogSnapshot.Empty(mutationGeneration);
+
+        if (cachedPlayerStatisticsContentId == localContentId &&
+            cachedPlayerStatisticsGeneration == mutationGeneration)
+        {
+            return cachedPlayerStatistics;
+        }
+
+        var characterKey = GetCharacterKey(localContentId);
+        var players = !document.Characters.TryGetValue(characterKey, out var character)
+            ? []
+            : character.ObservedPlayers
+                .Values
+                .Where(static player =>
+                    player.HasSearchableIdentity &&
+                    player.LastSeenUnixSeconds > 0 &&
+                    player.WinsAgainst >= 0 &&
+                    player.LossesAgainst >= 0 &&
+                    player.WinsAgainst <= long.MaxValue - player.LossesAgainst &&
+                    player.WinsAgainst + player.LossesAgainst > 0)
+                .Select(static player => new CrystallineConflictStoredPlayerStatistics(
+                    player.PlayerName,
+                    player.WorldId,
+                    player.WinsAgainst,
+                    player.LossesAgainst,
+                    player.LastSeenUnixSeconds))
+                .ToArray();
+
+        cachedPlayerStatisticsContentId = localContentId;
+        cachedPlayerStatisticsGeneration = mutationGeneration;
+        cachedPlayerStatistics = new CrystallineConflictPlayerStatisticsCatalogSnapshot(
+            mutationGeneration,
+            players);
+        return cachedPlayerStatistics;
     }
 
     internal bool TryGetPvpStatsImportPlan(
@@ -540,12 +603,31 @@ internal sealed class CrystallineConflictMapStatisticsStore
             return true;
         }
 
-        if (character.PvpStatsHistoryImported)
+        if (character.PvpStatsHistoryImported &&
+            character.PvpStatsPlayerDetailsImported)
         {
             plan = new PvpStatsHistoryImportPlan(
                 true,
                 mutationGeneration,
                 character.PvpStatsImportBeforeUnixSecondsExclusive,
+                character.PvpStatsImportedMatches,
+                character.PvpStatsImportedPlayers);
+            return true;
+        }
+
+        if (character.PvpStatsHistoryImported)
+        {
+            // Schema 4 deliberately retained only one-way player keys. Re-scan
+            // the exact same historical PvpStats interval once so schema 5 can
+            // attach local-only display names and enemy-only matchup counters
+            // without adding the already imported prediction W/L a second time.
+            // A legacy first import can have a long.MaxValue cutoff; cap that
+            // open end at the saved import instant so matches played afterward
+            // cannot enter the details backfill.
+            plan = new PvpStatsHistoryImportPlan(
+                false,
+                mutationGeneration,
+                GetPvpStatsDetailsBackfillCutoff(character),
                 character.PvpStatsImportedMatches,
                 character.PvpStatsImportedPlayers);
             return true;
@@ -620,7 +702,8 @@ internal sealed class CrystallineConflictMapStatisticsStore
             candidate.Characters.Add(characterKey, character);
         }
 
-        if (character.PvpStatsHistoryImported)
+        if (character.PvpStatsHistoryImported &&
+            character.PvpStatsPlayerDetailsImported)
         {
             result = new PvpStatsHistoryMergeResult(
                 true,
@@ -633,19 +716,49 @@ internal sealed class CrystallineConflictMapStatisticsStore
             return true;
         }
 
+        var backfillExistingImport = character.PvpStatsHistoryImported;
+        if (backfillExistingImport &&
+            (GetPvpStatsDetailsBackfillCutoff(character) !=
+             importBeforeUnixSecondsExclusive ||
+             character.PvpStatsImportedMatches != import.MatchesImported))
+        {
+            result = new PvpStatsHistoryMergeResult(
+                false,
+                false,
+                0,
+                0,
+                0,
+                false,
+                "The old PvpStats import no longer matches its saved boundary; nothing was changed.");
+            return false;
+        }
+
         var normalized = new List<ImportPlayerUpdate>(import.Players.Count);
         var identities = new HashSet<string>(StringComparer.Ordinal);
         foreach (var player in import.Players)
         {
             if (player.Wins < 0 ||
                 player.Losses < 0 ||
+                player.WinsAgainst < 0 ||
+                player.LossesAgainst < 0 ||
                 player.Matches <= 0 ||
                 player.LastSeenUnixSeconds <= 0 ||
                 player.LastSeenUnixSeconds > import.LatestMatchUnixSeconds ||
                 player.LastSeenUnixSeconds >= importBeforeUnixSecondsExclusive ||
                 !TryAddCounters(player.Wins, player.Losses, out var matches) ||
+                !TryAddCounters(
+                    player.WinsAgainst,
+                    player.LossesAgainst,
+                    out var opponentMatches) ||
                 matches != player.Matches ||
-                !TryNormalizeObservedIdentity(player.PlayerName, player.WorldId, out var identity))
+                opponentMatches > matches ||
+                player.WinsAgainst > player.Losses ||
+                player.LossesAgainst > player.Wins ||
+                !TryNormalizeObservedPlayer(
+                    player.PlayerName,
+                    player.WorldId,
+                    out var normalizedName,
+                    out var identity))
             {
                 result = new PvpStatsHistoryMergeResult(
                     false,
@@ -674,10 +787,95 @@ internal sealed class CrystallineConflictMapStatisticsStore
 
             normalized.Add(new ImportPlayerUpdate(
                 playerKey,
+                normalizedName,
+                player.WorldId,
                 player.Wins,
                 player.Losses,
+                player.WinsAgainst,
+                player.LossesAgainst,
                 player.Matches,
                 player.LastSeenUnixSeconds));
+        }
+
+        if (backfillExistingImport)
+        {
+            var updatesByKey = normalized.ToDictionary(
+                static player => player.PlayerKey,
+                StringComparer.Ordinal);
+            var updatedPlayers = 0;
+            foreach (var existing in character.ObservedPlayers)
+            {
+                if (!updatesByKey.TryGetValue(existing.Key, out var update))
+                    continue;
+                if (update.WinsAgainst == 0 && update.LossesAgainst == 0)
+                    continue;
+                if (update.Wins > existing.Value.Wins ||
+                    update.Losses > existing.Value.Losses)
+                {
+                    // This identity was not part of the bounded rows retained
+                    // by the old import (it may have appeared natively later).
+                    // Do not attach unproven historical details to it, but let
+                    // contained legacy rows complete their safe backfill.
+                    continue;
+                }
+
+                if (!TryAddCounters(
+                        existing.Value.WinsAgainst,
+                        update.WinsAgainst,
+                        out var winsAgainst) ||
+                    !TryAddCounters(
+                        existing.Value.LossesAgainst,
+                        update.LossesAgainst,
+                        out var lossesAgainst) ||
+                    winsAgainst > existing.Value.Losses ||
+                    lossesAgainst > existing.Value.Wins)
+                {
+                    result = new PvpStatsHistoryMergeResult(
+                        false,
+                        false,
+                        0,
+                        0,
+                        0,
+                        false,
+                        "Imported opponent counters could not be backfilled safely; nothing was saved.");
+                    return false;
+                }
+
+                existing.Value.PlayerName = update.PlayerName;
+                existing.Value.WorldId = update.WorldId;
+                existing.Value.WinsAgainst = winsAgainst;
+                existing.Value.LossesAgainst = lossesAgainst;
+                existing.Value.LastSeenUnixSeconds = Math.Max(
+                    existing.Value.LastSeenUnixSeconds,
+                    update.LastSeenUnixSeconds);
+                updatedPlayers++;
+            }
+
+            character.PvpStatsPlayerDetailsImported = true;
+            if (!TrySave(candidate))
+            {
+                result = new PvpStatsHistoryMergeResult(
+                    false,
+                    false,
+                    0,
+                    0,
+                    0,
+                    false,
+                    "Searchable PvpStats player details could not be saved; the old file was left unchanged.");
+                return false;
+            }
+
+            document = candidate;
+            AdvanceMutationGeneration();
+            result = new PvpStatsHistoryMergeResult(
+                true,
+                false,
+                import.MatchesImported,
+                updatedPlayers,
+                Math.Max(0, normalized.Count - updatedPlayers),
+                false,
+                $"Added searchable names and opponent W/L for {updatedPlayers:N0} existing PvpStats players. Original W/L was not counted again.");
+            return true;
         }
 
         var combinedPlayers = new Dictionary<string, ImportMergePlayerRecord>(
@@ -705,10 +903,14 @@ internal sealed class CrystallineConflictMapStatisticsStore
                 existing.Key,
                 new ImportMergePlayerRecord(
                     existing.Key,
+                    existing.Value.PlayerName,
+                    existing.Value.WorldId,
                     existing.Value.Wins,
                     existing.Value.Losses,
+                    existing.Value.WinsAgainst,
+                    existing.Value.LossesAgainst,
                     existingSnapshot.Matches,
-                    character.PlayerHistoryStartedAtUnixSeconds,
+                    existing.Value.LastSeenUnixSeconds,
                     HasImportedContribution: false));
         }
 
@@ -716,10 +918,22 @@ internal sealed class CrystallineConflictMapStatisticsStore
         {
             if (combinedPlayers.TryGetValue(update.PlayerKey, out var existing))
             {
+                var hasOpponentHistory =
+                    update.WinsAgainst != 0 || update.LossesAgainst != 0;
                 if (!TryAddCounters(existing.Wins, update.Wins, out var wins) ||
                     !TryAddCounters(existing.Losses, update.Losses, out var losses) ||
+                    !TryAddCounters(
+                        existing.WinsAgainst,
+                        update.WinsAgainst,
+                        out var winsAgainst) ||
+                    !TryAddCounters(
+                        existing.LossesAgainst,
+                        update.LossesAgainst,
+                        out var lossesAgainst) ||
                     !TryAddCounters(existing.Matches, update.Matches, out var matches) ||
-                    !CrystallineConflictMapStatisticsRules.TryCreateSnapshot(wins, losses, out _))
+                    !CrystallineConflictMapStatisticsRules.TryCreateSnapshot(wins, losses, out _) ||
+                    winsAgainst > losses ||
+                    lossesAgainst > wins)
                 {
                     result = new PvpStatsHistoryMergeResult(
                         false,
@@ -734,25 +948,41 @@ internal sealed class CrystallineConflictMapStatisticsStore
 
                 combinedPlayers[update.PlayerKey] = existing with
                 {
+                    PlayerName = hasOpponentHistory
+                        ? update.PlayerName
+                        : existing.PlayerName,
+                    WorldId = hasOpponentHistory
+                        ? update.WorldId
+                        : existing.WorldId,
                     Wins = wins,
                     Losses = losses,
+                    WinsAgainst = winsAgainst,
+                    LossesAgainst = lossesAgainst,
                     Matches = matches,
-                    LastSeenUnixSeconds = Math.Max(
-                        existing.LastSeenUnixSeconds,
-                        update.LastSeenUnixSeconds),
+                    LastSeenUnixSeconds = hasOpponentHistory
+                        ? Math.Max(
+                            existing.LastSeenUnixSeconds,
+                            update.LastSeenUnixSeconds)
+                        : existing.LastSeenUnixSeconds,
                     HasImportedContribution = true,
                 };
             }
             else
             {
+                var hasOpponentHistory =
+                    update.WinsAgainst != 0 || update.LossesAgainst != 0;
                 combinedPlayers.Add(
                     update.PlayerKey,
                     new ImportMergePlayerRecord(
                         update.PlayerKey,
+                        hasOpponentHistory ? update.PlayerName : string.Empty,
+                        hasOpponentHistory ? update.WorldId : (ushort)0,
                         update.Wins,
                         update.Losses,
+                        update.WinsAgainst,
+                        update.LossesAgainst,
                         update.Matches,
-                        update.LastSeenUnixSeconds,
+                        hasOpponentHistory ? update.LastSeenUnixSeconds : 0,
                         HasImportedContribution: true));
             }
         }
@@ -769,8 +999,13 @@ internal sealed class CrystallineConflictMapStatisticsStore
             static player => player.PlayerKey,
             static player => new ObservedPlayerWinLossRecord
             {
+                PlayerName = player.PlayerName,
+                WorldId = player.WorldId,
                 Wins = player.Wins,
                 Losses = player.Losses,
+                WinsAgainst = player.WinsAgainst,
+                LossesAgainst = player.LossesAgainst,
+                LastSeenUnixSeconds = player.LastSeenUnixSeconds,
             },
             StringComparer.Ordinal);
 
@@ -821,6 +1056,7 @@ internal sealed class CrystallineConflictMapStatisticsStore
         }
 
         character.PvpStatsHistoryImported = true;
+        character.PvpStatsPlayerDetailsImported = true;
         character.PvpStatsImportedMatches = import.MatchesImported;
         character.PvpStatsImportedPlayers = importedPlayers;
         character.PvpStatsImportedAtUnixSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -839,7 +1075,7 @@ internal sealed class CrystallineConflictMapStatisticsStore
         }
 
         document = candidate;
-        mutationGeneration = NextGeneration(mutationGeneration);
+        AdvanceMutationGeneration();
         var ownRecordStatus = importedLocalRecord
             ? " Your own W/L was filled from that history."
             : " Your existing own W/L was kept to avoid duplicate matches.";
@@ -854,6 +1090,17 @@ internal sealed class CrystallineConflictMapStatisticsStore
                 ? $"Imported {import.MatchesImported:N0} PvpStats matches for {importedPlayers:N0} players.{ownRecordStatus}"
                 : $"Imported {import.MatchesImported:N0} matches and kept the {importedPlayers:N0} most useful imported player records; {skippedPlayers:N0} did not fit.{ownRecordStatus}");
         return true;
+    }
+
+    private static long GetPvpStatsDetailsBackfillCutoff(
+        MapCharacterStatistics character)
+    {
+        var importedAtExclusive = character.PvpStatsImportedAtUnixSeconds == long.MaxValue
+            ? long.MaxValue
+            : character.PvpStatsImportedAtUnixSeconds + 1;
+        return Math.Min(
+            character.PvpStatsImportBeforeUnixSecondsExclusive,
+            importedAtExclusive);
     }
 
     internal bool TryRecord(
@@ -923,6 +1170,7 @@ internal sealed class CrystallineConflictMapStatisticsStore
                 character,
                 sample.LocalContentId,
                 sample.Result,
+                sample.CapturedAtUnixSeconds,
                 sample.Participants);
         if (playersRecorded &&
             (character.PlayerHistoryStartedAtUnixSeconds <= 0 ||
@@ -968,7 +1216,7 @@ internal sealed class CrystallineConflictMapStatisticsStore
 
         if (!TrySave(candidate)) return false;
         document = candidate;
-        mutationGeneration = NextGeneration(mutationGeneration);
+        AdvanceMutationGeneration();
         return true;
     }
 
@@ -990,6 +1238,7 @@ internal sealed class CrystallineConflictMapStatisticsStore
         MapCharacterStatistics character,
         ulong localContentId,
         byte localResult,
+        long capturedAtUnixSeconds,
         IReadOnlyList<CapturedMapResultParticipant> participants)
     {
         var localMatches = participants
@@ -1000,7 +1249,8 @@ internal sealed class CrystallineConflictMapStatisticsStore
         var localTeam = localMatches[0].Team;
         if (!CanIncrement(character.Overall)) return false;
 
-        var updates = new List<(string PlayerKey, bool PlayerWon)>(
+        var localWon = localResult == 1;
+        var updates = new List<NativePlayerHistoryUpdate>(
             CrystallineConflictMapStatisticsRules.ExpectedParticipantCount - 1);
         var exactPlayerKeys = new HashSet<string>(StringComparer.Ordinal);
 
@@ -1008,9 +1258,10 @@ internal sealed class CrystallineConflictMapStatisticsStore
         {
             if (participant.ContentId == localContentId) continue;
 
-            if (!TryNormalizeObservedIdentity(
+            if (!TryNormalizeObservedPlayer(
                     participant.PlayerName,
                     participant.WorldId,
+                    out var normalizedName,
                     out var identity))
             {
                 return false;
@@ -1031,7 +1282,14 @@ internal sealed class CrystallineConflictMapStatisticsStore
                 !CanIncrement(existing))
                 return false;
 
-            updates.Add((playerKey, playerWon));
+            updates.Add(new NativePlayerHistoryUpdate(
+                playerKey,
+                normalizedName,
+                participant.WorldId,
+                playerWon,
+                participant.Team != localTeam,
+                localWon,
+                capturedAtUnixSeconds));
         }
 
         if (updates.Count != CrystallineConflictMapStatisticsRules.ExpectedParticipantCount - 1)
@@ -1042,13 +1300,18 @@ internal sealed class CrystallineConflictMapStatisticsStore
         // native match must still land as one atomic observation. Current-match
         // identities are protected, then the least-observed old hashes are
         // evicted. Hash-descending is the deterministic tie-break, matching the
-        // importer's hash-ascending Top-K retention without persisting names.
+        // importer's hash-ascending Top-K retention.
         var stagedPlayers = character.ObservedPlayers.ToDictionary(
             static player => player.Key,
             static player => new ObservedPlayerWinLossRecord
             {
+                PlayerName = player.Value.PlayerName,
+                WorldId = player.Value.WorldId,
                 Wins = player.Value.Wins,
                 Losses = player.Value.Losses,
+                WinsAgainst = player.Value.WinsAgainst,
+                LossesAgainst = player.Value.LossesAgainst,
+                LastSeenUnixSeconds = player.Value.LastSeenUnixSeconds,
             },
             StringComparer.Ordinal);
         var missingRecords = updates.Count(update => !stagedPlayers.ContainsKey(update.PlayerKey));
@@ -1087,6 +1350,25 @@ internal sealed class CrystallineConflictMapStatisticsStore
             }
 
             if (!TryIncrement(record, update.PlayerWon)) return false;
+            if (update.IsEnemy)
+            {
+                record.PlayerName = update.PlayerName;
+                record.WorldId = update.WorldId;
+                record.LastSeenUnixSeconds = Math.Max(
+                    record.LastSeenUnixSeconds,
+                    update.LastSeenUnixSeconds);
+                if (!TryIncrementAgainst(record, update.LocalWon))
+                    return false;
+            }
+            else if (record.HasSearchableIdentity)
+            {
+                // "Last seen" means the latest encounter in either role once
+                // this player has legitimately become an opponent entry. An
+                // ally-only identity is still never persisted in clear text.
+                record.LastSeenUnixSeconds = Math.Max(
+                    record.LastSeenUnixSeconds,
+                    update.LastSeenUnixSeconds);
+            }
         }
 
         if (stagedPlayers.Count > MaximumObservedPlayersPerCharacter ||
@@ -1131,6 +1413,34 @@ internal sealed class CrystallineConflictMapStatisticsStore
         return true;
     }
 
+    private static bool TryIncrementAgainst(
+        ObservedPlayerWinLossRecord record,
+        bool localWon)
+    {
+        if (record.WinsAgainst < 0 ||
+            record.LossesAgainst < 0 ||
+            record.WinsAgainst > long.MaxValue - record.LossesAgainst)
+        {
+            return false;
+        }
+
+        if (localWon)
+        {
+            if (record.WinsAgainst == long.MaxValue) return false;
+            record.WinsAgainst++;
+        }
+        else
+        {
+            if (record.LossesAgainst == long.MaxValue) return false;
+            record.LossesAgainst++;
+        }
+
+        // Against W/L is from the local player's perspective. A local win is
+        // necessarily this opponent's loss and vice versa.
+        return record.WinsAgainst <= record.Losses &&
+               record.LossesAgainst <= record.Wins;
+    }
+
     internal bool TryReset()
     {
         var candidate = CreateEmptyDocument();
@@ -1140,7 +1450,7 @@ internal sealed class CrystallineConflictMapStatisticsStore
         salt = Convert.FromBase64String(candidate.Salt);
         cachedContentId = 0;
         cachedCharacterKey = string.Empty;
-        mutationGeneration = NextGeneration(mutationGeneration);
+        AdvanceMutationGeneration();
         StorageAvailable = true;
         return true;
     }
@@ -1332,6 +1642,39 @@ internal sealed class CrystallineConflictMapStatisticsStore
                     {
                         return false;
                     }
+
+                    if (sourceSchema < 5)
+                    {
+                        // Schema 4 has only a one-way identity key. Never trust
+                        // searchable fields injected under an older schema and
+                        // never invent head-to-head history during migration.
+                        player.Value.PlayerName = string.Empty;
+                        player.Value.WorldId = 0;
+                        player.Value.WinsAgainst = 0;
+                        player.Value.LossesAgainst = 0;
+                        player.Value.LastSeenUnixSeconds = 0;
+                    }
+                    else
+                    {
+                        // Search and rankings are opponent-only. Keep ally-only
+                        // participant W/L behind its HMAC key for prediction,
+                        // but do not retain a clear name or Home World for it.
+                        if (player.Value.WinsAgainst == 0 &&
+                            player.Value.LossesAgainst == 0)
+                        {
+                            player.Value.PlayerName = string.Empty;
+                            player.Value.WorldId = 0;
+                            player.Value.LastSeenUnixSeconds = 0;
+                        }
+
+                        if (!TryValidateObservedPlayerDetails(
+                                player.Key,
+                                player.Value,
+                                candidateSalt))
+                        {
+                            return false;
+                        }
+                    }
                 }
 
                 if (sourceSchema == 2)
@@ -1385,10 +1728,14 @@ internal sealed class CrystallineConflictMapStatisticsStore
                 pair.Value.PvpStatsImportedPlayers = 0;
                 pair.Value.PvpStatsImportedAtUnixSeconds = 0;
                 pair.Value.PvpStatsImportBeforeUnixSecondsExclusive = 0;
+                pair.Value.PvpStatsPlayerDetailsImported = false;
             }
-            else if (pair.Value.PlayerHistoryStartedAtUnixSeconds < 0)
+            else
             {
-                return false;
+                if (pair.Value.PlayerHistoryStartedAtUnixSeconds < 0)
+                    return false;
+                if (sourceSchema < 5)
+                    pair.Value.PvpStatsPlayerDetailsImported = false;
             }
 
             if (pair.Value.PvpStatsHistoryImported)
@@ -1405,7 +1752,8 @@ internal sealed class CrystallineConflictMapStatisticsStore
             else if (pair.Value.PvpStatsImportedMatches != 0 ||
                      pair.Value.PvpStatsImportedPlayers != 0 ||
                      pair.Value.PvpStatsImportedAtUnixSeconds != 0 ||
-                     pair.Value.PvpStatsImportBeforeUnixSecondsExclusive != 0)
+                     pair.Value.PvpStatsImportBeforeUnixSecondsExclusive != 0 ||
+                     pair.Value.PvpStatsPlayerDetailsImported)
             {
                 return false;
             }
@@ -1456,6 +1804,15 @@ internal sealed class CrystallineConflictMapStatisticsStore
     private static long NextGeneration(long current) =>
         current == long.MaxValue ? 1 : current + 1;
 
+    private void AdvanceMutationGeneration()
+    {
+        mutationGeneration = NextGeneration(mutationGeneration);
+        cachedPlayerStatisticsContentId = 0;
+        cachedPlayerStatisticsGeneration = -1;
+        cachedPlayerStatistics =
+            CrystallineConflictPlayerStatisticsCatalogSnapshot.Empty(mutationGeneration);
+    }
+
     private string ComputeCharacterKey(ulong contentId)
     {
         Span<byte> buffer = stackalloc byte[sizeof(ulong)];
@@ -1466,16 +1823,62 @@ internal sealed class CrystallineConflictMapStatisticsStore
     private string ComputeObservedPlayerKey(string normalizedIdentity) =>
         ComputeHash(Encoding.UTF8.GetBytes(normalizedIdentity));
 
+    private bool TryValidateObservedPlayerDetails(
+        string playerKey,
+        ObservedPlayerWinLossRecord record,
+        byte[] validationSalt)
+    {
+        if (!record.HasSearchableIdentity)
+        {
+            return string.IsNullOrEmpty(record.PlayerName) &&
+                   record.WorldId == 0 &&
+                   record.WinsAgainst == 0 &&
+                   record.LossesAgainst == 0 &&
+                   record.LastSeenUnixSeconds == 0;
+        }
+
+        return TryNormalizeObservedPlayer(
+                   record.PlayerName,
+                   record.WorldId,
+                   out var normalizedName,
+                   out var identity) &&
+               string.Equals(normalizedName, record.PlayerName, StringComparison.Ordinal) &&
+               string.Equals(
+                   ComputeHash(Encoding.UTF8.GetBytes(identity), validationSalt),
+                   playerKey,
+                   StringComparison.Ordinal) &&
+               record.LastSeenUnixSeconds > 0 &&
+               record.WinsAgainst >= 0 &&
+               record.LossesAgainst >= 0 &&
+               record.WinsAgainst <= long.MaxValue - record.LossesAgainst &&
+               record.WinsAgainst <= record.Losses &&
+               record.LossesAgainst <= record.Wins;
+    }
+
     private static bool TryNormalizeObservedIdentity(
         string? playerName,
         ushort worldId,
         out string identity)
     {
+        return TryNormalizeObservedPlayer(
+            playerName,
+            worldId,
+            out _,
+            out identity);
+    }
+
+    private static bool TryNormalizeObservedPlayer(
+        string? playerName,
+        ushort worldId,
+        out string normalizedName,
+        out string identity)
+    {
+        normalizedName = string.Empty;
         identity = string.Empty;
-        string? normalizedName;
+        string? candidateName;
         try
         {
-            normalizedName = playerName?.Trim().Normalize(NormalizationForm.FormC);
+            candidateName = playerName?.Trim().Normalize(NormalizationForm.FormC);
         }
         catch (ArgumentException)
         {
@@ -1483,15 +1886,16 @@ internal sealed class CrystallineConflictMapStatisticsStore
         }
 
         if (worldId == 0 ||
-            string.IsNullOrWhiteSpace(normalizedName) ||
-            normalizedName.Length is < 3 or > 42 ||
-            normalizedName.Any(character => char.IsControl(character) || char.IsSurrogate(character)) ||
-            Encoding.UTF8.GetByteCount(normalizedName) >
+            string.IsNullOrWhiteSpace(candidateName) ||
+            candidateName.Length is < 3 or > 42 ||
+            candidateName.Any(character => char.IsControl(character) || char.IsSurrogate(character)) ||
+            Encoding.UTF8.GetByteCount(candidateName) >
             CrystallineConflictMapResultPlayer.PlayerNameBufferLength - 1)
         {
             return false;
         }
 
+        normalizedName = candidateName;
         identity = string.Create(
             System.Globalization.CultureInfo.InvariantCulture,
             $"{worldId}|{normalizedName.ToUpperInvariant()}");
@@ -1538,7 +1942,12 @@ internal sealed class CrystallineConflictMapStatisticsStore
 
     private string ComputeHash(ReadOnlySpan<byte> value)
     {
-        using var hmac = new HMACSHA256(salt);
+        return ComputeHash(value, salt);
+    }
+
+    private static string ComputeHash(ReadOnlySpan<byte> value, byte[] key)
+    {
+        using var hmac = new HMACSHA256(key);
         return Convert.ToBase64String(hmac.ComputeHash(value.ToArray()));
     }
 
@@ -1595,8 +2004,13 @@ internal sealed class CrystallineConflictMapStatisticsStore
                     static player => player.Key,
                     static player => new ObservedPlayerWinLossRecord
                     {
+                        PlayerName = player.Value.PlayerName,
+                        WorldId = player.Value.WorldId,
                         Wins = player.Value.Wins,
                         Losses = player.Value.Losses,
+                        WinsAgainst = player.Value.WinsAgainst,
+                        LossesAgainst = player.Value.LossesAgainst,
+                        LastSeenUnixSeconds = player.Value.LastSeenUnixSeconds,
                     },
                     StringComparer.Ordinal),
                 RecentResults = pair.Value.RecentResults.Select(static result => new MapRecentResult
@@ -1614,6 +2028,8 @@ internal sealed class CrystallineConflictMapStatisticsStore
                 PvpStatsImportedAtUnixSeconds = pair.Value.PvpStatsImportedAtUnixSeconds,
                 PvpStatsImportBeforeUnixSecondsExclusive =
                     pair.Value.PvpStatsImportBeforeUnixSecondsExclusive,
+                PvpStatsPlayerDetailsImported =
+                    pair.Value.PvpStatsPlayerDetailsImported,
             },
             StringComparer.Ordinal),
     };
@@ -1640,6 +2056,7 @@ internal sealed class CrystallineConflictMapStatisticsStore
         public int PvpStatsImportedPlayers { get; set; }
         public long PvpStatsImportedAtUnixSeconds { get; set; }
         public long PvpStatsImportBeforeUnixSecondsExclusive { get; set; }
+        public bool PvpStatsPlayerDetailsImported { get; set; }
     }
 
     private sealed class MapWinLossRecord
@@ -1650,8 +2067,17 @@ internal sealed class CrystallineConflictMapStatisticsStore
 
     private sealed class ObservedPlayerWinLossRecord
     {
+        public string PlayerName { get; set; } = string.Empty;
+        public ushort WorldId { get; set; }
         public long Wins { get; set; }
         public long Losses { get; set; }
+        public long WinsAgainst { get; set; }
+        public long LossesAgainst { get; set; }
+        public long LastSeenUnixSeconds { get; set; }
+
+        [JsonIgnore]
+        internal bool HasSearchableIdentity =>
+            !string.IsNullOrWhiteSpace(PlayerName) && WorldId != 0;
 
         // Read-only compatibility surface for schema 2. These relationship
         // counters are validated and then their unresolvable player rows are
@@ -1681,16 +2107,33 @@ internal sealed class CrystallineConflictMapStatisticsStore
 
     private readonly record struct ImportPlayerUpdate(
         string PlayerKey,
+        string PlayerName,
+        ushort WorldId,
         long Wins,
         long Losses,
+        long WinsAgainst,
+        long LossesAgainst,
         int Matches,
         long LastSeenUnixSeconds);
 
     private readonly record struct ImportMergePlayerRecord(
         string PlayerKey,
+        string PlayerName,
+        ushort WorldId,
         long Wins,
         long Losses,
+        long WinsAgainst,
+        long LossesAgainst,
         long Matches,
         long LastSeenUnixSeconds,
         bool HasImportedContribution);
+
+    private readonly record struct NativePlayerHistoryUpdate(
+        string PlayerKey,
+        string PlayerName,
+        ushort WorldId,
+        bool PlayerWon,
+        bool IsEnemy,
+        bool LocalWon,
+        long LastSeenUnixSeconds);
 }

@@ -8,6 +8,8 @@ internal readonly record struct PvpStatsObservedPlayerAggregate(
     ushort WorldId,
     long Wins,
     long Losses,
+    long WinsAgainst,
+    long LossesAgainst,
     int Matches,
     long LastSeenUnixSeconds);
 
@@ -162,7 +164,11 @@ internal static class CrystallineConflictPvpStatsHistoryReader
                         players.Add(participant.Identity, aggregate);
                     }
 
-                    aggregate.Add(participant.Won, match.EndedAtUnixSeconds);
+                    aggregate.Add(
+                        participant.Won,
+                        participant.IsEnemy,
+                        match.LocalWon,
+                        match.EndedAtUnixSeconds);
                 }
 
                 Report(progress, documentsScanned, totalDocuments);
@@ -290,7 +296,8 @@ internal static class CrystallineConflictPvpStatsHistoryReader
                 player.Identity,
                 player.PlayerName,
                 player.WorldId,
-                winner == "Astra"));
+                winner == "Astra",
+                IsEnemy: localTeam != "Astra"));
         }
         foreach (var player in umbra.Players)
         {
@@ -299,7 +306,8 @@ internal static class CrystallineConflictPvpStatsHistoryReader
                 player.Identity,
                 player.PlayerName,
                 player.WorldId,
-                winner == "Umbra"));
+                winner == "Umbra",
+                IsEnemy: localTeam != "Umbra"));
         }
 
         if (remote.Count != all.Length - 1) return false;
@@ -477,7 +485,8 @@ internal static class CrystallineConflictPvpStatsHistoryReader
         string Identity,
         string PlayerName,
         ushort WorldId,
-        bool Won);
+        bool Won,
+        bool IsEnemy);
 
     private readonly record struct ImportedMatch(
         bool LocalWon,
@@ -490,21 +499,40 @@ internal static class CrystallineConflictPvpStatsHistoryReader
         internal ushort WorldId { get; } = worldId;
         internal long Wins { get; private set; }
         internal long Losses { get; private set; }
+        internal long WinsAgainst { get; private set; }
+        internal long LossesAgainst { get; private set; }
         internal int Matches { get; private set; }
         internal long LastSeenUnixSeconds { get; private set; }
 
-        internal void Add(bool won, long endedAtUnixSeconds)
+        internal void Add(
+            bool won,
+            bool isEnemy,
+            bool localWon,
+            long endedAtUnixSeconds)
         {
             checked
             {
                 if (won) Wins++;
                 else Losses++;
+                if (isEnemy)
+                {
+                    if (localWon) WinsAgainst++;
+                    else LossesAgainst++;
+                }
                 Matches++;
             }
             LastSeenUnixSeconds = Math.Max(LastSeenUnixSeconds, endedAtUnixSeconds);
         }
 
         internal PvpStatsObservedPlayerAggregate ToResult() =>
-            new(PlayerName, WorldId, Wins, Losses, Matches, LastSeenUnixSeconds);
+            new(
+                PlayerName,
+                WorldId,
+                Wins,
+                Losses,
+                WinsAgainst,
+                LossesAgainst,
+                Matches,
+                LastSeenUnixSeconds);
     }
 }

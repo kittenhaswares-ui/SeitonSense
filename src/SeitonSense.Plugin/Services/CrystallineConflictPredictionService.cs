@@ -47,8 +47,10 @@ internal sealed record CrystallineConflictPredictionSnapshot(
 
 /// <summary>
 /// Builds one local, playful CC estimate from locally observed player history.
-/// Raw names and current combat totals stay in memory. Only HMAC player keys
-/// plus W/L are persisted by the shared map-statistics store.
+/// Current team arrangement and combat totals stay in memory. When local player
+/// history is enabled, the shared statistics store also keeps bounded opponent names,
+/// Home Worlds, aggregate W/L, enemy-only head-to-head W/L, and HMAC lookup keys
+/// on this PC; none of that history is uploaded.
 /// </summary>
 internal sealed class CrystallineConflictPredictionService : IDisposable
 {

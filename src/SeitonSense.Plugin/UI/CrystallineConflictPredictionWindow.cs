@@ -209,11 +209,10 @@ internal sealed class CrystallineConflictPredictionWindow : Window
             ImGuiTableFlags.RowBg |
             ImGuiTableFlags.SizingFixedFit |
             ImGuiTableFlags.NoSavedSettings;
-        if (!ImGui.BeginTable("##SeitonSensePredictionPlayers", 6, flags, new Vector2(width, 0f)))
+        if (!ImGui.BeginTable("##SeitonSensePredictionPlayers", 5, flags, new Vector2(width, 0f)))
             return;
 
         ImGui.TableSetupColumn("NAME", ImGuiTableColumnFlags.WidthStretch, 1f);
-        ImGui.TableSetupColumn("W-L", ImGuiTableColumnFlags.WidthFixed, 90f * uiScale);
         ImGui.TableSetupColumn("D", ImGuiTableColumnFlags.WidthFixed, 42f * uiScale);
         ImGui.TableSetupColumn("DMG", ImGuiTableColumnFlags.WidthFixed, 78f * uiScale);
         ImGui.TableSetupColumn("HEAL", ImGuiTableColumnFlags.WidthFixed, 78f * uiScale);
@@ -229,25 +228,22 @@ internal sealed class CrystallineConflictPredictionWindow : Window
                 DrawPlayerName(player, uiScale);
 
                 ImGui.TableSetColumnIndex(1);
-                DrawCell(FormatRecord(player.Wins, player.Losses), false);
-
-                ImGui.TableSetColumnIndex(2);
                 DrawCell(player.Deaths.ToString(), false);
 
-                ImGui.TableSetColumnIndex(3);
+                ImGui.TableSetColumnIndex(2);
                 DrawCell(FormatCompact(player.DamageDealt), false);
 
-                ImGui.TableSetColumnIndex(4);
+                ImGui.TableSetColumnIndex(3);
                 DrawCell(FormatCompact(player.HealingDone), false);
 
-                ImGui.TableSetColumnIndex(5);
+                ImGui.TableSetColumnIndex(4);
                 DrawCell(FormatCrystalTime(player.CrystalSeconds), false);
             }
             else
             {
                 ImGui.TableSetColumnIndex(0);
                 ImGui.TextDisabled("WAITING...");
-                for (var column = 1; column < 6; column++)
+                for (var column = 1; column < 5; column++)
                 {
                     ImGui.TableSetColumnIndex(column);
                     DrawCell(MissingValue, true);
@@ -307,8 +303,6 @@ internal sealed class CrystallineConflictPredictionWindow : Window
 
     private static void DrawFooter(CrystallineConflictPredictionSnapshot snapshot)
     {
-        ImGui.TextDisabled(
-            $"KNOWN RECORDS  \u00b7  ALLIES {snapshot.KnownAllyRecords}/5  \u00b7  ENEMIES {snapshot.KnownEnemyRecords}/5");
         if (snapshot.LiveTotalsIncomplete && !snapshot.IsFinal)
             ImGui.TextDisabled("Live DMG and HEAL are observed totals; the final scoreboard replaces them.");
         if (!string.IsNullOrWhiteSpace(snapshot.Status))
@@ -317,12 +311,6 @@ internal sealed class CrystallineConflictPredictionWindow : Window
 
     private static double NormalizeProbability(double probability) =>
         double.IsFinite(probability) ? Math.Clamp(probability, 0d, 1d) : 0.5d;
-
-    private static string FormatRecord(long wins, long losses)
-    {
-        if (wins < 0 || losses < 0) return MissingValue;
-        return wins == 0 && losses == 0 ? "NEW" : $"{wins}W {losses}L";
-    }
 
     private static string FormatCompact(long value)
     {

@@ -2,6 +2,7 @@ using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Windowing;
+using Dalamud.Plugin.Services;
 using SeitonSense.Plugin.Models;
 using SeitonSense.Plugin.Services;
 
@@ -18,6 +19,9 @@ internal sealed partial class SettingsWindow : Window
     private readonly PressureCounterWindow pressureCounter;
     private readonly CrystallineConflictInstantLeaveService crystallineConflictInstantLeave;
     private readonly CrystallineConflictPvpStatsHistoryImportService pvpStatsHistoryImport;
+    private readonly IPlayerState playerState;
+    private readonly IDataManager dataManager;
+    private readonly CrystallineConflictMapStatisticsService mapStatistics;
     private readonly Action resetBufferLearningWindowPosition;
     private readonly Action resetWolvesDenRotationWindowPosition;
     private readonly Action resetCrystallineConflictPredictionWindowPosition;
@@ -37,6 +41,9 @@ internal sealed partial class SettingsWindow : Window
         PressureCounterWindow pressureCounter,
         CrystallineConflictInstantLeaveService crystallineConflictInstantLeave,
         CrystallineConflictPvpStatsHistoryImportService pvpStatsHistoryImport,
+        IPlayerState playerState,
+        IDataManager dataManager,
+        CrystallineConflictMapStatisticsService mapStatistics,
         Action? resetBufferLearningWindowPosition = null,
         Action? resetWolvesDenRotationWindowPosition = null,
         Func<bool>? resetCrystallineConflictMapStatistics = null,
@@ -52,6 +59,9 @@ internal sealed partial class SettingsWindow : Window
         this.pressureCounter = pressureCounter;
         this.crystallineConflictInstantLeave = crystallineConflictInstantLeave;
         this.pvpStatsHistoryImport = pvpStatsHistoryImport;
+        this.playerState = playerState;
+        this.dataManager = dataManager;
+        this.mapStatistics = mapStatistics;
         this.resetBufferLearningWindowPosition =
             resetBufferLearningWindowPosition ?? (() => { });
         this.resetWolvesDenRotationWindowPosition =
@@ -99,6 +109,7 @@ internal sealed partial class SettingsWindow : Window
                 SettingsPage.Start => DrawStartPage(),
                 SettingsPage.Alerts => DrawAlertsPage(),
                 SettingsPage.HudAndNameplates => DrawHudAndNameplatesPage(),
+                SettingsPage.PlayerStats => DrawPlayerStatsPage(),
                 SettingsPage.ActionHelpers => DrawActionHelpersPage(),
                 SettingsPage.PingHelpers => DrawPingHelpersPage(),
                 SettingsPage.JobTools => DrawJobToolsPage(),
@@ -131,6 +142,7 @@ internal sealed partial class SettingsWindow : Window
         DrawPageChoice(SettingsPage.Start, "Start");
         DrawPageChoice(SettingsPage.Alerts, "Alerts");
         DrawPageChoice(SettingsPage.HudAndNameplates, "HUD & Nameplates");
+        DrawPageChoice(SettingsPage.PlayerStats, "Player Stats");
         DrawPageChoice(SettingsPage.ActionHelpers, "Action Helpers");
         DrawPageChoice(SettingsPage.PingHelpers, "Ping Helpers");
         DrawPageChoice(SettingsPage.JobTools, "Job Tools");
@@ -158,6 +170,7 @@ internal sealed partial class SettingsWindow : Window
         Start,
         Alerts,
         HudAndNameplates,
+        PlayerStats,
         ActionHelpers,
         PingHelpers,
         JobTools,

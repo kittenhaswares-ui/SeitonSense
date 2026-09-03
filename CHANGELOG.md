@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.44.0.4
+
+- Added a dedicated **Player Stats** page. Search the current character's local
+  history by `Name @ World`, then switch between **ERZNEMESIS** and
+  **KANONENFUTTER** rankings.
+- Every row uses the local player's enemy-only result: wins mean you beat that
+  opponent, losses mean they beat you. The table also shows win rate, meetings,
+  and last-seen date. Leader badges require at least three meetings.
+- Moved player-history recording, PvpStats import, local-stat reset, map-W/L
+  recording, and prediction-panel settings out of **HUD & Nameplates** into the
+  new page.
+- Removed historical per-player W/L and known-record counts from the movable
+  match HUD. Its win prediction and live deaths, damage, healing, and crystal
+  time remain unchanged.
+- The local schema-5 history stores bounded opponent names, Home Worlds,
+  enemy-only W/L, and last-seen time beside installation-local HMAC keys.
+  Seiton uploads nothing and does not persist raw Content IDs, complete rosters,
+  or per-match scoreboards.
+- Existing schema-4 PvpStats imports can be scanned once more to attach
+  searchable names and opponent W/L without adding their aggregate W/L again.
+- Automated checks remain separate from live in-game confirmation.
+
 ## 0.44.0.3
 
 - Fixed `/smartaction` doing nothing in Wolves' Den duels when the client did

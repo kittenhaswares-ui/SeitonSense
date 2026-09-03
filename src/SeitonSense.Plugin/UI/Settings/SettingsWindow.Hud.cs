@@ -15,10 +15,6 @@ internal sealed partial class SettingsWindow
             changed |= DrawWolvesDenRotationControls();
 
         ImGui.Separator();
-        if (ImGui.CollapsingHeader("CC win prediction", ImGuiTreeNodeFlags.DefaultOpen))
-            changed |= DrawCrystallineConflictPredictionControls();
-
-        ImGui.Separator();
         if (ImGui.CollapsingHeader("CC medicine kits", ImGuiTreeNodeFlags.DefaultOpen))
             changed |= DrawCrystallineConflictMedicineKitControls();
 
@@ -205,36 +201,6 @@ internal sealed partial class SettingsWindow
             configuration.ShowWolvesDenRotationPanel,
             value => configuration.ShowWolvesDenRotationPanel = value);
         changed |= Checkbox(
-            "Record local per-map CC W/L",
-            configuration.EnableLocalCrystallineConflictMapStatisticsCapture,
-            value => configuration.EnableLocalCrystallineConflictMapStatisticsCapture = value);
-        ImGui.SameLine();
-        if (ImGui.Button("Clear all characters' saved local W/L"))
-        {
-            crystallineConflictMapStatisticsResetSucceeded =
-                resetCrystallineConflictMapStatistics();
-            crystallineConflictMapStatisticsResetFeedback =
-                crystallineConflictMapStatisticsResetSucceeded
-                    ? "All saved local CC map W/L was cleared."
-                    : "Could not clear local CC map W/L; the existing file was left unchanged.";
-            crystallineConflictMapStatisticsResetFeedbackUntil =
-                Environment.TickCount64 + 6_000;
-        }
-        if (!string.IsNullOrEmpty(crystallineConflictMapStatisticsResetFeedback) &&
-            Environment.TickCount64 <= crystallineConflictMapStatisticsResetFeedbackUntil)
-        {
-            ImGui.TextColored(
-                crystallineConflictMapStatisticsResetSucceeded
-                    ? new System.Numerics.Vector4(0.4f, 0.9f, 0.62f, 1f)
-                    : new System.Numerics.Vector4(1f, 0.45f, 0.42f, 1f),
-                crystallineConflictMapStatisticsResetFeedback);
-        }
-        else if (!string.IsNullOrEmpty(crystallineConflictMapStatisticsResetFeedback))
-        {
-            crystallineConflictMapStatisticsResetFeedback = string.Empty;
-            crystallineConflictMapStatisticsResetFeedbackUntil = 0;
-        }
-        changed |= Checkbox(
             "Lock rotation panel",
             configuration.WolvesDenRotationPanelLocked,
             value => configuration.WolvesDenRotationPanelLocked = value);
@@ -262,101 +228,9 @@ internal sealed partial class SettingsWindow
         ImGui.TextDisabled(
             "Uses the Patch 7.5 hourly map order and your locally saved phase adjustment. It works offline.");
         ImGui.TextDisabled(
-            "Showing the panel and saving your local W/L are separate options. Results are never uploaded.");
-        ImGui.TextDisabled(
             "The seven map cards reorder themselves each hour. Use < / > only if your in-game map does not match.");
         ImGui.TextDisabled(
-            "Per-map W/L starts counting after you enable it. Unclear or missing results stay NO DATA.");
-        return changed;
-    }
-
-    private bool DrawCrystallineConflictPredictionControls()
-    {
-        var changed = false;
-        changed |= Checkbox(
-            "Show CC win prediction from team reveal through the match",
-            configuration.ShowCrystallineConflictPredictionPanel,
-            value => configuration.ShowCrystallineConflictPredictionPanel = value);
-        changed |= Checkbox(
-            "Save local player W/L history",
-            configuration.EnableLocalCrystallineConflictPlayerHistory,
-            value => configuration.EnableLocalCrystallineConflictPlayerHistory = value);
-        var importSnapshot = pvpStatsHistoryImport.Snapshot;
-        if (importSnapshot.IsBusy)
-        {
-            if (ImGui.Button("Cancel PvpStats import"))
-                pvpStatsHistoryImport.Cancel();
-            ImGui.ProgressBar(
-                (float)Math.Clamp(importSnapshot.Progress, 0d, 1d),
-                new System.Numerics.Vector2(420f, 0f));
-        }
-        else if (ImGui.Button("Import old PvpStats player history"))
-        {
-            pvpStatsHistoryImport.TryStart();
-            importSnapshot = pvpStatsHistoryImport.Snapshot;
-        }
-        if (ImGui.IsItemHovered())
-        {
-            ImGui.BeginTooltip();
-            ImGui.TextUnformatted("One-time, local import for the character currently logged in.");
-            ImGui.TextUnformatted("Wolves' Den is supported while you are out of combat.");
-            ImGui.TextUnformatted("Unload PvpStats first so Seiton can prove exclusive read-only access.");
-            ImGui.TextUnformatted("Only completed Casual and Ranked 5v5 matches count.");
-            ImGui.EndTooltip();
-        }
-        if (!string.IsNullOrWhiteSpace(importSnapshot.Status))
-        {
-            if (importSnapshot.IsComplete)
-            {
-                ImGui.TextColored(
-                    importSnapshot.Success
-                        ? new System.Numerics.Vector4(0.4f, 0.9f, 0.62f, 1f)
-                        : new System.Numerics.Vector4(1f, 0.45f, 0.42f, 1f),
-                    importSnapshot.Status);
-            }
-            else
-            {
-                ImGui.TextDisabled(importSnapshot.Status);
-            }
-        }
-        changed |= Checkbox(
-            "Update the prediction while the match changes",
-            configuration.EnableDynamicCrystallineConflictPrediction,
-            value => configuration.EnableDynamicCrystallineConflictPrediction = value);
-        changed |= Checkbox(
-            "Lock prediction panel",
-            configuration.CrystallineConflictPredictionPanelLocked,
-            value => configuration.CrystallineConflictPredictionPanelLocked = value);
-        ImGui.SameLine();
-        changed |= Checkbox(
-            "Show background##CrystallineConflictPrediction",
-            configuration.CrystallineConflictPredictionPanelShowBackground,
-            value => configuration.CrystallineConflictPredictionPanelShowBackground = value);
-        changed |= Slider(
-            "Prediction panel scale",
-            configuration.CrystallineConflictPredictionPanelScale,
-            0.75f,
-            1.75f,
-            value => configuration.CrystallineConflictPredictionPanelScale = value,
-            "%.2f x");
-        changed |= Slider(
-            "Prediction panel background opacity",
-            configuration.CrystallineConflictPredictionPanelBackgroundOpacity,
-            0f,
-            1f,
-            value => configuration.CrystallineConflictPredictionPanelBackgroundOpacity = value,
-            "%.2f");
-        if (ImGui.Button("Reset prediction panel position"))
-            resetCrystallineConflictPredictionWindowPosition();
-
-        ImGui.TextDisabled(
-            "A playful estimate from matches saved on this PC. Unknown players count as 50%; nothing is uploaded.");
-        ImGui.TextDisabled(
-            "Switch between all five allies and all five enemies directly on the movable match panel.");
-        ImGui.TextDisabled(
-            "W/L stays saved locally. Deaths, damage, healing, and crystal time reset for every match.");
-        ImGui.TextDisabled(
-            "The optional PvpStats import never writes to its database and stores only salted player keys plus W/L.");
+            "Recording and browsing local CC statistics now lives under Player Stats.");
         return changed;
     }
 
