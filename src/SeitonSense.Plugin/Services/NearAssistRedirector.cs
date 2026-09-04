@@ -159,12 +159,17 @@ internal readonly record struct IntegratedBufferedReplayIntent(
     uint RequestedActionId,
     uint ResolvedActionId,
     ulong TargetId,
-    bool RequiresSmartActionProtectionRecheck)
+    bool RequiresSmartActionProtectionRecheck,
+    long SamuraiCastTapGeneration = 0)
 {
     internal bool IsValid =>
         ActionType is ActionType.Action or ActionType.PvPAction &&
         RequestedActionId != 0 &&
         ResolvedActionId != 0 &&
+        SamuraiCastTapGeneration >= 0 &&
+        (SamuraiCastTapGeneration == 0 ||
+         RequiresSmartActionProtectionRecheck &&
+         SamuraiSmartActionCastRules.IsReviewedBaseCastPair(RequestedActionId, ResolvedActionId)) &&
         (!RequiresSmartActionProtectionRecheck ||
          TargetId is not (0 or 0xE0000000));
 }
@@ -507,6 +512,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         lock (guardAttemptGate)
         {
             if (latestLocalGuardActionAttempt is not { } attempt ||
+                !attempt.ClientAccepted ||
                 attempt.TerritoryId != territoryId ||
                 attempt.LocalGameObjectId != localGameObjectId ||
                 attempt.LocalEntityId != localEntityId ||
@@ -1654,6 +1660,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
     internal void Reset()
     {
+        RevokeOwnedSamuraiCastProtection();
         RevokeExplicitAutoGuardBreak();
         ClearToken("Reset");
         ClearSmartKardiaTrigger();
@@ -1667,6 +1674,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         if (started) framework.Update -= OnFrameworkUpdate;
         started = false;
         integratedInputRuntime = null;
+        RevokeOwnedSamuraiCastProtection();
         RevokeExplicitAutoGuardBreak();
         ClearToken("Disposed");
         ClearSmartKardiaTrigger();
@@ -2698,6 +2706,18 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 // after the target-independent Smart Action carrier found no
                 // reachable winner. The selected-winner redirect lane remains
                 // one-shot and is deliberately not spatially replayed.
+                long capturedSamuraiTapGeneration;
+                lock (tokenGate)
+                {
+                    capturedSamuraiTapGeneration =
+                        SamuraiOgiCastProtectionRules.GetExactReplayTapGeneration(
+                            exactReplayScope: true,
+                            requiresSmartActionProtection: true,
+                            macroTapGeneration,
+                            samuraiSmartActionTapGeneration,
+                            actionId,
+                            ResolveActionId(thisPtr, actionType, actionId));
+                }
                 integratedAttempt =
                     integratedRuntime.ActionBuffer.BeginExactSmartActionMacroFallback(
                         thisPtr,
@@ -2707,7 +2727,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                         extraParam,
                         mode,
                         comboRouteId,
-                        macroTapGeneration);
+                        macroTapGeneration,
+                        samuraiCastTapGeneration: capturedSamuraiTapGeneration);
             }
             catch (Exception exception)
             {
@@ -2788,6 +2809,19 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                          samuraiSmartActionTapGeneration)
             {
                 ownedSamuraiCastTapGeneration = smartActionFallbackTapGeneration;
+            }
+            else if (integratedBufferReplayDepth == 1 &&
+                     integratedBufferedReplayScope is { Consumed: true } samuraiReplay &&
+                     ReferenceEquals(samuraiReplay.Owner, this))
+            {
+                ownedSamuraiCastTapGeneration =
+                    SamuraiOgiCastProtectionRules.GetExactReplayTapGeneration(
+                        exactReplayScope: true,
+                        samuraiReplay.Intent.RequiresSmartActionProtectionRecheck,
+                        samuraiReplay.Intent.SamuraiCastTapGeneration,
+                        samuraiSmartActionTapGeneration,
+                        actionId,
+                        samuraiReplay.Intent.ResolvedActionId);
             }
         }
         if (ownedSamuraiCastTapGeneration > 0)
@@ -4541,6 +4575,11 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
     internal bool IsSamuraiCastMovementSuppressed()
     {
+        if (!IsSamuraiCastProtectionRuntimeEnabled())
+        {
+            RevokeOwnedSamuraiCastProtection();
+            return false;
+        }
         var exactRequestInFlight = false;
         lock (tokenGate)
         {
@@ -4561,6 +4600,11 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
     internal bool IsOwnedSamuraiCastProtected()
     {
+        if (!IsSamuraiCastProtectionRuntimeEnabled())
+        {
+            RevokeOwnedSamuraiCastProtection();
+            return false;
+        }
         OwnedSamuraiCastProtection lease;
         lock (tokenGate)
         {
@@ -4674,6 +4718,36 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         {
             if (ownedSamuraiCastProtection == expected)
                 ownedSamuraiCastProtection = null;
+        }
+    }
+
+    private bool IsSamuraiCastProtectionRuntimeEnabled()
+    {
+        try
+        {
+            return SamuraiOgiCastProtectionRules.CanMaintainCastProtection(
+                started,
+                disposed,
+                configuration.Enabled,
+                configuration.EnableSmartActionMacro,
+                clientState.IsLoggedIn,
+                ResolveContext(),
+                configuration.EnableWolvesDenTesting);
+        }
+        catch
+        {
+            // A missing runtime/context view must immediately release input.
+            return false;
+        }
+    }
+
+    private void RevokeOwnedSamuraiCastProtection()
+    {
+        lock (tokenGate)
+        {
+            ownedSamuraiCastProtection = null;
+            inFlightSamuraiCastScopes.Clear();
+            samuraiSmartActionTapGeneration = 0;
         }
     }
 

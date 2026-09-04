@@ -577,6 +577,8 @@ var tests = new (string Name, Action Run)[]
     ("SAM Seiton target has an exact 5y deterministic ranking", SamuraiSeitonTargetSelectionSelfTests.FiveYalmBoundaryAndFallbackRankingAreExact),
     ("SAM Seiton target protection and telemetry fail closed", SamuraiSeitonTargetSelectionSelfTests.ProtectionIdentityAndTelemetryFailClosed),
     ("SAM Seiton target freezes one actor inside 5y", SamuraiSeitonTargetSelectionSelfTests.FrozenIntentRechecksActorProtectionAndFiveYalms),
+    ("SAM disabled runtime releases cast protection", SamuraiOgiCastProtectionSelfTests.RuntimeDisableReleasesProtection),
+    ("SAM exact Chase replay retains cast ownership", SamuraiOgiCastProtectionSelfTests.ExactSamuraiReplayRetainsProtection),
     ("SAM Ogi cast protection IDs are exact", SamuraiOgiCastProtectionSelfTests.ReviewedCastActionsAreExact),
     ("SAM Ogi cast movement suppression is narrow", SamuraiOgiCastProtectionSelfTests.MovementInputsAreNarrowAndTimingIsBounded),
     ("SAM Smart Action cast raw and adjusted pairs are exact", SamuraiSmartActionCastSelfTests.ExactRawAndAdjustedPairsAreClosed),

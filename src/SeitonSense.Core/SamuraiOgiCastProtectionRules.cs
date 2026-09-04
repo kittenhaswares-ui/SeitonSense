@@ -19,6 +19,36 @@ public static class SamuraiOgiCastProtectionRules
         exactSeitonSamRequestInFlight ||
         acceptedOwnedCastActive;
 
+    public static bool CanMaintainCastProtection(
+        bool started,
+        bool disposed,
+        bool pluginEnabled,
+        bool smartActionEnabled,
+        bool loggedIn,
+        SupportedPvPContext context,
+        bool wolvesDenTestingEnabled) =>
+        started && !disposed && pluginEnabled && smartActionEnabled && loggedIn &&
+        SmartActionContextRules.IsSupported(context, wolvesDenTestingEnabled);
+
+    /// <summary>
+    /// A delayed exact replay retains movement protection only when the
+    /// original tap belonged to /seitonsam and still owns the same generation.
+    /// Ordinary Smart Action replays and instant follow-ups never acquire it.
+    /// </summary>
+    public static long GetExactReplayTapGeneration(
+        bool exactReplayScope,
+        bool requiresSmartActionProtection,
+        long capturedSamuraiTapGeneration,
+        long currentSamuraiTapGeneration,
+        uint rawActionId,
+        uint resolvedActionId) =>
+        exactReplayScope && requiresSmartActionProtection &&
+        capturedSamuraiTapGeneration > 0 &&
+        capturedSamuraiTapGeneration == currentSamuraiTapGeneration &&
+        SamuraiSmartActionCastRules.IsReviewedBaseCastPair(rawActionId, resolvedActionId)
+            ? capturedSamuraiTapGeneration
+            : 0;
+
     public static bool CanBeginExactInFlightRequest(
         bool castMetadataVerified,
         bool exactSeitonSamOwner,

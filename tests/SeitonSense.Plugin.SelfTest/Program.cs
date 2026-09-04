@@ -24,6 +24,7 @@ var tests = new (string Name, Action Run)[]
     ("PvpStats reader accepts the current LiteDB CC shape", PvpStatsReaderAcceptsCurrentLiteDbShape),
     ("full imported player history evicts deterministically for one native match", FullImportStillAcceptsNativeMatch),
     ("repeated rejected Guard spam preserves the original attempt", RejectedGuardSpamRestoresOriginalAttempt),
+    ("only accepted Guard requests suppress helpers", RecoveryGuardSelfTests.OnlyAcceptedGuardAttemptsSuppressHelpers),
 };
 
 static void PredictionPreparationSnapshotStaysVisible()

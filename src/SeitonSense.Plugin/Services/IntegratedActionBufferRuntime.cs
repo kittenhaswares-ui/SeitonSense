@@ -95,7 +95,8 @@ internal readonly record struct IntegratedActionBufferDispatchRequest(
     IntegratedActionBufferHotbarRoot HotbarRoot,
     bool RequiresSmartActionProtectionRecheck,
     bool RequiresVisibleHardTargetBinding,
-    IntegratedActionBufferActorIdentity VisibleHardTargetAtCapture);
+    IntegratedActionBufferActorIdentity VisibleHardTargetAtCapture,
+    long SamuraiCastTapGeneration = 0);
 
 /// <summary>
 /// Exact result of one delayed replay. A false return is retryable only when
@@ -575,7 +576,8 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
         uint extraParam,
         ActionManager.UseActionMode sourceMode,
         uint comboRouteId,
-        long tapGeneration) =>
+        long tapGeneration,
+        long samuraiCastTapGeneration = 0) =>
         BeginExactSmartActionMacroTap(
             actionManager,
             actionType,
@@ -586,7 +588,8 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
             comboRouteId,
             tapGeneration,
             requiresVisibleHardTargetStability: true,
-            logicalInputName: "Smart Action fallback");
+            logicalInputName: "Smart Action fallback",
+            samuraiCastTapGeneration);
 
     /// <summary>
     /// Observes one exact canonical S-slot selected by Smart Action without
@@ -624,7 +627,8 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
         uint comboRouteId,
         long tapGeneration,
         bool requiresVisibleHardTargetStability,
-        string logicalInputName)
+        string logicalInputName,
+        long samuraiCastTapGeneration = 0)
     {
         lock (gate)
         {
@@ -745,7 +749,10 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
                 RequiresSmartActionProtectionRecheck: true,
                 RequiresVisibleHardTargetBinding:
                     requiresVisibleHardTargetStability,
-                VisibleHardTargetAtCapture: visibleHardTarget);
+                VisibleHardTargetAtCapture: visibleHardTarget,
+                SamuraiCastTapGeneration: samuraiCastTapGeneration == tapGeneration
+                    ? samuraiCastTapGeneration
+                    : 0);
             inFlight = new InFlightAttempt(
                 latestRootEpoch,
                 Environment.TickCount64,

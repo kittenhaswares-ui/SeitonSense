@@ -169,7 +169,7 @@ internal sealed class CrystallineConflictPredictionService : IDisposable
 
             if (roster is null)
             {
-                if (!TryFreezeRoster(out roster))
+                if (!TryFreezeRoster(out var frozenRoster))
                 {
                     Volatile.Write(
                         ref snapshot,
@@ -177,6 +177,9 @@ internal sealed class CrystallineConflictPredictionService : IDisposable
                     return;
                 }
 
+                // A failed read produces an empty candidate array. Publish it
+                // only on success so preparation can retry missing actors.
+                roster = frozenRoster;
                 matchGeneration = matchGeneration == long.MaxValue ? 1 : matchGeneration + 1;
                 finalResultObserved = false;
             }
@@ -226,7 +229,11 @@ internal sealed class CrystallineConflictPredictionService : IDisposable
                 return;
             }
 
-            if (roster is null && !TryCreateRosterFromResult(result, out roster)) return;
+            if (roster is null)
+            {
+                if (!TryCreateRosterFromResult(result, out var resultRoster)) return;
+                roster = resultRoster;
+            }
             var byIdentity = new Dictionary<string, CapturedMapResultParticipant>(
                 result.Participants.Length,
                 StringComparer.Ordinal);

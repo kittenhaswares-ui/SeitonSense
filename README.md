@@ -3,6 +3,13 @@
 Seiton Sense is a local PvP awareness HUD with pressure tracking, nameplate
 cues, warnings, job helpers, Smart Action, and target highlights.
 
+Version 0.44.0.9 fixes several edge cases found in a code audit: failed Guard
+presses no longer briefly block helpers, `/seitonsam` keeps its cast protection
+through Chase retries and releases it when disabled, and AST keeps Double Cast
+after an Orbis retry succeeds. CC prediction now retries when the preparation
+roster is still loading. Smart Action's cast and duel help text is corrected.
+These fixes passed automated checks; live in-game confirmation is separate.
+
 Version 0.44.0.8 fixes Smart Action and `/seitonsam` in Wolves' Den: an invalid
 `<e1>` macro line no longer spends the one-shot before the exact visible `<t>`
 line. `/seitonsam` now blocks the game's pressed, down, and held movement paths
@@ -2197,7 +2204,8 @@ focus module to avoid drawing both over the same actor.
 | Optional RDM fresh-Guard held-key engage | Yes | Yes, for the exact current target when test mode is enabled | No |
 | Optional DRK Shadowbringer held-key helper | Yes, held Smart Action policy with one exact frozen actor | Yes, exact current duel/dummy target when test mode is enabled | No |
 | Optional DPS Smart Tab | Yes | No | No |
-| One-shot Smart Action and `/seitonfar` macros | Yes | No | No |
+| One-shot `/smartaction` and `/seitonsam` macros | Yes | Yes, exact current duel/dummy target when test mode is enabled | No |
+| One-shot `/seitonfar` macro | Yes | No | No |
 | Near Assist | Yes | No | No |
 | Near Help | Yes | No | No |
 | Far Help | Yes | No | No |
@@ -2678,7 +2686,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 651-test Core registry, sixteen plugin self-tests,
+For the current source, the exact 653-test Core registry, seventeen plugin self-tests,
 and source checks pin configuration schema 53, the shared monotonic response clock and framework
 epoch, true not-ready-to-ready wakeups, strict unchanged-queue critical recovery,
 the immutable release-independent tap-to-land buffer, active-Sprint repeat

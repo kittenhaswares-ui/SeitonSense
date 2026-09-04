@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.44.0.9
+
+- Failed Guard presses no longer briefly block recovery and job helpers.
+- `/seitonsam` keeps movement protection when Chase retries its exact cast
+  after you get in range. Normal Smart Action does not gain a movement lock.
+- Turning Smart Action off, changing context, or resetting Seiton releases
+  SAM cast protection immediately.
+- AST keeps its Double Cast follow-up when Orbis succeeds on a later retry.
+- CC prediction keeps trying when players are still loading in preparation,
+  instead of getting stuck with an empty roster.
+- Corrected the Smart Action cast and Wolves' Den help text. Automated checks
+  remain separate from live in-game confirmation.
+
 ## 0.44.0.8
 
 - Fixed Smart Action and `/seitonsam` in Wolves' Den. A non-exact `<e1>` macro

@@ -1087,6 +1087,11 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
             }
 
             acceptedBaseOutcome = outcome;
+            // A rejected first attempt may succeed on a later retry. The
+            // follow-up must start after that accepted frame, not the frame
+            // where the original intent was frozen. Otherwise an already
+            // transformed carrier returns Dispatch here and loses the chain.
+            sequenceIntent = sequenceIntent.WithAcceptedBaseFrame(frameworkFrame);
             var actionManager = ActionManager.Instance();
             var adjustedDoubleCastActionId = actionManager == null
                 ? 0

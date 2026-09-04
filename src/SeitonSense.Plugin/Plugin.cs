@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.44.0.8";
+    private const string CurrentReleaseVersion = "0.44.0.9";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -470,11 +470,11 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Smart Action and /seitonsam now keep their exact visible duel target in Wolves' Den.",
-                "/seitonsam now protects Ogi and Tendo from held movement without a gap at cast start.",
-                "Guard retries stay responsive, and idle Sprint or Seiton-owned repeats cannot cancel Guard.",
-                "AST now follows held Harmonischer Orbis with a ready Zweifacher Zauber on the same ally.",
-                "Ping Helpers can optionally quiet repeated line-of-sight error sounds while Seiton retries.",
+                "Failed Guard presses no longer briefly block recovery and job helpers.",
+                "/seitonsam keeps cast protection when Chase retries the attack after you get in range.",
+                "Turning Smart Action off now releases SAM movement protection immediately.",
+                "AST keeps its Double Cast follow-up when Orbis succeeds on a later retry.",
+                "CC prediction keeps trying when players are still loading during preparation.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

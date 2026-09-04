@@ -280,6 +280,31 @@ internal static class AstrologianHarmonicOrbisSelfTests
         Equal(AstrologianHarmonicOrbisRules.DoubleCastHarmonicOrbisActionId,
             accepted.Action.ExpectedAdjustedActionId,
             "exact adjusted follow-up is retained");
+
+        // The base can reject first and be accepted several frames later,
+        // with the carrier already showing Orbis when UseAction returns.
+        var acceptedRetry = intent.WithAcceptedBaseFrame(105);
+        Equal(intent.Target, acceptedRetry.Target, "retry retains frozen ally");
+        Equal(intent.BaseChargeEpochToken, acceptedRetry.BaseChargeEpochToken,
+            "retry retains the original charge epoch");
+        var retryFrame = Evaluate(
+            acceptedRetry,
+            ClientActionAttemptOutcome.ClientAccepted,
+            frame: 105,
+            target: acceptedRetry.Target,
+            resolvedActionId:
+                AstrologianHarmonicOrbisRules.DoubleCastHarmonicOrbisActionId);
+        Equal(AstrologianHarmonicOrbisFollowUpKind.Waiting, retryFrame.Kind,
+            "accepted retry enters transition instead of losing an immediate Dispatch result");
+        var afterRetryFrame = Evaluate(
+            acceptedRetry,
+            ClientActionAttemptOutcome.ClientAccepted,
+            frame: 106,
+            target: acceptedRetry.Target,
+            resolvedActionId:
+                AstrologianHarmonicOrbisRules.DoubleCastHarmonicOrbisActionId);
+        True(afterRetryFrame.ShouldDispatch,
+            "accepted retry dispatches exact Orbis follow-up on the next frame");
     }
 
     internal static void DoubleCastSnapshotAndSelectionThresholdAreOneShot()

@@ -747,7 +747,8 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
                 request.RequestedActionId,
                 request.ResolvedActionId,
                 request.TargetId,
-                request.RequiresSmartActionProtectionRecheck);
+                request.RequiresSmartActionProtectionRecheck,
+                request.SamuraiCastTapGeneration);
             var replay = nearAssist.RunExactBufferedReplay(
                 replayIntent,
                 () => actionManager->UseAction(

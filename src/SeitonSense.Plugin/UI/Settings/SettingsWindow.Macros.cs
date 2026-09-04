@@ -63,8 +63,8 @@ internal sealed partial class SettingsWindow
                 "Smart Action and /seitonsam safely keep your exact visible duel target instead. /seitonfar stays CC-only. " +
                 "Your visible target does not change. /ssaction is an alias.");
             ImGui.TextDisabled(
-                "Most cast-time attacks keep your visible target so FFXIV does not turn you unexpectedly. Instant " +
-                "attacks use Smart Action. /seitonsam supports Ogi Namikiri and Tendo Setsugekka: movement and helper " +
+                "Instant attacks and casts both use Smart Action. The target is chosen before the cast starts and " +
+                "stays fixed for that cast. /seitonsam supports Ogi Namikiri and Tendo Setsugekka: movement and helper " +
                 "actions wait, while Purify and a manual Guard still work.");
             ImGui.PopTextWrapPos();
         }

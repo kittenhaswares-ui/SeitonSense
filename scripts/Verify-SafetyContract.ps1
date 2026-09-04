@@ -606,7 +606,7 @@ Assert-Literals $integratedInputRuntime @(
     'nearAssist.IsSamuraiCastMovementSuppressed())',
     'var replayIntent = new IntegratedBufferedReplayIntent(',
     'request.ResolvedActionId,',
-    'request.RequiresSmartActionProtectionRecheck);',
+    'request.RequiresSmartActionProtectionRecheck,',
     'var replay = nearAssist.RunExactBufferedReplay(',
     'replayIntent,',
     '() => actionManager->UseAction(',
@@ -828,14 +828,14 @@ Assert-Literals $pluginSource @(
 ) 'Idempotent exception-isolated plugin disposal'
 if ($normalizedPluginForIntegratedInput -notmatch 'nearAssist\.Start\(\); personalStatus\.Start\(\); integratedInput\.Start\(\);' -or
     $normalizedPluginForIntegratedInput -notmatch 'integratedInput\.Dispose\(\);.*?criticalUtilityCoordination\.Dispose\(\);.*?nearAssist\.Dispose\(\);' -or
-    $normalizedIntegratedInputRuntime -notmatch 'private IntegratedActionBufferDispatchResult DispatchBufferedAction\( IntegratedActionBufferDispatchRequest request\).*?if \(disposed \|\| Volatile\.Read\(ref started\) == 0 \|\| IsInternalPriorityClaimedFailClosed\(\)\).*?var replayIntent = new IntegratedBufferedReplayIntent\( request\.ActionType, request\.RequestedActionId, request\.ResolvedActionId, request\.TargetId, request\.RequiresSmartActionProtectionRecheck\); var replay = nearAssist\.RunExactBufferedReplay\( replayIntent, \(\) => actionManager->UseAction\( request\.ActionType, request\.RequestedActionId, request\.TargetId, request\.ExtraParam, request\.Mode, request\.ComboRouteId\)\); if \(!replay\.NativeBoundaryInvoked\) return IntegratedActionBufferDispatchResult\.NotInvoked;.*?ClientActionAttemptBoundaryRules\.Classify\( replay\.ClientReturnedAccepted, request\.ResolvedActionId, boundaryBefore, boundaryAfter\); return new IntegratedActionBufferDispatchResult\( NativeBoundaryInvoked: true, outcome\);' -or
+    $normalizedIntegratedInputRuntime -notmatch 'private IntegratedActionBufferDispatchResult DispatchBufferedAction\( IntegratedActionBufferDispatchRequest request\).*?if \(disposed \|\| Volatile\.Read\(ref started\) == 0 \|\| IsInternalPriorityClaimedFailClosed\(\)\).*?var replayIntent = new IntegratedBufferedReplayIntent\( request\.ActionType, request\.RequestedActionId, request\.ResolvedActionId, request\.TargetId, request\.RequiresSmartActionProtectionRecheck, request\.SamuraiCastTapGeneration\); var replay = nearAssist\.RunExactBufferedReplay\( replayIntent, \(\) => actionManager->UseAction\( request\.ActionType, request\.RequestedActionId, request\.TargetId, request\.ExtraParam, request\.Mode, request\.ComboRouteId\)\); if \(!replay\.NativeBoundaryInvoked\) return IntegratedActionBufferDispatchResult\.NotInvoked;.*?ClientActionAttemptBoundaryRules\.Classify\( replay\.ClientReturnedAccepted, request\.ResolvedActionId, boundaryBefore, boundaryAfter\); return new IntegratedActionBufferDispatchResult\( NativeBoundaryInvoked: true, outcome\);' -or
     $normalizedNearAssistForIntegratedInput -notmatch 'internal IntegratedBufferedReplayResult RunExactBufferedReplay\( IntegratedBufferedReplayIntent intent, Func<bool> action\).*?if \(!intent\.IsValid \|\| integratedBufferedReplayScope is not null\) return default;.*?var scope = new IntegratedBufferedReplayScope\(this, intent\); integratedBufferedReplayScope = scope; integratedBufferReplayDepth\+\+; actionBarActivitySuppressionDepth\+\+; internalRedirectBypassDepth\+\+; try \{ var clientReturnedAccepted = action\(\); return new IntegratedBufferedReplayResult\( scope\.NativeBoundaryInvoked, clientReturnedAccepted\); \} finally \{ internalRedirectBypassDepth--; actionBarActivitySuppressionDepth--; integratedBufferReplayDepth--; integratedBufferedReplayScope = previousScope; \}' -or
     $normalizedNearAssistForIntegratedInput -notmatch 'TryCaptureSmartKardiaEukrasiaPreflight\( thisPtr, actionType, actionId, mode, targetId, forwardedTargetId, bypassRedirect, integratedBufferReplayDepth > 0, helperTokenConsumed, targetSuppressedByRedirect, out var smartKardiaPreflight\)') {
     throw 'PersonalStatus must publish critical priority before integrated input runs; both Turbo and final buffered dispatch must yield, and integrated hooks must dispose before their NearAssist/coordination dependencies.'
 }
 Assert-Literals $normalizedNearAssistForIntegratedInput @(
     'internal readonly record struct IntegratedBufferedReplayIntent(',
-    'bool RequiresSmartActionProtectionRecheck)',
+    'bool RequiresSmartActionProtectionRecheck,',
     'private bool TryConsumeIntegratedBufferedReplay(',
     'integratedBufferReplayDepth != 1',
     'scope.Consumed = true;',
@@ -863,7 +863,8 @@ Assert-Literals $integratedActionBufferRuntime @(
     'IntegratedActionBufferTargetSnapshot TargetSnapshot,',
     'bool RequiresSmartActionProtectionRecheck,',
     'bool RequiresVisibleHardTargetBinding,',
-    'IntegratedActionBufferActorIdentity VisibleHardTargetAtCapture);',
+    'IntegratedActionBufferActorIdentity VisibleHardTargetAtCapture,',
+    'long SamuraiCastTapGeneration = 0);',
     'mode != ActionManager.UseActionMode.None',
     'var snapshot = CaptureSnapshot(',
     'var request = new IntegratedActionBufferDispatchRequest(',
@@ -878,10 +879,10 @@ Assert-Literals $integratedActionBufferRuntime @(
 ) 'Immutable action, target/resolver, territory, instance, and one-shot dispatch freeze'
 if ($normalizedNearAssistForIntegratedInput -notmatch 'var integratedAttempt = IntegratedActionBufferAttempt\.None; if \(mode == ActionManager\.UseActionMode\.None && integratedRuntime\?\.TryGetActiveBufferRoot\( actionType, actionId, out var integratedHotbarRoot\) == true\).*?integratedAttempt = integratedRuntime\.ActionBuffer\.BeginExactStandardHotbarRoot\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, integratedHotbarRoot, handlingSmartTarget \|\| smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe\);.*?clientAccepted = useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, outOptAreaTargeted\);' -or
     $normalizedNearAssistForIntegratedInput -notmatch 'else if \(!bypassRedirect && integratedRuntime is not null && handlingSmartTarget && smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe && handlingSmartTargetToken is \{ TapGeneration: > 0 \} rankedSmartTargetToken && rankedSmartTargetToken\.SelectionMode == SmartTargetRedirectMode\.CombatPriority && IsCertifiedSmartActionTapInvocationMode\(mode\)\).*?BeginExactSmartActionRankedTarget\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, rankedSmartTargetToken\.TapGeneration\);' -or
-    $normalizedNearAssistForIntegratedInput -notmatch 'else if \(!bypassRedirect && integratedRuntime is not null && !handlingSmartTarget && smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe && IsCertifiedSmartActionTapInvocationMode\(mode\) && IsExactCurrentHardTarget\(forwardedTargetId\) && TryGetSmartActionFallbackTapGeneration\(out var macroTapGeneration\)\).*?BeginExactSmartActionMacroFallback\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, macroTapGeneration\);.*?clientAccepted = useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, outOptAreaTargeted\);' -or
+    $normalizedNearAssistForIntegratedInput -notmatch 'else if \(!bypassRedirect && integratedRuntime is not null && !handlingSmartTarget && smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe && IsCertifiedSmartActionTapInvocationMode\(mode\) && IsExactCurrentHardTarget\(forwardedTargetId\) && TryGetSmartActionFallbackTapGeneration\(out var macroTapGeneration\)\).*?BeginExactSmartActionMacroFallback\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, macroTapGeneration, samuraiCastTapGeneration: capturedSamuraiTapGeneration\);.*?clientAccepted = useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, outOptAreaTargeted\);' -or
     $normalizedIntegratedActionBufferRuntime -notmatch 'var request = new IntegratedActionBufferDispatchRequest\( actionType, requestedActionId, resolvedActionId, targetId, extraParam, mode, comboRouteId, snapshot\.TerritoryId, snapshot\.InstanceFingerprint, snapshot\.Local\.GameObjectId, snapshot\.Local\.EntityId, snapshot\.Target, hotbarRoot, requiresSmartActionProtectionRecheck, RequiresVisibleHardTargetBinding: true, VisibleHardTargetAtCapture: ToActorIdentity\(targetManager\.Target\)\);' -or
     $normalizedIntegratedActionBufferRuntime -notmatch 'internal IntegratedActionBufferAttempt BeginExactSmartActionMacroFallback\(.*?requiresVisibleHardTargetStability: true.*?internal IntegratedActionBufferAttempt BeginExactSmartActionRankedTarget\(.*?requiresVisibleHardTargetStability: false.*?private IntegratedActionBufferAttempt BeginExactSmartActionMacroTap\(' -or
-    $normalizedIntegratedActionBufferRuntime -notmatch 'var request = new IntegratedActionBufferDispatchRequest\( actionType, requestedActionId, resolvedActionId, selectedTargetId, extraParam, ActionManager\.UseActionMode\.None, comboRouteId, snapshot\.TerritoryId, snapshot\.InstanceFingerprint, snapshot\.Local\.GameObjectId, snapshot\.Local\.EntityId, snapshot\.Target, macroRoot, RequiresSmartActionProtectionRecheck: true, RequiresVisibleHardTargetBinding: requiresVisibleHardTargetStability, VisibleHardTargetAtCapture: visibleHardTarget\);' -or
+    $normalizedIntegratedActionBufferRuntime -notmatch 'var request = new IntegratedActionBufferDispatchRequest\( actionType, requestedActionId, resolvedActionId, selectedTargetId, extraParam, ActionManager\.UseActionMode\.None, comboRouteId, snapshot\.TerritoryId, snapshot\.InstanceFingerprint, snapshot\.Local\.GameObjectId, snapshot\.Local\.EntityId, snapshot\.Target, macroRoot, RequiresSmartActionProtectionRecheck: true, RequiresVisibleHardTargetBinding: requiresVisibleHardTargetStability, VisibleHardTargetAtCapture: visibleHardTarget, SamuraiCastTapGeneration: samuraiCastTapGeneration == tapGeneration \? samuraiCastTapGeneration : 0\);' -or
     $normalizedIntegratedActionBufferRuntime -notmatch 'if \(candidate\.Request\.RequiresVisibleHardTargetBinding && \(visibleHardTarget != candidate\.Request\.VisibleHardTargetAtCapture \|\| visibleHardTarget != candidate\.Snapshot\.Target\.ExplicitTarget\)\)' -or
     $normalizedIntegratedActionBufferRuntime -notmatch 'var visibleTargetStable = !runtime\.Request\.RequiresVisibleHardTargetBinding \|\| runtime\.VisibleHardTarget != IntegratedActionBufferActorIdentity\.Empty && runtime\.VisibleHardTarget == runtime\.Snapshot\.Target\.ExplicitTarget && ToActorIdentity\(targetManager\.Target\) == runtime\.VisibleHardTarget;' -or
     $normalizedIntegratedActionBufferRuntime -notmatch 'var current = CaptureSnapshot\( runtime\.Request\.TargetId,.*?if \(!HasStableIdentity\(runtime\.Snapshot, current\) \|\| !ExplicitTargetStillExists\(runtime\.Snapshot\.Target\)\).*?SmartActionBufferCancelReason\.TargetChange') {
@@ -918,7 +919,7 @@ if ($normalizedNearAssistForIntegratedInput -notmatch 'TryConsumeCastedMacroRedi
 }
 
 # Pin all retained buffer/repeat/compatibility suites and the exact current
-# 651-test registry.
+# 653-test registry.
 $integratedCoreTestProgram = Read-RequiredSource (Join-Path $coreSelfTestRoot 'Program.cs') 'Integrated Core self-test registry'
 $smartActionBufferSelfTests = Read-RequiredSource $smartActionBufferSelfTestsPath 'Smart action-buffer self-tests'
 $logicalHotbarRepeatSelfTests = Read-RequiredSource $logicalHotbarRepeatSelfTestsPath 'Logical hotbar repeat self-tests'
@@ -942,11 +943,11 @@ Assert-Literals $smartActionBufferCompatibilitySelfTests @(
     'reActionOwnsExactAction: false)',
     'reActionOwnsExactAction: true)'
 ) 'Generic-buffer compatibility self-tests'
-if ($staticIntegratedTestCount -ne 610 -or
+if ($staticIntegratedTestCount -ne 612 -or
     $logicalRepeatTestCount -ne 31 -or
     $physicalLatchTestCount -ne 6 -or
     $repeatPolicyTestCount -ne 4 -or
-    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 651 -or
+    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 653 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches($smartActionBufferSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferCompatibilitySelfTests\.\w+').Count -ne 6 -or
@@ -956,7 +957,7 @@ if ($staticIntegratedTestCount -ne 610 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatPolicySelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartSprintSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches((Read-RequiredSource $smartSprintSelfTestsPath 'Smart Sprint self-tests'), '\bpublic static void\s+\w+\s*\(').Count -ne 7) {
-    throw 'Schema 53 must retain seven smart-buffer tests, six compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, seven Smart Sprint tests, four Player Stats tests, and the exact 651-test combined Core registry.'
+    throw 'Schema 53 must retain seven smart-buffer tests, six compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, seven Smart Sprint tests, four Player Stats tests, and the exact 653-test combined Core registry.'
 }
 
 # Pin the two schema-42 visual overlays and the fail-closed local map-result
@@ -999,7 +1000,9 @@ Assert-Literals $crystallineConflictPredictionService @(
     'CrystallineConflictPredictionSnapshot.Preparing());'
 ) 'Active incomplete CC preparation snapshot with no combat or live-total claims'
 if ($normalizedCrystallineConflictPredictionService -notmatch 'internal static CrystallineConflictPredictionSnapshot Preparing\( string status = "Waiting for exact 5 \+ 5 roster"\) => new\(true, false, false, false, false, 0\.5d, 0\.5d, 0, 0, \[\], \[\], status\);' -or
-    $normalizedCrystallineConflictPredictionService -notmatch 'if \(!TryFreezeRoster\(out roster\)\) \{ Volatile\.Write\( ref snapshot, CrystallineConflictPredictionSnapshot\.Preparing\(\)\); return; \}' -or
+    $normalizedCrystallineConflictPredictionService -notmatch 'if \(!TryFreezeRoster\(out var frozenRoster\)\) \{ Volatile\.Write\( ref snapshot, CrystallineConflictPredictionSnapshot\.Preparing\(\)\); return; \}.*?roster = frozenRoster;' -or
+    $normalizedCrystallineConflictPredictionService -notmatch 'if \(roster is null\) \{ if \(!TryCreateRosterFromResult\(result, out var resultRoster\)\) return; roster = resultRoster; \}' -or
+    $crystallineConflictPredictionService -match 'Try(?:FreezeRoster|CreateRosterFromResult)\([^\r\n]*out roster\)' -or
     [regex]::Matches($crystallineConflictPredictionService, 'CrystallineConflictPredictionSnapshot\.Preparing\(\)').Count -ne 1) {
     throw 'CC prediction must remain visibly active but incomplete while the exact preparation roster resolves, without claiming combat, final state, incomplete live totals, records, or fabricated players; the failed roster freeze must publish that preparation snapshot exactly once.'
 }
@@ -1043,11 +1046,11 @@ Assert-Literals $pluginPersistenceSelfTests @(
     'Equal(0, snapshot.Allies.Length, "unresolved allies are not fabricated");',
     'Equal(0, snapshot.Enemies.Length, "unresolved enemies are not fabricated");'
 ) 'CC prediction, searchable player history, schema migration, salt reload, and PvpStats backfill regression assertions'
-if ([regex]::Matches($pluginPersistenceSelfTests, '(?m)^\s*\("[^"]+",\s*\w+\),\s*$').Count -ne 16 -or
+if ([regex]::Matches($pluginPersistenceSelfTests, '(?m)^\s*\("[^"]+",\s*[\w.]+\),\s*$').Count -ne 17 -or
     [regex]::Matches($pluginPersistenceSelfTests, '\("CC prediction preparation snapshot stays visible without live totals", PredictionPreparationSnapshotStaysVisible\),').Count -ne 1 -or
     [regex]::Matches($pluginPersistenceSelfTests, 'static void PredictionPreparationSnapshotStaysVisible\(\)').Count -ne 1 -or
     $normalizedPluginPersistenceSelfTests -notmatch 'static void PredictionPreparationSnapshotStaysVisible\(\) \{ var snapshot = CrystallineConflictPredictionSnapshot\.Preparing\(\); True\(snapshot\.IsActive, "preparation snapshot remains drawable"\); False\(snapshot\.IsComplete, "roster is not claimed complete before exact 5 \+ 5 capture"\); False\(snapshot\.HasCombatStarted, "preparation does not claim combat started"\); False\(snapshot\.LiveTotalsIncomplete, "live combat totals remain closed during preparation"\); Equal\(0, snapshot\.Allies\.Length, "unresolved allies are not fabricated"\); Equal\(0, snapshot\.Enemies\.Length, "unresolved enemies are not fabricated"\); \}') {
-    throw 'The exact sixteen-test plugin registry must retain CC preparation plus enemy-only local-perspective history, searchable schema-5/safe schema-4 identity, saved-salt restart, one-shot import, and idempotent no-double-count PvpStats backfill regressions.'
+    throw 'The exact seventeen-test plugin registry must retain CC preparation plus enemy-only local-perspective history, searchable schema-5/safe schema-4 identity, saved-salt restart, one-shot import, and idempotent no-double-count PvpStats backfill regressions.'
 }
 
 Assert-Literals $crystallineConflictPlayerStatsRules @(
@@ -1696,6 +1699,36 @@ Assert-Literals $samuraiOgiCastProtectionRules @(
     '526 or',
     '>= 671 and <= 674'
 ) 'Bounded /seitonsam cast and movement identities'
+Assert-Literals $samuraiOgiCastProtectionRules @(
+    'public static bool CanMaintainCastProtection(',
+    'started && !disposed && pluginEnabled && smartActionEnabled && loggedIn &&',
+    'SmartActionContextRules.IsSupported(context, wolvesDenTestingEnabled);',
+    'public static long GetExactReplayTapGeneration(',
+    'capturedSamuraiTapGeneration == currentSamuraiTapGeneration &&'
+) 'SAM runtime authority and exact delayed replay generation'
+Assert-Literals $samuraiOgiCastProtectionSelfTests @(
+    'RuntimeDisableReleasesProtection()',
+    'ExactSamuraiReplayRetainsProtection()',
+    'ordinary Smart Action does not gain movement protection',
+    'a replaced SAM tap cannot acquire a later cast',
+    'turning Den testing off releases movement'
+) 'SAM disable, context, replay ownership, and replacement regressions'
+Assert-Literals $integratedCoreTestProgram @(
+    'SamuraiOgiCastProtectionSelfTests.RuntimeDisableReleasesProtection',
+    'SamuraiOgiCastProtectionSelfTests.ExactSamuraiReplayRetainsProtection'
+) 'New SAM regression registrations'
+if ($normalizedSamuraiOgiCastProtectionRuntime -notmatch 'internal void Reset\(\) \{ RevokeOwnedSamuraiCastProtection\(\);' -or
+    $normalizedSamuraiOgiCastProtectionRuntime -notmatch 'internal bool IsSamuraiCastMovementSuppressed\(\) \{ if \(!IsSamuraiCastProtectionRuntimeEnabled\(\)\) \{ RevokeOwnedSamuraiCastProtection\(\); return false; \}' -or
+    $normalizedSamuraiOgiCastProtectionRuntime -notmatch 'internal bool IsOwnedSamuraiCastProtected\(\) \{ if \(!IsSamuraiCastProtectionRuntimeEnabled\(\)\) \{ RevokeOwnedSamuraiCastProtection\(\); return false; \}' -or
+    $normalizedSamuraiOgiCastProtectionRuntime -notmatch 'integratedBufferReplayDepth == 1 && integratedBufferedReplayScope is \{ Consumed: true \} samuraiReplay && ReferenceEquals\(samuraiReplay.Owner, this\).*?GetExactReplayTapGeneration\(.*?samuraiReplay.Intent.SamuraiCastTapGeneration, samuraiSmartActionTapGeneration,') {
+    throw 'SAM protection must release when disabled/reset and only an exact consumed owner/generation-backed replay may regain it.'
+}
+Assert-Literals $pluginPersistenceSelfTests @(
+    'RecoveryGuardSelfTests.OnlyAcceptedGuardAttemptsSuppressHelpers'
+) 'Shared Guard acceptance reader runtime regression registration'
+if ($normalizedSamuraiOgiCastProtectionRuntime -notmatch 'internal bool TryGetRecentExactLocalGuardAttempt\(.*?!attempt.ClientAccepted \|\| attempt.TerritoryId != territoryId') {
+    throw 'Only a client-accepted exact Guard attempt may suppress helpers during propagation.'
+}
 Assert-Literals $samuraiOgiCastProtectionSelfTests @(
     'an armed Seiton SAM token alone never suppresses movement',
     'the consumed exact Seiton SAM request suppresses movement inside native Original',
@@ -5465,8 +5498,8 @@ if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
     [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 11 -or
     [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 11 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 610) {
-    throw 'All four shared protection-end tests, all eleven SAM reactive tests, four Player Stats tests, and the exact 610-test static Core registry before the appended repeat-policy suites must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 612) {
+    throw 'All four shared protection-end tests, all eleven SAM reactive tests, four Player Stats tests, and the exact 612-test static Core registry before the appended repeat-policy suites must remain pinned.'
 }
 Assert-Literals $samuraiReactiveRuntimeRules @(
     'public static bool IsExactCurrentOwnSourceKuzushi(',
@@ -6061,7 +6094,7 @@ if ([regex]::Matches($astrologianHarmonicOrbisProbe, '\bUseAction\s*\(').Count -
     $normalizedAstrologianHarmonicOrbisProbe -notmatch 'TrySnapshotDoubleCastAvailability\(.*?GetAdjustedActionId\( DoubleCastCarrierActionId\).*?GetCurrentCharges\( DoubleCastCarrierActionId\).*?IsDoubleCastAvailableBeforeBase\( adjustedActionId, actionManager->IsActionOffCooldown\( ActionType\.Action, DoubleCastCarrierActionId\), currentCharges\);' -or
     $normalizedAstrologianHarmonicOrbisProbe -notmatch 'case AstrologianHarmonicOrbisFollowUpKind\.Waiting:.*?if \(!higherPriorityClaimed && !inputFrame\.IsConsumed\).*?inputClaimed = true;.*?inputFrame\.Consume\(\);' -or
     $normalizedAstrologianHarmonicOrbisProbe -notmatch 'TryDispatchOnce\(.*?IsCurrentlySuppressedByGuard\(currentLocal, Environment\.TickCount64\).*?return ClientActionAttemptOutcome\.NotInvoked;.*?GetActionStatus\( ActionType\.Action, expectedAdjustedActionId, intent\.Target\.GameObjectId.*?CaptureDispatchBoundary\(actionManager, dispatchAction\).*?nearAssist\.RunAstrologianHarmonicOrbisWithoutRedirect\( dispatchAction\.RawActionId, expectedAdjustedActionId, intent\.LocalPlayer, intent\.Target\.GameObjectId, \(\) => actionManager->UseAction\( ActionType\.Action, dispatchAction\.RawActionId, intent\.Target\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\)\)' -or
-    $normalizedAstrologianHarmonicOrbisProbe -notmatch 'outcome == ClientActionAttemptOutcome\.ClientAccepted && dispatchAction == AstrologianHarmonicOrbisRules\.BaseDispatchAction.*?TrySpendBaseChargeEpoch\(.*?EvaluateFollowUp\(.*?phase = AstrologianHarmonicOrbisProbePhase\.AwaitingDoubleCast' -or
+    $normalizedAstrologianHarmonicOrbisProbe -notmatch 'outcome == ClientActionAttemptOutcome\.ClientAccepted && dispatchAction == AstrologianHarmonicOrbisRules\.BaseDispatchAction.*?TrySpendBaseChargeEpoch\(.*?WithAcceptedBaseFrame\(frameworkFrame\).*?EvaluateFollowUp\(.*?phase = AstrologianHarmonicOrbisProbePhase\.AwaitingDoubleCast' -or
     $astrologianHarmonicOrbisProbe -match '\b(?:IGameInteropProvider|Hook<|HookFromAddress|SignatureAttribute|SigScanner|ITargetManager|TargetManager|SetTarget|AlternateAction|AlternateTarget|FallbackAction|FallbackTarget)\b|\.(?:Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=(?!=|>)') {
     throw 'AST held healing must own one exact direct-GOID UseAction and one cast-cancel request shape, reserve lower helper lanes while a charged carrier transforms, remain suppressed by live/propagated own Guard through final dispatch, promote only an accepted base, and never hook, retarget, rerank, or substitute.'
 }
@@ -11785,7 +11818,7 @@ Assert-Literals $settingsWindow @(
     'In Crystalline Conflict, Seiton chooses a living, reachable, safe enemy.',
     'Smart Action and /seitonsam safely keep your exact visible duel target instead. /seitonfar stays CC-only.',
     'Your visible target does not change. /ssaction is an alias.',
-    'Most cast-time attacks keep your visible target so FFXIV does not turn you unexpectedly.',
+    'Instant attacks and casts both use Smart Action. The target is chosen before the cast starts and ',
     'actions wait, while Purify and a manual Guard still work.',
     'Use /autoseiton (or click the movable action-bar tile) to switch this availability ON/OFF.',
     'ON is fully automatic',
@@ -12688,17 +12721,18 @@ $whatsNewWindow = Read-RequiredSource $whatsNewWindowPath 'What''s New window'
 $releaseNotesContentRules = Read-RequiredSource $releaseNotesContentRulesPath 'Release-note content rules'
 $releaseNotesContentSelfTests = Read-RequiredSource $releaseNotesContentSelfTestsPath 'Release-note content self-tests'
 Assert-Literals $projectFile @(
-    '<Version>0.44.0.8</Version>',
-    '<AssemblyVersion>0.44.0.8</AssemblyVersion>',
-    '<FileVersion>0.44.0.8</FileVersion>'
-) 'v0.44.0.8 project version'
+    '<Version>0.44.0.9</Version>',
+    '<AssemblyVersion>0.44.0.9</AssemblyVersion>',
+    '<FileVersion>0.44.0.9</FileVersion>'
+) 'v0.44.0.9 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.44.0.8";',
-    'Smart Action and /seitonsam now keep their exact visible duel target in Wolves'' Den.',
-    '/seitonsam now protects Ogi and Tendo from held movement without a gap at cast start.',
-    'Guard retries stay responsive, and idle Sprint or Seiton-owned repeats cannot cancel Guard.',
-    'Ping Helpers can optionally quiet repeated line-of-sight error sounds while Seiton retries.'
-) 'v0.44.0.8 version-acknowledged player-facing What''s New content'
+    'private const string CurrentReleaseVersion = "0.44.0.9";',
+    'Failed Guard presses no longer briefly block recovery and job helpers.',
+    '/seitonsam keeps cast protection when Chase retries the attack after you get in range.',
+    'Turning Smart Action off now releases SAM movement protection immediately.',
+    'AST keeps its Double Cast follow-up when Orbis succeeds on a later retry.',
+    'CC prediction keeps trying when players are still loading during preparation.'
+) 'v0.44.0.9 version-acknowledged player-facing What''s New content'
 Assert-Literals $releaseNotesContentRules @(
     'public const int MaximumBulletCount = 5;',
     'if (bullets is null) return [];',
@@ -12757,17 +12791,17 @@ if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.44.0.8"',
-    'Fixed Smart Action and /seitonsam in Wolves'' Den.',
-    '/seitonsam now protects Ogi and Tendo from held movement without a start gap.',
-    'Guard retries stay responsive, and idle Sprint or Seiton-owned repeats can no longer cancel Guard.',
-    'Added an optional quiet mode for repeated line-of-sight errors.',
+    '"AssemblyVersion": "0.44.0.9"',
+    'Failed Guard presses no longer briefly block helpers.',
+    '/seitonsam keeps cast protection through Chase retries and releases it when disabled.',
+    'AST keeps Double Cast after a successful Orbis retry.',
+    'CC prediction retries while players load in preparation.',
     '"IsHide": false',
     '"IsTestingExclusive": false',
     '"DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"',
     '"DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"',
     '"DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"'
-) 'v0.44.0.8 custom-repository metadata'
+) 'v0.44.0.9 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -13174,7 +13208,7 @@ Assert-Literals $normalizedReadme @(
     'BRD **Mannstopper** keeps Smart Action ranking but avoids Chiten, Guard, Purify protection, Meikyo, Paean, and other real CC immunity.',
     'PLD and DRK damage-only invulnerability remains a valid Mannstopper target',
     'The CC prediction panel now stays visible during preparation while the exact 5v5 roster is still loading.',
-    'For the current source, the exact 651-test Core registry, sixteen plugin self-tests, and source checks pin configuration schema 53',
+    'For the current source, the exact 653-test Core registry, seventeen plugin self-tests, and source checks pin configuration schema 53',
     'the independent default-off automatic basic-shot cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
@@ -15064,4 +15098,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 53, local CC statistics schema 5, the exact 651-test Core registry, and 16 plugin persistence tests. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, PLD Guardian, Recuperate, then Auto-Guard own priority in that order. Guardian requires exact Guard and Guardian metadata/readiness through the final boundary: <=20% is unconditional, <=40% needs fresh exact 2+ focus, and <=50% needs fresh exact 3+ focus. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-actor reservation from either a certified direct standard hotbar press, an exact lease/generation-backed /smartaction visible-<t> fallback, or a target-independent CC Smart Action S1-S5 winner; only the first two bind the visible hard target. Queue stays rejected. Release cannot cancel it; new action, context, Guard, CC, identity, protection, or exact-action/actor drift does, only a post-revalidated clean native range/LoS false may retry, accepted or ambiguous outcomes are terminal, and it never reranks or writes target/facing. The optional quiet-held-errors setting avoids global sound hooks and suppresses only a plugin-owned synthetic repeat whose exact hostile target returns native line-of-sight code 562; the first press, out-of-range, and every unknown error remain native. /seitonfar remains reachable-only. Enabled Wolves Den Smart Action resolves the exact stable visible hard target or reviewed dummy; a matching native duel identity may replace a stale Hostile flag, conflicting actor views still fail closed, and only the first non-exact carrier per tap may preserve the one-shot for the following exact <t>. Every current damaging non-ground-target shape shares the same closed admission and final-protection path. Exact /seitonsam Ogi/Tendo request-in-flight ownership suppresses movement through native acceptance and then hands off to the bounded accepted-cast lease; merely arming /seitonsam does not suppress movement, and ordinary /smartaction never gains this behavior. Exact repeat-Guard protection is identity- and territory-bound: a client-accepted request or exact live Guard blocks plugin-owned repeats during propagation, while a rejected or ambiguous provisional request remains immediately retryable; the first visible Guard frame then owns the full 1000-ms exact-repeat window. Current-name semantic protection metadata tolerates removed historical duplicate rows while still requiring Guard, Covered, Hallowed Ground, and Undead Redemption. Metadata-verified Shield Smite and Chain Stratagem may select Guard; other primary protections remain candidate-local blockers and only incidental/global Chiten vetoes AoE. Every exact Smart Action-owned harmful non-ground-target PvP cast uses reachable S1-S5 ranking only in CC; in enabled Wolves Den it preserves the exact visible hostile/dummy target through the same closed protection path. Exact Near Help-owned friendly PvP casts use one-shot current ally ranking after atomic exact-generation consumption, while Near Assist retains cast-time hidden-carrier suppression with visible-target pass-through. A Smart Action fallback transfers only a live exact owner into the same bounded reservation. Auto-Zantetsuken uses an identity/context-bound 500-ms no-target collection from the first exact own-source Kuzushi, ranks the fresh live cluster only after maturity, and rechecks collection, frozen identity, current Kuzushi, protection, Bind, readiness, range, and line of sight at the final boundary. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not reset it, Guard refreshes the idle baseline through its exact status/propagation episode, and a complete idle interval must pass after Guard ends. Player Stats is a dedicated local-only searchable opponent view: ally-only identities stay HMAC-only, clear opponent Name + World appears only after enemy history, last-seen tracks later encounters in either role, and schema-4 PvpStats backfill is cutoff-bounded, contained-row-only, one-shot, and never double-adds participant W/L. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."
+Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 53, local CC statistics schema 5, the exact 653-test Core registry, and 17 plugin persistence tests. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, PLD Guardian, Recuperate, then Auto-Guard own priority in that order. Guardian requires exact Guard and Guardian metadata/readiness through the final boundary: <=20% is unconditional, <=40% needs fresh exact 2+ focus, and <=50% needs fresh exact 3+ focus. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-actor reservation from either a certified direct standard hotbar press, an exact lease/generation-backed /smartaction visible-<t> fallback, or a target-independent CC Smart Action S1-S5 winner; only the first two bind the visible hard target. Queue stays rejected. Release cannot cancel it; new action, context, Guard, CC, identity, protection, or exact-action/actor drift does, only a post-revalidated clean native range/LoS false may retry, accepted or ambiguous outcomes are terminal, and it never reranks or writes target/facing. The optional quiet-held-errors setting avoids global sound hooks and suppresses only a plugin-owned synthetic repeat whose exact hostile target returns native line-of-sight code 562; the first press, out-of-range, and every unknown error remain native. /seitonfar remains reachable-only. Enabled Wolves Den Smart Action resolves the exact stable visible hard target or reviewed dummy; a matching native duel identity may replace a stale Hostile flag, conflicting actor views still fail closed, and only the first non-exact carrier per tap may preserve the one-shot for the following exact <t>. Every current damaging non-ground-target shape shares the same closed admission and final-protection path. Exact /seitonsam Ogi/Tendo request-in-flight ownership suppresses movement through native acceptance and then hands off to the bounded accepted-cast lease; merely arming /seitonsam does not suppress movement, and ordinary /smartaction never gains this behavior. Exact repeat-Guard protection is identity- and territory-bound: a client-accepted request or exact live Guard blocks plugin-owned repeats during propagation, while a rejected or ambiguous provisional request remains immediately retryable; the first visible Guard frame then owns the full 1000-ms exact-repeat window. Current-name semantic protection metadata tolerates removed historical duplicate rows while still requiring Guard, Covered, Hallowed Ground, and Undead Redemption. Metadata-verified Shield Smite and Chain Stratagem may select Guard; other primary protections remain candidate-local blockers and only incidental/global Chiten vetoes AoE. Every exact Smart Action-owned harmful non-ground-target PvP cast uses reachable S1-S5 ranking only in CC; in enabled Wolves Den it preserves the exact visible hostile/dummy target through the same closed protection path. Exact Near Help-owned friendly PvP casts use one-shot current ally ranking after atomic exact-generation consumption, while Near Assist retains cast-time hidden-carrier suppression with visible-target pass-through. A Smart Action fallback transfers only a live exact owner into the same bounded reservation. Auto-Zantetsuken uses an identity/context-bound 500-ms no-target collection from the first exact own-source Kuzushi, ranks the fresh live cluster only after maturity, and rechecks collection, frozen identity, current Kuzushi, protection, Bind, readiness, range, and line of sight at the final boundary. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not reset it, Guard refreshes the idle baseline through its exact status/propagation episode, and a complete idle interval must pass after Guard ends. Player Stats is a dedicated local-only searchable opponent view: ally-only identities stay HMAC-only, clear opponent Name + World appears only after enemy history, last-seen tracks later encounters in either role, and schema-4 PvpStats backfill is cutoff-bounded, contained-row-only, one-shot, and never double-adds participant W/L. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."

@@ -23,7 +23,7 @@ jobs:
       # XIVLauncher installation. The release script performs that full build
       # before packaging; hosted CI can reproducibly compile the dependency-free
       # policy core and verify the committed, source-fingerprinted plugin ZIP.
-      # Build-Release.ps1 additionally runs the nine plugin persistence tests on
+      # Build-Release.ps1 additionally runs the plugin integration tests on
       # the release machine where Dalamud's local runtime assemblies exist.
       - name: Build dependency-free core
         run: >-

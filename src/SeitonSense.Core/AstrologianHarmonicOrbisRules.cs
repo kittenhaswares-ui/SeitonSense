@@ -11,6 +11,9 @@ public readonly record struct AstrologianHarmonicOrbisIntent(
         Target.IsValid &&
         NearHelpSelectionRules.IsValidPartySlot(PartySlot) &&
         BaseChargeEpochToken != 0;
+
+    public AstrologianHarmonicOrbisIntent WithAcceptedBaseFrame(ulong frameworkFrame) =>
+        this with { OrbisFrameworkFrame = frameworkFrame };
 }
 
 /// <summary>
