@@ -621,6 +621,10 @@ Assert-Literals $integratedInputRuntime @(
     'ClientActionAttemptBoundaryRules.Classify(',
     'NativeBoundaryInvoked: true,'
 ) 'Integrated input closed hook, sole-UseAction dispatch, and explicit native-boundary outcome classification'
+if ($normalizedIntegratedInputRuntime -match
+    '!condition\[ConditionFlag\.BeingMoved\] && nearAssist\.IsOwnedSamuraiCastProtected\(\)') {
+    throw '/seitonsam movement suppression must not disable itself when ordinary movement sets BeingMoved.'
+}
 Assert-Literals $integratedHotbarInputSource @(
     'HookFromAddress<InputData.Delegates.IsInputIdPressed>',
     'HookFromSignature<CheckHotbarBindingsDelegate>',
@@ -12487,16 +12491,16 @@ $whatsNewWindow = Read-RequiredSource $whatsNewWindowPath 'What''s New window'
 $releaseNotesContentRules = Read-RequiredSource $releaseNotesContentRulesPath 'Release-note content rules'
 $releaseNotesContentSelfTests = Read-RequiredSource $releaseNotesContentSelfTestsPath 'Release-note content self-tests'
 Assert-Literals $projectFile @(
-    '<Version>0.44.0.6</Version>',
-    '<AssemblyVersion>0.44.0.6</AssemblyVersion>',
-    '<FileVersion>0.44.0.6</FileVersion>'
-) 'v0.44.0.6 project version'
+    '<Version>0.44.0.7</Version>',
+    '<AssemblyVersion>0.44.0.7</AssemblyVersion>',
+    '<FileVersion>0.44.0.7</FileVersion>'
+) 'v0.44.0.7 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.44.0.6";',
-    'New /seitonsam chooses one safe SAM target within 5 yalms; no selected target is needed in CC.',
-    'Own Kuzushi or Debana and Stun are preferred before distance and the normal Smart Action signals.',
-    'Ogi and Tendo casts started by /seitonsam ignore normal movement and helper cancellation; Purify and manual Guard still work.'
-) 'v0.44.0.6 version-acknowledged player-facing What''s New content'
+    'private const string CurrentReleaseVersion = "0.44.0.7";',
+    'Fixed /seitonsam movement protection switching itself off as soon as normal movement began.',
+    'Ogi and Tendo casts started by /seitonsam now keep ordinary movement input blocked for the active cast.',
+    'Purify, native knockback or CC cancellation, and a fresh manual Guard remain available immediately.'
+) 'v0.44.0.7 version-acknowledged player-facing What''s New content'
 Assert-Literals $releaseNotesContentRules @(
     'public const int MaximumBulletCount = 5;',
     'if (bullets is null) return [];',
@@ -12550,22 +12554,21 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.44.0.6 plugin manifest metadata'
+) 'v0.44.0.7 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.44.0.6"',
-    'Added /seitonsam: a SAM-only 5-yalm Smart Action target helper',
-    'Own Kuzushi or Debana and Stun are preferred.',
-    'Ogi Namikiri and Tendo Setsugekka started by /seitonsam are protected from ordinary movement and helper cancellation',
-    'Purify and manual Guard remain available.',
+    '"AssemblyVersion": "0.44.0.7"',
+    'Fixed /seitonsam movement protection disabling itself',
+    'Ogi Namikiri and Tendo Setsugekka started by the macro now keep ordinary digital movement blocked',
+    'Purify, native knockback or CC cancellation, and fresh manual Guard remain available.',
     '"IsHide": false',
     '"IsTestingExclusive": false',
     '"DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"',
     '"DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"',
     '"DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"'
-) 'v0.44.0.6 custom-repository metadata'
+) 'v0.44.0.7 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -12730,6 +12733,9 @@ Assert-Literals $normalizedPrivacy @(
     'Automatic Zantetsuken and Auto-Seiton never use this permission.'
 ) 'v0.42.0.8 retained required-Kuzushi Zantetsuken, Auto-Seiton/Namikiri, and safety/privacy disclosure'
 Assert-Literals $normalizedReadme @(
+    'Version 0.44.0.7 fixes `/seitonsam` cast protection switching itself off as soon as ordinary movement set the game''s `BeingMoved` state.',
+    'Ogi Namikiri and Tendo Setsugekka now keep digital movement input blocked for the active cast.',
+    'Purify, native knockback or CC cancellation, and a fresh manual Guard remain available immediately.',
     'Version 0.44.0.6 adds `/seitonsam`, a SAM-only one-shot Smart Action helper.',
     'In Crystalline Conflict it needs no selected target and chooses one safe enemy within 5 yalms',
     'preferring own Kuzushi or Debana and exact Stun.',
@@ -12978,8 +12984,12 @@ Assert-Literals $normalizedReadme @(
     'constructs fifteen reviewed request shapes across seventeen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.44.0.6 Seiton SAM release with retained safety history'
+) 'v0.44.0.7 Seiton SAM movement hotfix with retained safety history'
 Assert-Literals $normalizedChangelog @(
+    '## 0.44.0.7',
+    'Fixed `/seitonsam` movement protection disabling itself as soon as ordinary movement set the game''s `BeingMoved` state.',
+    'Ogi Namikiri and Tendo Setsugekka started by the exact macro now keep ordinary digital movement input blocked throughout the active cast.',
+    'Purify remains immediate.',
     '## 0.44.0.6',
     'Added `/seitonsam`, a SAM-only one-shot Smart Action helper for one safe enemy within 5 yalms.',
     'No selected target is required in Crystalline Conflict;',

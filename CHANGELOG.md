@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.44.0.7
+
+- Fixed `/seitonsam` movement protection disabling itself as soon as ordinary
+  movement set the game's `BeingMoved` state.
+- Ogi Namikiri and Tendo Setsugekka started by the exact macro now keep ordinary
+  digital movement input blocked throughout the active cast.
+- Purify remains immediate. Native knockback or CC cancellation and a fresh
+  manual Guard still release or intentionally cancel the cast normally.
+- Automated checks remain separate from live in-game confirmation.
+
 ## 0.44.0.6
 
 - Added `/seitonsam`, a SAM-only one-shot Smart Action helper for one safe enemy

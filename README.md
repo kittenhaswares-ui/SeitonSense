@@ -3,6 +3,12 @@
 Seiton Sense is a local PvP awareness HUD with pressure tracking, nameplate
 cues, warnings, job helpers, Smart Action, and target highlights.
 
+Version 0.44.0.7 fixes `/seitonsam` cast protection switching itself off as
+soon as ordinary movement set the game's `BeingMoved` state. Ogi Namikiri and
+Tendo Setsugekka now keep digital movement input blocked for the active cast.
+Purify, native knockback or CC cancellation, and a fresh manual Guard remain
+available immediately.
+
 Version 0.44.0.6 adds `/seitonsam`, a SAM-only one-shot Smart Action helper.
 In Crystalline Conflict it needs no selected target and chooses one safe enemy
 within 5 yalms, preferring own Kuzushi or Debana and exact Stun. Enabled Wolves'

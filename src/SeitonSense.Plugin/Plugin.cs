@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.44.0.6";
+    private const string CurrentReleaseVersion = "0.44.0.7";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -468,9 +468,9 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "New /seitonsam chooses one safe SAM target within 5 yalms; no selected target is needed in CC.",
-                "Own Kuzushi or Debana and Stun are preferred before distance and the normal Smart Action signals.",
-                "Ogi and Tendo casts started by /seitonsam ignore normal movement and helper cancellation; Purify and manual Guard still work.",
+                "Fixed /seitonsam movement protection switching itself off as soon as normal movement began.",
+                "Ogi and Tendo casts started by /seitonsam now keep ordinary movement input blocked for the active cast.",
+                "Purify, native knockback or CC cancellation, and a fresh manual Guard remain available immediately.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

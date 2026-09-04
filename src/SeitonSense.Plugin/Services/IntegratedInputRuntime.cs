@@ -121,8 +121,11 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
                 GetHotbarInputSettings,
                 OnCertifiedPhysicalPress,
                 OnUnconsumedInjectedRepeat,
-                () => !condition[ConditionFlag.BeingMoved] &&
-                      nearAssist.IsOwnedSamuraiCastProtected());
+                // BeingMoved also becomes true for ordinary player movement.
+                // Gating on it made WASD disable its own cast protection.
+                // Native knockback/forced movement does not depend on this
+                // digital input result and still cancels the cast normally.
+                () => nearAssist.IsOwnedSamuraiCastProtected());
             Volatile.Write(ref available, 1);
             SetLastEvent("Ready to start");
         }
