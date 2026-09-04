@@ -65,6 +65,7 @@ internal sealed unsafe class BardRepellingShotProbe
     private readonly NearAssistRedirector nearAssist;
     private readonly AutomaticRecoveryShotCastMetadataValidation basicShotMetadata;
     private readonly IPluginLog log;
+    private readonly BardRepellingShotRetryGate retryGate = new();
     private FrozenIntent? frozenIntent;
     private bool readyEpochSpent;
     private ulong nextIntentEpoch;
@@ -99,7 +100,9 @@ internal sealed unsafe class BardRepellingShotProbe
         bool ownGuardActiveOrPropagating,
         bool higherPriorityClaimed,
         long nowMilliseconds,
-        bool hardReset)
+        bool hardReset,
+        bool edgeDrivenRetriesEnabled,
+        long frameworkFrameId)
     {
         try
         {
@@ -112,7 +115,9 @@ internal sealed unsafe class BardRepellingShotProbe
                 ownGuardActiveOrPropagating,
                 higherPriorityClaimed,
                 nowMilliseconds,
-                hardReset);
+                hardReset,
+                edgeDrivenRetriesEnabled,
+                frameworkFrameId);
         }
         catch (Exception exception)
         {
@@ -145,7 +150,9 @@ internal sealed unsafe class BardRepellingShotProbe
         bool ownGuardActiveOrPropagating,
         bool higherPriorityClaimed,
         long nowMilliseconds,
-        bool hardReset)
+        bool hardReset,
+        bool edgeDrivenRetriesEnabled,
+        long frameworkFrameId)
     {
         var supportedContext = context is
             SupportedPvPContext.CrystallineConflict or
@@ -260,6 +267,16 @@ internal sealed unsafe class BardRepellingShotProbe
                                       localPlayer.IsCasting,
                                       castActionId,
                                       actionManager->ActionQueued);
+        var retryReady = retryGate.Observe(
+            currentIntent?.IntentEpochToken ?? 0,
+            currentIntent?.Retry ?? HeldActionRetryState.Initial,
+            currentReadinessKnown: actionManager != null && localPlayer is not null &&
+                                   float.IsFinite(actionManager->AnimationLock) &&
+                                   actionManager->AnimationLock >= 0,
+            currentNativeReady: nativeBoundaryReady,
+            edgeDrivenRetriesEnabled,
+            frameworkFrameId,
+            nowMilliseconds);
         var decision = BardRepellingShotRules.Evaluate(
             new BardRepellingShotObservation(
                 enabled,
@@ -306,11 +323,10 @@ internal sealed unsafe class BardRepellingShotProbe
         else if (decision.ShouldDispatch &&
                  currentIntent is { } dispatchIntent &&
                  runtimeTarget.IsValid &&
-                 HeldActionRetryRules.CanAttemptFrozenIntent(
-                     dispatchIntent.Retry,
-                     nowMilliseconds))
+                 retryReady)
         {
             inputClaimed = true;
+            retryGate.ReserveAttemptFrame(frameworkFrameId);
             nativeOutcome = TryUseOnce(
                 localPlayer!,
                 dispatchIntent,
@@ -336,6 +352,7 @@ internal sealed unsafe class BardRepellingShotProbe
             {
                 frozenIntent = null;
                 readyEpochSpent = true;
+                retryGate.ClearEpisode();
             }
         }
 
@@ -690,6 +707,7 @@ internal sealed unsafe class BardRepellingShotProbe
     {
         frozenIntent = null;
         readyEpochSpent = false;
+        retryGate.Reset();
     }
 
     private ulong NextToken()

@@ -5,8 +5,8 @@
     "Punchline": "PvP cues, Smart Tab, responsive helpers, and survival tools.",
     "Description": "A local PvP HUD with searchable CC player rankings and prediction, nameplate cues, Limit Break alerts, pressure and CC information, Ping Helpers, medicine-kit beacons, range rings, a Wolves' Den map panel, recovery and job helpers, Smart Tab, assist macros, MP sounds, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.44.0.9",
-    "Changelog": "Failed Guard presses no longer briefly block helpers. /seitonsam keeps cast protection through Chase retries and releases it when disabled. AST keeps Double Cast after a successful Orbis retry. CC prediction retries while players load in preparation. Corrected Smart Action cast and duel help text.",
+    "AssemblyVersion": "0.44.1.0",
+    "Changelog": "Cleaner Job Tools with current-job focus and a simple Helper Status page. Added gameplay movement-state and autorun coverage for /seitonsam cast protection. Bard Repelling Shot can retry on a fresh ready signal. Added real service-sequence tests and version-specific update downloads.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -33,9 +33,9 @@
     ],
     "IsHide": false,
     "IsTestingExclusive": false,
-    "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1788552486"
+    "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.1.0/dist/SeitonSense-0.44.1.0.zip",
+    "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.1.0/dist/SeitonSense-0.44.1.0.zip",
+    "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.1.0/dist/SeitonSense-0.44.1.0.zip",
+    "LastUpdate": "1788554865"
   }
 ]

@@ -3,6 +3,16 @@
 Seiton Sense is a local PvP awareness HUD with pressure tracking, nameplate
 cues, warnings, job helpers, Smart Action, and target highlights.
 
+Version 0.44.1.0 makes settings easier to browse: Job Tools starts with your
+current job, and Helper Status explains waiting helpers before showing technical
+details. `/seitonsam` additionally covers the game's gameplay-movement and
+autorun queries; keyboard, mouse and controller behavior still need live testing.
+Bard Repelling Shot can wake a rejected retry on a fresh busy-to-ready transition
+when Adaptive Response is enabled, while unchanged ready frames keep their throttle.
+New offline tests execute real AST completion and prediction-roster transitions.
+Each repository update now names its own version-tagged ZIP, preventing a cached
+old feed from downloading an unrelated newer package. Existing settings survive.
+
 Version 0.44.0.9 fixes several edge cases found in a code audit: failed Guard
 presses no longer briefly block helpers, `/seitonsam` keeps its cast protection
 through Chase retries and releases it when disabled, and AST keeps Double Cast
@@ -2224,8 +2234,9 @@ always-on pressure display by surprise.
 
 ## Settings and schema migration
 
-The sidebar order is Start, Alerts, HUD & Nameplates, Action Helpers, Ping
-Helpers, Job Tools, Macro Helpers, Targets, and Diagnostics. Enemy LB nameplate controls live under
+The sidebar groups Start and Helper Status under Overview; Action Helpers,
+Job Tools, Macro Helpers, Ping Helpers and Targets under Gameplay; and Alerts,
+HUD & Nameplates and Player Stats under Display & History. Enemy LB nameplate controls live under
 HUD & Nameplates; self/ally LB notifications and local MP sounds live under
 Alerts. Reactive defensive utilities, Smart Recuperate, and Emergency Teleport
 remain under Action Helpers; independent PLD Guardian, accepted-Eukrasia Smart
@@ -2686,7 +2697,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 653-test Core registry, seventeen plugin self-tests,
+For the current source, the exact 659-test Core registry, twenty-five plugin self-tests,
 and source checks pin configuration schema 53, the shared monotonic response clock and framework
 epoch, true not-ready-to-ready wakeups, strict unchanged-queue critical recovery,
 the immutable release-independent tap-to-land buffer, active-Sprint repeat

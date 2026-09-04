@@ -17,6 +17,11 @@ internal sealed partial class SettingsWindow
             "Wings are not supported by the enemy-slot features.");
 
         ImGui.Spacing();
+        if (ImGui.Button("Why is a helper waiting?")) selectedPage = SettingsPage.Diagnostics;
+        ImGui.SameLine();
+        if (ImGui.Button("Settings for my job")) selectedPage = SettingsPage.JobTools;
+
+        ImGui.Spacing();
         ImGui.TextUnformatted("Testing scope");
         changed |= Checkbox(
             "Enable Wolves' Den testing for supported Seiton Sense features and helpers",

@@ -129,6 +129,7 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
     private readonly TargetPressureTracker pressureTracker;
     private readonly NearAssistRedirector nearAssist;
     private readonly IPluginLog log;
+    private readonly Func<uint> readDoubleCastCarrier;
     private FrozenIntent? frozenIntent;
     private AstrologianHarmonicOrbisProbePhase phase =
         AstrologianHarmonicOrbisProbePhase.Waiting;
@@ -161,13 +162,15 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
         IObjectTable objectTable,
         TargetPressureTracker pressureTracker,
         NearAssistRedirector nearAssist,
-        IPluginLog log)
+        IPluginLog log,
+        Func<uint>? readDoubleCastCarrier = null)
     {
         this.clientState = clientState;
         this.objectTable = objectTable;
         this.pressureTracker = pressureTracker;
         this.nearAssist = nearAssist;
         this.log = log;
+        this.readDoubleCastCarrier = readDoubleCastCarrier ?? ReadDoubleCastCarrier;
     }
 
     internal AstrologianHarmonicOrbisProbeSnapshot Snapshot =>
@@ -1058,7 +1061,7 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
             CaptureDispatchBoundary(actionManager, dispatchAction));
     }
 
-    private void CompleteAttempt(
+    internal void CompleteAttempt(
         FrozenIntent intent,
         AstrologianHarmonicOrbisDispatchAction dispatchAction,
         ClientActionAttemptOutcome outcome,
@@ -1092,10 +1095,7 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
             // where the original intent was frozen. Otherwise an already
             // transformed carrier returns Dispatch here and loses the chain.
             sequenceIntent = sequenceIntent.WithAcceptedBaseFrame(frameworkFrame);
-            var actionManager = ActionManager.Instance();
-            var adjustedDoubleCastActionId = actionManager == null
-                ? 0
-                : actionManager->GetAdjustedActionId(DoubleCastCarrierActionId);
+            var adjustedDoubleCastActionId = readDoubleCastCarrier();
             var followUpDecision =
                 AstrologianHarmonicOrbisRules.EvaluateFollowUp(
                     sequenceIntent,
@@ -1132,6 +1132,14 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
             terminalHeldKey = intent.HeldKey;
         }
         ClearEpisode();
+    }
+
+    private static uint ReadDoubleCastCarrier()
+    {
+        var actionManager = ActionManager.Instance();
+        return actionManager == null
+            ? 0
+            : actionManager->GetAdjustedActionId(DoubleCastCarrierActionId);
     }
 
     private HeldCastCancellationRequest? BuildCastCancellationRequest(
@@ -1490,7 +1498,7 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
         TargetPressureActorIdentity Identity,
         nint Address);
 
-    private readonly record struct FrozenIntent(
+    internal readonly record struct FrozenIntent(
         TargetPressureActorIdentity LocalPlayer,
         TargetPressureActorIdentity Target,
         nint LocalAddress,

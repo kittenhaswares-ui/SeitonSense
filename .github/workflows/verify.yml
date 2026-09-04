@@ -35,6 +35,7 @@ jobs:
         shell: pwsh
         run: |
           ./scripts/Verify-SafetyContract.ps1
+          ./tests/ReleaseScripts.SelfTest.ps1
           ./scripts/Verify-Release.ps1
       - name: Test dependency-free core
         run: >-

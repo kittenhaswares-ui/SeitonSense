@@ -25,6 +25,14 @@ var tests = new (string Name, Action Run)[]
     ("full imported player history evicts deterministically for one native match", FullImportStillAcceptsNativeMatch),
     ("repeated rejected Guard spam preserves the original attempt", RejectedGuardSpamRestoresOriginalAttempt),
     ("only accepted Guard requests suppress helpers", RecoveryGuardSelfTests.OnlyAcceptedGuardAttemptsSuppressHelpers),
+    ("AST service keeps Double Cast after a rejected then accepted Orbis", ServiceScenarioSelfTests.AstRejectedThenAcceptedRetryKeepsDoubleCast),
+    ("AST service ends unknown and unavailable follow-ups cleanly", ServiceScenarioSelfTests.AstUnknownAndUnavailableFollowUpsEndCleanly),
+    ("prediction service retries incomplete roster and freezes once", ServiceScenarioSelfTests.PredictionIncompleteRosterRetriesAndFreezesOnce),
+    ("prediction service rejects malformed success without poisoning next frame", ServiceScenarioSelfTests.PredictionMalformedSuccessDoesNotPoisonNextFrame),
+    ("SAM gameplay and digital movement share exact ownership", SamuraiMovementBoundarySelfTests.GameplayControlAndDigitalPathsShareExactOwnership),
+    ("SAM unavailable ownership and recursive reads preserve input", SamuraiMovementBoundarySelfTests.OwnershipFailureAndRecursiveQueriesPreserveNativeInput),
+    ("SAM gameplay movement codes match native dependency", SamuraiMovementBoundarySelfTests.GameplayControlCodesMatchDependencyMetadata),
+    ("SAM buffered replay retains typed request owner", SamuraiMovementBoundarySelfTests.BufferedReplayRetainsTypedOwner),
 };
 
 static void PredictionPreparationSnapshotStaysVisible()

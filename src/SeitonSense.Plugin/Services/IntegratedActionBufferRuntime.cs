@@ -96,7 +96,7 @@ internal readonly record struct IntegratedActionBufferDispatchRequest(
     bool RequiresSmartActionProtectionRecheck,
     bool RequiresVisibleHardTargetBinding,
     IntegratedActionBufferActorIdentity VisibleHardTargetAtCapture,
-    long SamuraiCastTapGeneration = 0);
+    SmartActionTapOwnership Ownership = default);
 
 /// <summary>
 /// Exact result of one delayed replay. A false return is retryable only when
@@ -577,7 +577,7 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
         ActionManager.UseActionMode sourceMode,
         uint comboRouteId,
         long tapGeneration,
-        long samuraiCastTapGeneration = 0) =>
+        SmartActionTapOwnership ownership = default) =>
         BeginExactSmartActionMacroTap(
             actionManager,
             actionType,
@@ -589,7 +589,7 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
             tapGeneration,
             requiresVisibleHardTargetStability: true,
             logicalInputName: "Smart Action fallback",
-            samuraiCastTapGeneration);
+            ownership);
 
     /// <summary>
     /// Observes one exact canonical S-slot selected by Smart Action without
@@ -628,7 +628,7 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
         long tapGeneration,
         bool requiresVisibleHardTargetStability,
         string logicalInputName,
-        long samuraiCastTapGeneration = 0)
+        SmartActionTapOwnership ownership = default)
     {
         lock (gate)
         {
@@ -750,9 +750,9 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
                 RequiresVisibleHardTargetBinding:
                     requiresVisibleHardTargetStability,
                 VisibleHardTargetAtCapture: visibleHardTarget,
-                SamuraiCastTapGeneration: samuraiCastTapGeneration == tapGeneration
-                    ? samuraiCastTapGeneration
-                    : 0);
+                Ownership: ownership.MatchesGeneration(tapGeneration)
+                    ? ownership
+                    : SmartActionTapOwnership.Capture(tapGeneration, samurai: false));
             inFlight = new InFlightAttempt(
                 latestRootEpoch,
                 Environment.TickCount64,

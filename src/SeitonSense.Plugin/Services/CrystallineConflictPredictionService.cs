@@ -68,6 +68,8 @@ internal sealed class CrystallineConflictPredictionService : IDisposable
     private readonly CrystallineConflictMapStatisticsService mapStatistics;
     private readonly CrystallineConflictPredictionCaptureBuffer captureBuffer;
     private readonly IPluginLog log;
+    internal delegate bool RosterReader(out PlayerRuntime[] roster);
+    private readonly RosterReader readRoster;
     private PlayerRuntime[]? roster;
     private CrystallineConflictPredictionSnapshot snapshot =
         CrystallineConflictPredictionSnapshot.Inactive();
@@ -92,7 +94,8 @@ internal sealed class CrystallineConflictPredictionService : IDisposable
         ICondition condition,
         CrystallineConflictMapStatisticsService mapStatistics,
         CrystallineConflictPredictionCaptureBuffer captureBuffer,
-        IPluginLog log)
+        IPluginLog log,
+        RosterReader? readRoster = null)
     {
         this.configuration = configuration;
         this.clientState = clientState;
@@ -105,6 +108,7 @@ internal sealed class CrystallineConflictPredictionService : IDisposable
         this.mapStatistics = mapStatistics;
         this.captureBuffer = captureBuffer;
         this.log = log;
+        this.readRoster = readRoster ?? TryFreezeRoster;
     }
 
     internal CrystallineConflictPredictionSnapshot Snapshot => Volatile.Read(ref snapshot);
@@ -167,22 +171,7 @@ internal sealed class CrystallineConflictPredictionService : IDisposable
                 Reset("CC territory changed");
             activeTerritoryId = clientState.TerritoryType;
 
-            if (roster is null)
-            {
-                if (!TryFreezeRoster(out var frozenRoster))
-                {
-                    Volatile.Write(
-                        ref snapshot,
-                        CrystallineConflictPredictionSnapshot.Preparing());
-                    return;
-                }
-
-                // A failed read produces an empty candidate array. Publish it
-                // only on success so preparation can retry missing actors.
-                roster = frozenRoster;
-                matchGeneration = matchGeneration == long.MaxValue ? 1 : matchGeneration + 1;
-                finalResultObserved = false;
-            }
+            if (!TryPrepareRoster()) return;
 
             // The exact roster is useful as soon as team reveal completes.
             // Live counters remain closed until the first combat frame, then
@@ -214,6 +203,33 @@ internal sealed class CrystallineConflictPredictionService : IDisposable
             Reset("Prediction failed closed");
             log.Error(exception, "The local CC prediction failed closed for one update.");
         }
+    }
+
+    // Kept separate from native context reads so offline scenario tests run
+    // the same retry/publication transition used by every framework update.
+    internal bool TryPrepareRoster()
+    {
+        if (disposed) return false;
+        if (roster is not null) return true;
+        if (!readRoster(out var frozenRoster))
+        {
+            Volatile.Write(ref snapshot, CrystallineConflictPredictionSnapshot.Preparing());
+            return false;
+        }
+
+        // Never publish an incomplete roster, including from an injected reader.
+        if (frozenRoster.Length != 10 ||
+            frozenRoster.Count(player => player.IsAllied) != 5 ||
+            frozenRoster.Count(player => player.IsLocal) != 1)
+        {
+            Volatile.Write(ref snapshot, CrystallineConflictPredictionSnapshot.Preparing());
+            return false;
+        }
+
+        roster = frozenRoster;
+        matchGeneration = matchGeneration == long.MaxValue ? 1 : matchGeneration + 1;
+        finalResultObserved = false;
+        return true;
     }
 
     private void OnConfirmedMatch(ConfirmedCrystallineConflictMatchResult result)
@@ -641,7 +657,7 @@ internal sealed class CrystallineConflictPredictionService : IDisposable
     private static bool IsNetworkEntityId(uint entityId) =>
         entityId is not (0 or 0xE0000000u);
 
-    private sealed class PlayerRuntime(
+    internal sealed class PlayerRuntime(
         int slot,
         uint entityId,
         string identityKey,

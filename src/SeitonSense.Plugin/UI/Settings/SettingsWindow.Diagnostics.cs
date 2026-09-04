@@ -9,6 +9,10 @@ internal sealed partial class SettingsWindow
     {
         var changed = false;
         ImGui.Spacing();
+        DrawHelperStatusOverview();
+        ImGui.Spacing();
+        if (!ImGui.CollapsingHeader("Advanced technical details##SeitonDiagnostics"))
+            return changed;
         ImGui.TextUnformatted("Live diagnostics");
         ImGui.TextDisabled("For the complete multi-line snapshot, use /seiton debug in chat.");
         ImGui.TextWrapped(

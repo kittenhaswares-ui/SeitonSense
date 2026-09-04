@@ -322,6 +322,7 @@ internal sealed class PersonalStatusService : IDisposable
     internal MiracleInterceptProbeSnapshot MiracleInterceptDiagnostics => miracleIntercept.Snapshot;
     internal SamuraiReactiveCounterCcProbeSnapshot SamuraiReactiveDiagnostics =>
         samuraiReactive.Snapshot;
+    internal SamuraiCastInputStatus SamuraiCastInputStatus => nearAssist.SamuraiCastInputStatus;
     internal SamuraiReactiveMetadataValidation SamuraiReactiveMetadata =>
         samuraiReactiveMetadata;
     internal SamuraiReactiveCaptureDiagnostics SamuraiReactiveCaptureDiagnostics => new(
@@ -1086,7 +1087,9 @@ internal sealed class PersonalStatusService : IDisposable
             guardActive,
             immediateDefenseClaimedPriority || emergencyInputFrame.IsConsumed,
             now,
-            hardReset);
+            hardReset,
+            configuration.EnableAdaptiveResponseEngine,
+            frameworkFrameId);
         immediateDefenseClaimedPriority |= bardRepelling.InputClaimed;
         // AST's held Near Help lane is immediately below self recovery. It freezes one
         // exact <=60% party member and may reserve only its accepted base

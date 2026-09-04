@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.44.1.0
+
+- Job Tools starts with your current job; use Show all jobs to browse the rest.
+- Helper Status shows short reasons when helpers wait. The detailed diagnostics
+  remain available under Advanced technical details.
+- `/seitonsam` now also checks the game's movement-state and autorun input paths.
+  Camera input, Purify and intentional manual Guard remain available. Live Den
+  and CC validation, especially mouse/controller movement, is still required.
+- Smart Action and Chase carry typed request ownership for exact SAM cast protection.
+- Bard Repelling Shot can retry on a fresh native ready signal with Adaptive
+  Response enabled. Stable-ready frames retain the normal retry throttle.
+- Added offline service scenarios for rejected Orbis followed by accepted retry,
+  Double Cast cleanup, prediction roster retry and native movement boundaries.
+- Update feeds now reference a version-tagged ZIP. Release scripts refuse to
+  replace an existing version package with different contents.
+
 ## 0.44.0.9
 
 - Failed Guard presses no longer briefly block recovery and job helpers.

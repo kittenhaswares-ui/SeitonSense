@@ -16,7 +16,8 @@ internal sealed partial class SettingsWindow
             "Auto-Seiton work while switched on; the other action helpers still need a held gameplay key. General " +
             "survival and counter-CC settings are under Action Helpers.");
 
-        if (ImGui.CollapsingHeader("Astrologian — Harmonischer Orbis", ImGuiTreeNodeFlags.DefaultOpen))
+        DrawJobToolsFilter();
+        if (DrawJobSectionHeader(33, "Astrologian — Harmonischer Orbis"))
         {
             changed |= Checkbox(
                 "Harmonischer Orbis + optional Zweifacher Zauber on held key (includes WASD)",
@@ -38,9 +39,7 @@ internal sealed partial class SettingsWindow
             ImGui.PopTextWrapPos();
         }
 
-        ImGui.Separator();
-
-        if (ImGui.CollapsingHeader("Red Mage — fresh Guard engage", ImGuiTreeNodeFlags.DefaultOpen))
+        if (DrawJobSectionHeader(35, "Red Mage — fresh Guard engage"))
         {
             changed |= Checkbox(
                 "Corps-a-corps into a freshly started enemy Guard on held key (includes WASD)",
@@ -75,9 +74,7 @@ internal sealed partial class SettingsWindow
             ImGui.PopTextWrapPos();
         }
 
-        ImGui.Separator();
-
-        if (ImGui.CollapsingHeader("Paladin — Guardian rescue", ImGuiTreeNodeFlags.DefaultOpen))
+        if (DrawJobSectionHeader(19, "Paladin — Guardian rescue"))
         {
             changed |= Checkbox(
                 "Guardian for a critical or focused ally",
@@ -107,9 +104,7 @@ internal sealed partial class SettingsWindow
             ImGui.PopTextWrapPos();
         }
 
-        ImGui.Separator();
-
-        if (ImGui.CollapsingHeader("Dark Knight — Hiebsprung + Shadowbringer", ImGuiTreeNodeFlags.DefaultOpen))
+        if (DrawJobSectionHeader(32, "Dark Knight — Hiebsprung + Shadowbringer"))
         {
             changed |= Checkbox(
                 "Hiebsprung on held gameplay key at 30% HP or lower (experimental)",
@@ -165,9 +160,7 @@ internal sealed partial class SettingsWindow
             ImGui.PopTextWrapPos();
         }
 
-        ImGui.Separator();
-
-        if (ImGui.CollapsingHeader("Ninja — Guard Shukuchi + Seiton", ImGuiTreeNodeFlags.DefaultOpen))
+        if (DrawJobSectionHeader(30, "Ninja — Guard Shukuchi + Seiton"))
         {
             changed |= Checkbox(
                 "Shukuchi to a guarded enemy below 20% HP on held key (experimental)",
@@ -276,8 +269,7 @@ internal sealed partial class SettingsWindow
                 "%.2f");
         }
 
-        ImGui.Separator();
-        if (ImGui.CollapsingHeader("Samurai — Zantetsuken", ImGuiTreeNodeFlags.DefaultOpen))
+        if (DrawJobSectionHeader(34, "Samurai — Zantetsuken"))
         {
             changed |= Checkbox(
                 "Automatically use SAM Zantetsuken on your own Kuzushi target's best 5y cluster",
@@ -297,8 +289,7 @@ internal sealed partial class SettingsWindow
             ImGui.PopTextWrapPos();
         }
 
-        ImGui.Separator();
-        if (ImGui.CollapsingHeader("Viper — Serpentiner Geist", ImGuiTreeNodeFlags.DefaultOpen))
+        if (DrawJobSectionHeader(41, "Viper — Serpentiner Geist"))
         {
             changed |= Checkbox(
                 "Use transformed Serpentiner Geist while a gameplay key is held (includes WASD)",
@@ -318,8 +309,7 @@ internal sealed partial class SettingsWindow
             ImGui.PopTextWrapPos();
         }
 
-        ImGui.Separator();
-        if (ImGui.CollapsingHeader("Gunbreaker — Continuation", ImGuiTreeNodeFlags.DefaultOpen))
+        if (DrawJobSectionHeader(37, "Gunbreaker — Continuation"))
         {
             changed |= Checkbox(
                 "Use transformed Continuation follow-ups on held gameplay key (includes WASD)",
@@ -336,8 +326,7 @@ internal sealed partial class SettingsWindow
             ImGui.PopTextWrapPos();
         }
 
-        ImGui.Separator();
-        if (ImGui.CollapsingHeader("Scholar — Critical Strategy", ImGuiTreeNodeFlags.DefaultOpen))
+        if (DrawJobSectionHeader(28, "Scholar — Critical Strategy"))
         {
             changed |= Checkbox(
                 "Critical Strategy on held gameplay key (Guard targets only, experimental)",
@@ -359,20 +348,17 @@ internal sealed partial class SettingsWindow
             ImGui.PopTextWrapPos();
         }
 
-        ImGui.Separator();
-        if (ImGui.CollapsingHeader("Sage — Smart Kardia", ImGuiTreeNodeFlags.DefaultOpen))
+        if (DrawJobSectionHeader(40, "Sage — Smart Kardia"))
         {
             changed |= DrawSageKardiaControls();
         }
 
-        ImGui.Separator();
-        if (ImGui.CollapsingHeader("Bard — Smart Paean target", ImGuiTreeNodeFlags.DefaultOpen))
+        if (DrawJobSectionHeader(23, "Bard — Smart Paean target"))
         {
             changed |= DrawBardWardensPaeanPressureRedirectControls();
         }
 
-        ImGui.Separator();
-        if (ImGui.CollapsingHeader("Monk — held combo + Earth's Reply", ImGuiTreeNodeFlags.DefaultOpen))
+        if (DrawJobSectionHeader(20, "Monk — held combo + Earth's Reply"))
         {
             changed |= Checkbox(
                 "Run the PvP Monk combo on held gameplay key (includes WASD)",

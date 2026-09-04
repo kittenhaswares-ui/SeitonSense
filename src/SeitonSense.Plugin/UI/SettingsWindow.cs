@@ -30,6 +30,7 @@ internal sealed partial class SettingsWindow : Window
     private bool crystallineConflictMapStatisticsResetSucceeded;
     private long crystallineConflictMapStatisticsResetFeedbackUntil;
     private SettingsPage selectedPage = SettingsPage.Start;
+    private bool showAllJobTools;
 
     public SettingsWindow(
         PluginConfiguration configuration,
@@ -138,17 +139,21 @@ internal sealed partial class SettingsWindow : Window
 
     private void DrawSidebar()
     {
-        ImGui.TextDisabled("SETTINGS");
+        ImGui.TextDisabled("OVERVIEW");
         DrawPageChoice(SettingsPage.Start, "Start");
+        DrawPageChoice(SettingsPage.Diagnostics, "Helper Status");
+        ImGui.Spacing();
+        ImGui.TextDisabled("GAMEPLAY");
+        DrawPageChoice(SettingsPage.ActionHelpers, "Action Helpers");
+        DrawPageChoice(SettingsPage.JobTools, "Job Tools");
+        DrawPageChoice(SettingsPage.MacroHelpers, "Macro Helpers");
+        DrawPageChoice(SettingsPage.PingHelpers, "Ping Helpers");
+        DrawPageChoice(SettingsPage.Targets, "Targets");
+        ImGui.Spacing();
+        ImGui.TextDisabled("DISPLAY & HISTORY");
         DrawPageChoice(SettingsPage.Alerts, "Alerts");
         DrawPageChoice(SettingsPage.HudAndNameplates, "HUD & Nameplates");
         DrawPageChoice(SettingsPage.PlayerStats, "Player Stats");
-        DrawPageChoice(SettingsPage.ActionHelpers, "Action Helpers");
-        DrawPageChoice(SettingsPage.PingHelpers, "Ping Helpers");
-        DrawPageChoice(SettingsPage.JobTools, "Job Tools");
-        DrawPageChoice(SettingsPage.MacroHelpers, "Macro Helpers");
-        DrawPageChoice(SettingsPage.Targets, "Targets");
-        DrawPageChoice(SettingsPage.Diagnostics, "Diagnostics");
 
         ImGui.Spacing();
         ImGui.Separator();

@@ -337,6 +337,7 @@ $expectedSettingsRelativePaths = @(
     'Settings/SettingsWindow.Actions.cs',
     'Settings/SettingsWindow.Alerts.cs',
     'Settings/SettingsWindow.Diagnostics.cs',
+    'Settings/SettingsWindow.HelperStatus.cs',
     'Settings/SettingsWindow.Hud.cs',
     'Settings/SettingsWindow.Jobs.cs',
     'Settings/SettingsWindow.Macros.cs',
@@ -604,7 +605,7 @@ Assert-Literals $integratedInputRuntime @(
     'OnCertifiedPhysicalPress,',
     'OnUnconsumedInjectedRepeat,',
     'nearAssist.IsSamuraiCastMovementSuppressed())',
-    'var replayIntent = new IntegratedBufferedReplayIntent(',
+    'var replayIntent = CreateBufferedReplayIntent(request);',
     'request.ResolvedActionId,',
     'request.RequiresSmartActionProtectionRecheck,',
     'var replay = nearAssist.RunExactBufferedReplay(',
@@ -635,9 +636,15 @@ Assert-Literals $integratedHotbarInputSource @(
     'heldHook.Enable();',
     'TryDisable(heldHook);',
     'TryDisable(downHook);',
-    'downHook.Original(inputData, inputId);',
-    'heldHook.Original(inputData, inputId);',
-    'ShouldSuppressSamuraiMovementInput(inputId)',
+    'downHook.Original((InputData*)inputAddress, (InputId)inputCode)',
+    'heldHook.Original((InputData*)inputAddress, (InputId)inputCode)',
+    'samuraiMovementBoundary.Read(',
+    'HookFromAddress<InputManager.Delegates.GetInputStatus>',
+    'HookFromAddress<InputManager.Delegates.IsAutoRunning>',
+    'controlInputHook!.Original((InputManager*)inputAddress, (InputCode)inputCode)',
+    'autorunHook!.Original()',
+    'try { autorunHook?.Dispose(); } catch { }',
+    'try { controlInputHook?.Dispose(); } catch { }',
     'checkHotbarBindingsHook.Original(context, mode);',
     'unconsumedInjectedRepeat = TakeUnconsumedInjectedRepeat(scanId);',
     'ClearPendingForScan(scanId);',
@@ -693,11 +700,11 @@ if ([regex]::Matches($integratedInputRuntime, 'HookFromAddress<RaptureHotbarModu
     [regex]::Matches($integratedHotbarInputSource, 'reportPressed = decision\.ShouldReportPressed;').Count -ne 1 -or
     $normalizedIntegratedHotbarInputSource -notmatch 'case LogicalHotbarRepeatDecisionKind\.InjectedRepeat:.*?pendingActivations\[binding\.Index\] = new PendingActivation\( new IntegratedHotbarActivation\( IntegratedHotbarActivationKind\.InjectedRepeat, injectedPress, now\), activeScanId, RequiresOwnerCoalesce: false\);.*?reportPressed = decision\.ShouldReportPressed;.*?Interlocked\.Increment\(ref injectedRepeats\);.*?break;.*?case LogicalHotbarRepeatDecisionKind\.DelegatedRepeat:' -or
     $normalizedIntegratedHotbarInputSource -match 'case LogicalHotbarRepeatDecisionKind\.InjectedRepeat:.*?reportPressed = false;.*?case LogicalHotbarRepeatDecisionKind\.DelegatedRepeat:' -or
-    $normalizedIntegratedHotbarInputSource -notmatch 'private bool IsInputIdDownDetour\(InputData\* inputData, InputId inputId\).*?var nativeDown = downHook\.Original\(inputData, inputId\); return ShouldSuppressSamuraiMovementInput\(inputId\) \? false : nativeDown;' -or
-    $normalizedIntegratedHotbarInputSource -notmatch 'private bool IsInputIdHeldDetour\(InputData\* inputData, InputId inputId\).*?var nativeHeld = heldHook\.Original\(inputData, inputId\); return ShouldSuppressSamuraiMovementInput\(inputId\) \? false : nativeHeld;' -or
+    $normalizedIntegratedHotbarInputSource -notmatch 'private bool IsInputIdDownDetour\(InputData\* inputData, InputId inputId\).*?return samuraiMovementBoundary\.Read\( \(nint\)inputData, \(uint\)inputId, SamuraiMovementInputPath\.Down\);' -or
+    $normalizedIntegratedHotbarInputSource -notmatch 'private bool IsInputIdHeldDetour\(InputData\* inputData, InputId inputId\).*?return samuraiMovementBoundary\.Read\( \(nint\)inputData, \(uint\)inputId, SamuraiMovementInputPath\.Held\);' -or
     $normalizedIntegratedHotbarInputSource -notmatch 'public void Dispose\(\).*?checkHotbarBindingsHook\.Dispose\(\);.*?heldHook\.Dispose\(\);.*?downHook\.Dispose\(\);.*?pressedHook\.Dispose\(\);' -or
     $normalizedIntegratedHotbarInputSource -notmatch 'checkHotbarBindingsHook\.Original\(context, mode\); lock \(gate\) \{ unconsumedInjectedRepeat = TakeUnconsumedInjectedRepeat\(scanId\); \} \} finally \{ lock \(gate\) \{ ClearPendingForScan\(scanId\); \} activeScanSource = previousSource; activeScanSettings = previousSettings; activeScanId = previousScanId; \} if \(unconsumedInjectedRepeat is \{ \} activation\).*?onUnconsumedInjectedRepeat\(activation\);') {
-    throw 'Integrated input must retain exactly six reviewed native hooks, no second UseAction hook, suppress exact /seitonsam movement across Pressed/Down/Held while leaving Released native, surface one due Turbo cadence as the native pressed result, and hand an unconsumed token to diagnostics only after the native scan is fully unwound.'
+    throw 'Integrated input must retain exactly eight reviewed native hooks, no second UseAction hook, suppress exact /seitonsam movement across Pressed/Down/Held while leaving Released native, surface one due Turbo cadence as the native pressed result, and hand an unconsumed token to diagnostics only after the native scan is fully unwound.'
 }
 
 # An injected Turbo pulse is one exact same-scan native pressed result. Only the
@@ -828,7 +835,7 @@ Assert-Literals $pluginSource @(
 ) 'Idempotent exception-isolated plugin disposal'
 if ($normalizedPluginForIntegratedInput -notmatch 'nearAssist\.Start\(\); personalStatus\.Start\(\); integratedInput\.Start\(\);' -or
     $normalizedPluginForIntegratedInput -notmatch 'integratedInput\.Dispose\(\);.*?criticalUtilityCoordination\.Dispose\(\);.*?nearAssist\.Dispose\(\);' -or
-    $normalizedIntegratedInputRuntime -notmatch 'private IntegratedActionBufferDispatchResult DispatchBufferedAction\( IntegratedActionBufferDispatchRequest request\).*?if \(disposed \|\| Volatile\.Read\(ref started\) == 0 \|\| IsInternalPriorityClaimedFailClosed\(\)\).*?var replayIntent = new IntegratedBufferedReplayIntent\( request\.ActionType, request\.RequestedActionId, request\.ResolvedActionId, request\.TargetId, request\.RequiresSmartActionProtectionRecheck, request\.SamuraiCastTapGeneration\); var replay = nearAssist\.RunExactBufferedReplay\( replayIntent, \(\) => actionManager->UseAction\( request\.ActionType, request\.RequestedActionId, request\.TargetId, request\.ExtraParam, request\.Mode, request\.ComboRouteId\)\); if \(!replay\.NativeBoundaryInvoked\) return IntegratedActionBufferDispatchResult\.NotInvoked;.*?ClientActionAttemptBoundaryRules\.Classify\( replay\.ClientReturnedAccepted, request\.ResolvedActionId, boundaryBefore, boundaryAfter\); return new IntegratedActionBufferDispatchResult\( NativeBoundaryInvoked: true, outcome\);' -or
+    $normalizedIntegratedInputRuntime -notmatch 'private IntegratedActionBufferDispatchResult DispatchBufferedAction\( IntegratedActionBufferDispatchRequest request\).*?if \(disposed \|\| Volatile\.Read\(ref started\) == 0 \|\| IsInternalPriorityClaimedFailClosed\(\)\).*?var replayIntent = CreateBufferedReplayIntent\(request\); var replay = nearAssist\.RunExactBufferedReplay\( replayIntent, \(\) => actionManager->UseAction\( request\.ActionType, request\.RequestedActionId, request\.TargetId, request\.ExtraParam, request\.Mode, request\.ComboRouteId\)\); if \(!replay\.NativeBoundaryInvoked\) return IntegratedActionBufferDispatchResult\.NotInvoked;.*?ClientActionAttemptBoundaryRules\.Classify\( replay\.ClientReturnedAccepted, request\.ResolvedActionId, boundaryBefore, boundaryAfter\); return new IntegratedActionBufferDispatchResult\( NativeBoundaryInvoked: true, outcome\);' -or
     $normalizedNearAssistForIntegratedInput -notmatch 'internal IntegratedBufferedReplayResult RunExactBufferedReplay\( IntegratedBufferedReplayIntent intent, Func<bool> action\).*?if \(!intent\.IsValid \|\| integratedBufferedReplayScope is not null\) return default;.*?var scope = new IntegratedBufferedReplayScope\(this, intent\); integratedBufferedReplayScope = scope; integratedBufferReplayDepth\+\+; actionBarActivitySuppressionDepth\+\+; internalRedirectBypassDepth\+\+; try \{ var clientReturnedAccepted = action\(\); return new IntegratedBufferedReplayResult\( scope\.NativeBoundaryInvoked, clientReturnedAccepted\); \} finally \{ internalRedirectBypassDepth--; actionBarActivitySuppressionDepth--; integratedBufferReplayDepth--; integratedBufferedReplayScope = previousScope; \}' -or
     $normalizedNearAssistForIntegratedInput -notmatch 'TryCaptureSmartKardiaEukrasiaPreflight\( thisPtr, actionType, actionId, mode, targetId, forwardedTargetId, bypassRedirect, integratedBufferReplayDepth > 0, helperTokenConsumed, targetSuppressedByRedirect, out var smartKardiaPreflight\)') {
     throw 'PersonalStatus must publish critical priority before integrated input runs; both Turbo and final buffered dispatch must yield, and integrated hooks must dispose before their NearAssist/coordination dependencies.'
@@ -864,7 +871,7 @@ Assert-Literals $integratedActionBufferRuntime @(
     'bool RequiresSmartActionProtectionRecheck,',
     'bool RequiresVisibleHardTargetBinding,',
     'IntegratedActionBufferActorIdentity VisibleHardTargetAtCapture,',
-    'long SamuraiCastTapGeneration = 0);',
+    'SmartActionTapOwnership Ownership = default);',
     'mode != ActionManager.UseActionMode.None',
     'var snapshot = CaptureSnapshot(',
     'var request = new IntegratedActionBufferDispatchRequest(',
@@ -879,10 +886,10 @@ Assert-Literals $integratedActionBufferRuntime @(
 ) 'Immutable action, target/resolver, territory, instance, and one-shot dispatch freeze'
 if ($normalizedNearAssistForIntegratedInput -notmatch 'var integratedAttempt = IntegratedActionBufferAttempt\.None; if \(mode == ActionManager\.UseActionMode\.None && integratedRuntime\?\.TryGetActiveBufferRoot\( actionType, actionId, out var integratedHotbarRoot\) == true\).*?integratedAttempt = integratedRuntime\.ActionBuffer\.BeginExactStandardHotbarRoot\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, integratedHotbarRoot, handlingSmartTarget \|\| smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe\);.*?clientAccepted = useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, outOptAreaTargeted\);' -or
     $normalizedNearAssistForIntegratedInput -notmatch 'else if \(!bypassRedirect && integratedRuntime is not null && handlingSmartTarget && smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe && handlingSmartTargetToken is \{ TapGeneration: > 0 \} rankedSmartTargetToken && rankedSmartTargetToken\.SelectionMode == SmartTargetRedirectMode\.CombatPriority && IsCertifiedSmartActionTapInvocationMode\(mode\)\).*?BeginExactSmartActionRankedTarget\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, rankedSmartTargetToken\.TapGeneration\);' -or
-    $normalizedNearAssistForIntegratedInput -notmatch 'else if \(!bypassRedirect && integratedRuntime is not null && !handlingSmartTarget && smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe && IsCertifiedSmartActionTapInvocationMode\(mode\) && IsExactCurrentHardTarget\(forwardedTargetId\) && TryGetSmartActionFallbackTapGeneration\(out var macroTapGeneration\)\).*?BeginExactSmartActionMacroFallback\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, macroTapGeneration, samuraiCastTapGeneration: capturedSamuraiTapGeneration\);.*?clientAccepted = useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, outOptAreaTargeted\);' -or
+    $normalizedNearAssistForIntegratedInput -notmatch 'else if \(!bypassRedirect && integratedRuntime is not null && !handlingSmartTarget && smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe && IsCertifiedSmartActionTapInvocationMode\(mode\) && IsExactCurrentHardTarget\(forwardedTargetId\) && TryGetSmartActionFallbackTapGeneration\(out var macroTapGeneration\)\).*?BeginExactSmartActionMacroFallback\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, macroTapGeneration, ownership: SmartActionTapOwnership\.Capture\( macroTapGeneration, samurai: capturedSamuraiTapGeneration > 0\)\);.*?clientAccepted = useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, outOptAreaTargeted\);' -or
     $normalizedIntegratedActionBufferRuntime -notmatch 'var request = new IntegratedActionBufferDispatchRequest\( actionType, requestedActionId, resolvedActionId, targetId, extraParam, mode, comboRouteId, snapshot\.TerritoryId, snapshot\.InstanceFingerprint, snapshot\.Local\.GameObjectId, snapshot\.Local\.EntityId, snapshot\.Target, hotbarRoot, requiresSmartActionProtectionRecheck, RequiresVisibleHardTargetBinding: true, VisibleHardTargetAtCapture: ToActorIdentity\(targetManager\.Target\)\);' -or
     $normalizedIntegratedActionBufferRuntime -notmatch 'internal IntegratedActionBufferAttempt BeginExactSmartActionMacroFallback\(.*?requiresVisibleHardTargetStability: true.*?internal IntegratedActionBufferAttempt BeginExactSmartActionRankedTarget\(.*?requiresVisibleHardTargetStability: false.*?private IntegratedActionBufferAttempt BeginExactSmartActionMacroTap\(' -or
-    $normalizedIntegratedActionBufferRuntime -notmatch 'var request = new IntegratedActionBufferDispatchRequest\( actionType, requestedActionId, resolvedActionId, selectedTargetId, extraParam, ActionManager\.UseActionMode\.None, comboRouteId, snapshot\.TerritoryId, snapshot\.InstanceFingerprint, snapshot\.Local\.GameObjectId, snapshot\.Local\.EntityId, snapshot\.Target, macroRoot, RequiresSmartActionProtectionRecheck: true, RequiresVisibleHardTargetBinding: requiresVisibleHardTargetStability, VisibleHardTargetAtCapture: visibleHardTarget, SamuraiCastTapGeneration: samuraiCastTapGeneration == tapGeneration \? samuraiCastTapGeneration : 0\);' -or
+    $normalizedIntegratedActionBufferRuntime -notmatch 'var request = new IntegratedActionBufferDispatchRequest\( actionType, requestedActionId, resolvedActionId, selectedTargetId, extraParam, ActionManager\.UseActionMode\.None, comboRouteId, snapshot\.TerritoryId, snapshot\.InstanceFingerprint, snapshot\.Local\.GameObjectId, snapshot\.Local\.EntityId, snapshot\.Target, macroRoot, RequiresSmartActionProtectionRecheck: true, RequiresVisibleHardTargetBinding: requiresVisibleHardTargetStability, VisibleHardTargetAtCapture: visibleHardTarget, Ownership: ownership\.MatchesGeneration\(tapGeneration\) \? ownership : SmartActionTapOwnership\.Capture\(tapGeneration, samurai: false\)\);' -or
     $normalizedIntegratedActionBufferRuntime -notmatch 'if \(candidate\.Request\.RequiresVisibleHardTargetBinding && \(visibleHardTarget != candidate\.Request\.VisibleHardTargetAtCapture \|\| visibleHardTarget != candidate\.Snapshot\.Target\.ExplicitTarget\)\)' -or
     $normalizedIntegratedActionBufferRuntime -notmatch 'var visibleTargetStable = !runtime\.Request\.RequiresVisibleHardTargetBinding \|\| runtime\.VisibleHardTarget != IntegratedActionBufferActorIdentity\.Empty && runtime\.VisibleHardTarget == runtime\.Snapshot\.Target\.ExplicitTarget && ToActorIdentity\(targetManager\.Target\) == runtime\.VisibleHardTarget;' -or
     $normalizedIntegratedActionBufferRuntime -notmatch 'var current = CaptureSnapshot\( runtime\.Request\.TargetId,.*?if \(!HasStableIdentity\(runtime\.Snapshot, current\) \|\| !ExplicitTargetStillExists\(runtime\.Snapshot\.Target\)\).*?SmartActionBufferCancelReason\.TargetChange') {
@@ -943,11 +950,11 @@ Assert-Literals $smartActionBufferCompatibilitySelfTests @(
     'reActionOwnsExactAction: false)',
     'reActionOwnsExactAction: true)'
 ) 'Generic-buffer compatibility self-tests'
-if ($staticIntegratedTestCount -ne 612 -or
+if ($staticIntegratedTestCount -ne 618 -or
     $logicalRepeatTestCount -ne 31 -or
     $physicalLatchTestCount -ne 6 -or
     $repeatPolicyTestCount -ne 4 -or
-    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 653 -or
+    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 659 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches($smartActionBufferSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferCompatibilitySelfTests\.\w+').Count -ne 6 -or
@@ -957,7 +964,7 @@ if ($staticIntegratedTestCount -ne 612 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatPolicySelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartSprintSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches((Read-RequiredSource $smartSprintSelfTestsPath 'Smart Sprint self-tests'), '\bpublic static void\s+\w+\s*\(').Count -ne 7) {
-    throw 'Schema 53 must retain seven smart-buffer tests, six compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, seven Smart Sprint tests, four Player Stats tests, and the exact 653-test combined Core registry.'
+    throw 'Schema 53 must retain seven smart-buffer tests, six compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, seven Smart Sprint tests, four Player Stats tests, and the exact 659-test combined Core registry.'
 }
 
 # Pin the two schema-42 visual overlays and the fail-closed local map-result
@@ -1000,11 +1007,12 @@ Assert-Literals $crystallineConflictPredictionService @(
     'CrystallineConflictPredictionSnapshot.Preparing());'
 ) 'Active incomplete CC preparation snapshot with no combat or live-total claims'
 if ($normalizedCrystallineConflictPredictionService -notmatch 'internal static CrystallineConflictPredictionSnapshot Preparing\( string status = "Waiting for exact 5 \+ 5 roster"\) => new\(true, false, false, false, false, 0\.5d, 0\.5d, 0, 0, \[\], \[\], status\);' -or
-    $normalizedCrystallineConflictPredictionService -notmatch 'if \(!TryFreezeRoster\(out var frozenRoster\)\) \{ Volatile\.Write\( ref snapshot, CrystallineConflictPredictionSnapshot\.Preparing\(\)\); return; \}.*?roster = frozenRoster;' -or
+    $normalizedCrystallineConflictPredictionService -notmatch 'if \(!TryPrepareRoster\(\)\) return;' -or
+    $normalizedCrystallineConflictPredictionService -notmatch 'internal bool TryPrepareRoster\(\) \{ if \(disposed\) return false; if \(roster is not null\) return true; if \(!readRoster\(out var frozenRoster\)\) \{ Volatile\.Write\(ref snapshot, CrystallineConflictPredictionSnapshot\.Preparing\(\)\); return false; \}.*?if \(frozenRoster\.Length != 10 \|\| frozenRoster\.Count\(player => player\.IsAllied\) != 5 \|\| frozenRoster\.Count\(player => player\.IsLocal\) != 1\) \{ Volatile\.Write\(ref snapshot, CrystallineConflictPredictionSnapshot\.Preparing\(\)\); return false; \} roster = frozenRoster; matchGeneration = matchGeneration == long\.MaxValue \? 1 : matchGeneration \+ 1; finalResultObserved = false; return true; \}' -or
     $normalizedCrystallineConflictPredictionService -notmatch 'if \(roster is null\) \{ if \(!TryCreateRosterFromResult\(result, out var resultRoster\)\) return; roster = resultRoster; \}' -or
     $crystallineConflictPredictionService -match 'Try(?:FreezeRoster|CreateRosterFromResult)\([^\r\n]*out roster\)' -or
-    [regex]::Matches($crystallineConflictPredictionService, 'CrystallineConflictPredictionSnapshot\.Preparing\(\)').Count -ne 1) {
-    throw 'CC prediction must remain visibly active but incomplete while the exact preparation roster resolves, without claiming combat, final state, incomplete live totals, records, or fabricated players; the failed roster freeze must publish that preparation snapshot exactly once.'
+    [regex]::Matches($crystallineConflictPredictionService, 'CrystallineConflictPredictionSnapshot\.Preparing\(\)').Count -ne 2) {
+    throw 'CC prediction must remain visibly active but incomplete while the exact preparation roster resolves, without claiming combat or fabricated players; both unreadable and incomplete rosters publish preparation, and a complete roster freezes once through the scenario-tested transition.'
 }
 Assert-Literals $crystallineConflictPredictionWindow @(
     'ImGui.BeginTable("##SeitonSensePredictionPlayers", 5, flags',
@@ -1046,11 +1054,11 @@ Assert-Literals $pluginPersistenceSelfTests @(
     'Equal(0, snapshot.Allies.Length, "unresolved allies are not fabricated");',
     'Equal(0, snapshot.Enemies.Length, "unresolved enemies are not fabricated");'
 ) 'CC prediction, searchable player history, schema migration, salt reload, and PvpStats backfill regression assertions'
-if ([regex]::Matches($pluginPersistenceSelfTests, '(?m)^\s*\("[^"]+",\s*[\w.]+\),\s*$').Count -ne 17 -or
+if ([regex]::Matches($pluginPersistenceSelfTests, '(?m)^\s*\("[^"]+",\s*[\w.]+\),\s*$').Count -ne 25 -or
     [regex]::Matches($pluginPersistenceSelfTests, '\("CC prediction preparation snapshot stays visible without live totals", PredictionPreparationSnapshotStaysVisible\),').Count -ne 1 -or
     [regex]::Matches($pluginPersistenceSelfTests, 'static void PredictionPreparationSnapshotStaysVisible\(\)').Count -ne 1 -or
     $normalizedPluginPersistenceSelfTests -notmatch 'static void PredictionPreparationSnapshotStaysVisible\(\) \{ var snapshot = CrystallineConflictPredictionSnapshot\.Preparing\(\); True\(snapshot\.IsActive, "preparation snapshot remains drawable"\); False\(snapshot\.IsComplete, "roster is not claimed complete before exact 5 \+ 5 capture"\); False\(snapshot\.HasCombatStarted, "preparation does not claim combat started"\); False\(snapshot\.LiveTotalsIncomplete, "live combat totals remain closed during preparation"\); Equal\(0, snapshot\.Allies\.Length, "unresolved allies are not fabricated"\); Equal\(0, snapshot\.Enemies\.Length, "unresolved enemies are not fabricated"\); \}') {
-    throw 'The exact seventeen-test plugin registry must retain CC preparation plus enemy-only local-perspective history, searchable schema-5/safe schema-4 identity, saved-salt restart, one-shot import, and idempotent no-double-count PvpStats backfill regressions.'
+    throw 'The exact twenty-five-test plugin registry must retain CC preparation plus enemy-only local-perspective history, searchable schema-5/safe schema-4 identity, saved-salt restart, one-shot import, and idempotent no-double-count PvpStats backfill regressions.'
 }
 
 Assert-Literals $crystallineConflictPlayerStatsRules @(
@@ -1720,7 +1728,7 @@ Assert-Literals $integratedCoreTestProgram @(
 if ($normalizedSamuraiOgiCastProtectionRuntime -notmatch 'internal void Reset\(\) \{ RevokeOwnedSamuraiCastProtection\(\);' -or
     $normalizedSamuraiOgiCastProtectionRuntime -notmatch 'internal bool IsSamuraiCastMovementSuppressed\(\) \{ if \(!IsSamuraiCastProtectionRuntimeEnabled\(\)\) \{ RevokeOwnedSamuraiCastProtection\(\); return false; \}' -or
     $normalizedSamuraiOgiCastProtectionRuntime -notmatch 'internal bool IsOwnedSamuraiCastProtected\(\) \{ if \(!IsSamuraiCastProtectionRuntimeEnabled\(\)\) \{ RevokeOwnedSamuraiCastProtection\(\); return false; \}' -or
-    $normalizedSamuraiOgiCastProtectionRuntime -notmatch 'integratedBufferReplayDepth == 1 && integratedBufferedReplayScope is \{ Consumed: true \} samuraiReplay && ReferenceEquals\(samuraiReplay.Owner, this\).*?GetExactReplayTapGeneration\(.*?samuraiReplay.Intent.SamuraiCastTapGeneration, samuraiSmartActionTapGeneration,') {
+    $normalizedSamuraiOgiCastProtectionRuntime -notmatch 'integratedBufferReplayDepth == 1 && integratedBufferedReplayScope is \{ Consumed: true \} samuraiReplay && ReferenceEquals\(samuraiReplay.Owner, this\).*?GetExactReplayTapGeneration\(.*?samuraiReplay\.Intent\.Ownership\.RequiresSamuraiCastProtection \? samuraiReplay\.Intent\.Ownership\.Generation : 0, samuraiSmartActionTapGeneration,') {
     throw 'SAM protection must release when disabled/reset and only an exact consumed owner/generation-backed replay may regain it.'
 }
 Assert-Literals $pluginPersistenceSelfTests @(
@@ -5498,8 +5506,8 @@ if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
     [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 11 -or
     [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 11 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 612) {
-    throw 'All four shared protection-end tests, all eleven SAM reactive tests, four Player Stats tests, and the exact 612-test static Core registry before the appended repeat-policy suites must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 618) {
+    throw 'All four shared protection-end tests, all eleven SAM reactive tests, four Player Stats tests, and the exact 618-test static Core registry before the appended repeat-policy suites must remain pinned.'
 }
 Assert-Literals $samuraiReactiveRuntimeRules @(
     'public static bool IsExactCurrentOwnSourceKuzushi(',
@@ -11683,17 +11691,120 @@ foreach ($testGroup in $replacementLbTests) {
 $normalizedPluginSource = $pluginSource -replace '\s+', ' '
 
 
+# The service seams below are exercised offline, not substitutes for native
+# in-game validation. Pin their ownership and transition wiring as well as the
+# lower-level rules so a passing rules-only test cannot conceal dropped state.
+$typedTapOwnership = Read-RequiredSource (Join-Path $coreRoot 'SmartActionTapOwnership.cs') 'Typed Smart Action tap ownership'
+$samuraiMovementBoundary = Read-RequiredSource (Join-Path $pluginServicesRoot 'SamuraiCastMovementInputBoundary.cs') 'Shared SAM movement read boundary'
+$samuraiMovementBoundaryTests = Read-RequiredSource (Join-Path $resolvedRoot 'tests/SeitonSense.Plugin.SelfTest/SamuraiMovementBoundarySelfTests.cs') 'Shared SAM movement boundary tests'
+$serviceScenarioTests = Read-RequiredSource (Join-Path $resolvedRoot 'tests/SeitonSense.Plugin.SelfTest/ServiceScenarioSelfTests.cs') 'Real service transition scenario tests'
+$bardRetryGate = Read-RequiredSource (Join-Path $coreRoot 'BardRepellingShotRetryGate.cs') 'BRD exact-intent readiness edge gate'
+$bardRepellingShotProbe = Read-RequiredSource $bardRepellingShotProbePath 'BRD readiness edge probe wiring'
+$bardRetryTests = Read-RequiredSource (Join-Path $coreSelfTestRoot 'BardRepellingShotRetrySelfTests.cs') 'BRD multi-frame readiness tests'
+$helperPresentation = Read-RequiredSource (Join-Path $coreRoot 'HelperStatusPresentationRules.cs') 'Read-only helper status presentation'
+$helperSettings = Read-RequiredSource (Join-Path $pluginUiRoot 'Settings/SettingsWindow.HelperStatus.cs') 'Current job helper status settings'
+Assert-Literals $typedTapOwnership @(
+    'public readonly record struct SmartActionTapOwnership(',
+    'Generation > 0 && Origin is SmartActionTapOrigin.SmartAction or SmartActionTapOrigin.SeitonSam;',
+    'public bool RequiresSmartActionProtection => IsValid;',
+    'public bool RequiresSamuraiCastProtection => IsValid && Origin == SmartActionTapOrigin.SeitonSam;',
+    'public bool MatchesGeneration(long generation) => IsValid && Generation == generation;'
+) 'Positive exact-generation typed authority separates ordinary Smart Action from SeitonSam'
+if (($integratedInputRuntime -replace '\s+', ' ') -notmatch 'internal static IntegratedBufferedReplayIntent CreateBufferedReplayIntent\( IntegratedActionBufferDispatchRequest request\) => new\( request\.ActionType, request\.RequestedActionId, request\.ResolvedActionId, request\.TargetId, request\.RequiresSmartActionProtectionRecheck, request\.Ownership\);') {
+    throw 'Buffered replay must copy the immutable exact request action, target, recheck, and typed owner through the same testable factory.'
+}
+$samuraiProtectionBody = [regex]::Match($nearAssistRedirectorForAstrologian,
+    '(?s)internal bool IsOwnedSamuraiCastProtected\(\)(?<Body>.*?)private bool ShouldBlockActionDuringOwnedSamuraiCast\(')
+if (-not $samuraiProtectionBody.Success -or
+    $samuraiProtectionBody.Groups['Body'].Value -match 'Conditions\s*\.\s*Instance\s*\(|->\s*BeingMoved' -or
+    ($samuraiProtectionBody.Groups['Body'].Value -replace '\s+', ' ') -notmatch 'if \(!identityValid \|\| HasCastBreakingCrowdControl\(local!\)\).*?ClearOwnedSamuraiCastProtection\(lease\); return false;.*?if \(lease\.ObservedExactCast\) \{ ClearOwnedSamuraiCastProtection\(lease\); return false; \}') {
+    throw 'An exact owned SAM cast must release on CC or disappearance of its observed cast, never on ordinary BeingMoved input that the protection itself is meant to suppress.'
+}
+Assert-Literals $samuraiMovementBoundary @(
+    '[ThreadStatic]',
+    'private static int ownershipReadDepth;',
+    'var nativeResult = readNative(inputAddress, inputCode, path);',
+    'if (!nativeResult || ownershipReadDepth != 0 || !IsMovement(path, inputCode))',
+    'if (!shouldSuppress()) return nativeResult;',
+    'SamuraiOgiCastProtectionRules.IsMovementInputId(inputCode)',
+    'SamuraiOgiCastProtectionRules.IsMovementControlCode(inputCode)',
+    'SamuraiMovementInputPath.Autorun => true,',
+    '_ => false,'
+) 'All five SAM movement paths share native-first exact ownership and movement-only filtering'
+if (($samuraiMovementBoundary -replace '\s+', ' ') -notmatch 'try \{ ownershipReadDepth\+\+; if \(!shouldSuppress\(\)\) return nativeResult; \} catch \{ Interlocked\.Increment\(ref failures\); return nativeResult; \} finally \{ ownershipReadDepth--; \}' -or
+    $samuraiMovementBoundary -match '\b(?:UseAction|SetTarget|CancelCast|HookFromAddress|Task\.Run|Thread\.Sleep)\b' -or
+    [regex]::Matches($integratedHotbarInputSource, 'HookFromAddress<InputManager\.Delegates\.GetInputStatus>').Count -ne 1 -or
+    [regex]::Matches($integratedHotbarInputSource, 'HookFromAddress<InputManager\.Delegates\.IsAutoRunning>').Count -ne 1) {
+    throw 'SAM input ownership reads must be reentrancy-safe and fail open without action/target mutation; exactly two reviewed optional gameplay hooks complement the existing digital hooks.'
+}
+Assert-Literals $integratedHotbarInputSource @(
+    'controlInputHook?.Enable();', 'autorunHook?.Enable();',
+    'if (controlInputHook is not null) TryDisable(controlInputHook);',
+    'if (autorunHook is not null) TryDisable(autorunHook);',
+    'started && !disposed && controlInputHook?.IsEnabled == true && autorunHook?.IsEnabled == true;'
+) 'Optional gameplay hooks fail independently and report actual operational state'
+foreach ($method in @('GameplayControlAndDigitalPathsShareExactOwnership', 'OwnershipFailureAndRecursiveQueriesPreserveNativeInput', 'GameplayControlCodesMatchDependencyMetadata', 'BufferedReplayRetainsTypedOwner')) {
+    Assert-Literals $samuraiMovementBoundaryTests @("internal static void $method()") "SAM boundary scenario $method"
+    Assert-Literals $pluginPersistenceSelfTests @("SamuraiMovementBoundarySelfTests.$method") "SAM boundary scenario registration $method"
+}
+Assert-Literals $nearAssistRedirectorForAstrologian @('!attempt.ClientAccepted ||') 'Only accepted exact Guard attempts suppress helpers'
+Assert-Literals $pluginPersistenceSelfTests @('RecoveryGuardSelfTests.OnlyAcceptedGuardAttemptsSuppressHelpers') 'Accepted-only shared Guard reader regression registration'
+Assert-Literals $bardRetryGate @(
+    'var becameReady = currentIntentEpoch == intentEpoch &&',
+    'readinessKnown && currentReadinessKnown &&',
+    '!nativeReady && currentNativeReady &&',
+    'observedFrame >= 0 && frameId > observedFrame;',
+    'frameId < 0 || frameId == lastNativeAttemptFrame)',
+    'HeldActionRetryRules.CanAttemptFrozenIntentOnBoundaryEdgeOrThrottle(',
+    ': HeldActionRetryRules.CanAttemptFrozenIntent(retry, nowMilliseconds);'
+) 'BRD wakeup is only a known busy-to-ready edge for the same later-frame intent'
+if (($bardRepellingShotProbe -replace '\s+', ' ') -notmatch 'var retryReady = retryGate\.Observe\( currentIntent\?\.IntentEpochToken \?\? 0, currentIntent\?\.Retry \?\? HeldActionRetryState\.Initial,.*?currentNativeReady: nativeBoundaryReady, edgeDrivenRetriesEnabled, frameworkFrameId, nowMilliseconds\);.*?else if \(decision\.ShouldDispatch && currentIntent is \{ \} dispatchIntent && runtimeTarget\.IsValid && retryReady\) \{ inputClaimed = true; retryGate\.ReserveAttemptFrame\(frameworkFrameId\); nativeOutcome = TryUseOnce\(' -or
+    ($bardRepellingShotProbe -replace '\s+', ' ') -notmatch 'else \{ frozenIntent = null; readyEpochSpent = true; retryGate\.ClearEpisode\(\); \}' -or
+    ($bardRetryGate -replace '\s+', ' ') -notmatch 'public void ClearEpisode\(\) \{ intentEpoch = 0; observedFrame = -1; readinessKnown = false; nativeReady = false; \} public void Reset\(\) \{ ClearEpisode\(\); lastNativeAttemptFrame = -1; \}') {
+    throw 'BRD readiness edges must retain decision/target/native checks, reserve before final dispatch, clear terminal intent state, and preserve one native attempt per frame across cleared episodes.'
+}
+foreach ($method in @('BusyToReadyWakesOnlyTheSameFrozenIntent', 'StableReadyUnknownAndClearedEpisodesKeepTheThrottle', 'DisabledEdgesAndTerminalAttemptsNeverGainExtraRetries')) {
+    Assert-Literals $bardRetryTests @("public static void $method()") "BRD multi-frame scenario $method"
+    Assert-Literals $integratedCoreTestProgram @("BardRepellingShotRetrySelfTests.$method") "BRD scenario registration $method"
+}
+Assert-Literals $astrologianHarmonicOrbisProbe @(
+    'if (actionId == BaseActionId && !sequenceIntent.IsValid)',
+    'sequenceIntent.BaseChargeEpochToken ==',
+    'sequenceIntent = sequenceIntent.WithAcceptedBaseFrame(frameworkFrame);',
+    'var adjustedDoubleCastActionId = readDoubleCastCarrier();'
+) 'AST preserves pre-base Double Cast evidence across retry and stamps the accepted service frame'
+foreach ($method in @('AstRejectedThenAcceptedRetryKeepsDoubleCast', 'AstUnknownAndUnavailableFollowUpsEndCleanly', 'PredictionIncompleteRosterRetriesAndFreezesOnce', 'PredictionMalformedSuccessDoesNotPoisonNextFrame')) {
+    Assert-Literals $serviceScenarioTests @("public static void $method()") "Real service scenario $method"
+    Assert-Literals $pluginPersistenceSelfTests @("ServiceScenarioSelfTests.$method") "Service scenario registration $method"
+}
+Assert-Literals $serviceScenarioTests @('probe.CompleteAttempt(', 'service.TryPrepareRoster()', 'ClientActionAttemptOutcome.ClientRejected', 'ClientActionAttemptOutcome.ClientAccepted', 'ClientActionAttemptOutcome.AcceptanceUnknown') 'Service scenario tests invoke actual retry and roster transitions'
+Assert-Literals $helperSettings @(
+    'ImGui.Checkbox("Show all jobs##SeitonJobFilter", ref showAllJobTools);',
+    'This only filters the settings page. Your saved options stay unchanged.',
+    'HelperStatusPresentationRules.ShowJob(currentJob, jobId, showAllJobTools)',
+    'var guard = defense.GuardActive || defense.GuardPropagationLatchActive;',
+    'Request counters do not prove a heal, hit, or save landed.'
+) 'Current-job display filter is non-mutating and does not misreport Ninja stealth as global Guard'
+if ($helperSettings -match 'configuration\.\w+\s*=(?!=|>)|\b(?:UseAction|HookFromAddress|SetTarget)\s*\(' -or
+    $helperPresentation -match '\b(?:UseAction|HookFromAddress|SetTarget|DateTime|Environment)\b' -or
+    ($helperPresentation -replace '\s+', ' ') -notmatch 'if \(!enabled\).*?if \(!supportedContext\).*?if \(ownGuard\).*?if \(accepted\).*?if \(attempted\)') {
+    throw 'Helper presentation must remain deterministic and read-only; current disabled/context/Guard gates override stale accepted/attempted diagnostic samples.'
+}
+foreach ($method in @('JobFilterPreservesDiscoverability', 'CurrentGatesOverrideStaleActionSamples', 'ReasonsStaySimpleWithoutInventingUnknownBlockers')) {
+    Assert-Literals $integratedCoreTestProgram @("HelperStatusPresentationSelfTests.$method") "Read-only helper presentation regression registration $method"
+}
+
 $settingsPageContracts = [ordered]@{
     Start = @('Start', 'DrawStartPage')
+    Diagnostics = @('Helper Status', 'DrawDiagnosticsPage')
+    ActionHelpers = @('Action Helpers', 'DrawActionHelpersPage')
+    JobTools = @('Job Tools', 'DrawJobToolsPage')
+    MacroHelpers = @('Macro Helpers', 'DrawMacroHelpersPage')
+    PingHelpers = @('Ping Helpers', 'DrawPingHelpersPage')
+    Targets = @('Targets', 'DrawTargetsPage')
     Alerts = @('Alerts', 'DrawAlertsPage')
     HudAndNameplates = @('HUD & Nameplates', 'DrawHudAndNameplatesPage')
     PlayerStats = @('Player Stats', 'DrawPlayerStatsPage')
-    ActionHelpers = @('Action Helpers', 'DrawActionHelpersPage')
-    PingHelpers = @('Ping Helpers', 'DrawPingHelpersPage')
-    JobTools = @('Job Tools', 'DrawJobToolsPage')
-    MacroHelpers = @('Macro Helpers', 'DrawMacroHelpersPage')
-    Targets = @('Targets', 'DrawTargetsPage')
-    Diagnostics = @('Diagnostics', 'DrawDiagnosticsPage')
 }
 Assert-Literals $settingsWindow @(
     'internal sealed partial class SettingsWindow',
@@ -11747,7 +11858,7 @@ foreach ($entry in $settingsPageContracts.GetEnumerator()) {
     $sidebarOrderPatterns += $choicePattern
 }
 if ($normalizedSettingsWindow -notmatch ($sidebarOrderPatterns -join '.*?')) {
-    throw 'Settings sidebar order must remain Start, Alerts, HUD & Nameplates, Player Stats, Action Helpers, Ping Helpers, Job Tools, Macro Helpers, Targets, Diagnostics.'
+    throw 'Settings sidebar order must remain Start, Helper Status, Action Helpers, Job Tools, Macro Helpers, Ping Helpers, Targets, Alerts, HUD & Nameplates, Player Stats.'
 }
 if ($settingsWindow -match 'ImGui\.BeginTabItem|DrawJobsTab') {
     throw 'The sidebar Settings structure must not silently fall back to the obsolete monolithic tab/DrawJobsTab layout.'
@@ -12721,18 +12832,18 @@ $whatsNewWindow = Read-RequiredSource $whatsNewWindowPath 'What''s New window'
 $releaseNotesContentRules = Read-RequiredSource $releaseNotesContentRulesPath 'Release-note content rules'
 $releaseNotesContentSelfTests = Read-RequiredSource $releaseNotesContentSelfTestsPath 'Release-note content self-tests'
 Assert-Literals $projectFile @(
-    '<Version>0.44.0.9</Version>',
-    '<AssemblyVersion>0.44.0.9</AssemblyVersion>',
-    '<FileVersion>0.44.0.9</FileVersion>'
-) 'v0.44.0.9 project version'
+    '<Version>0.44.1.0</Version>',
+    '<AssemblyVersion>0.44.1.0</AssemblyVersion>',
+    '<FileVersion>0.44.1.0</FileVersion>'
+) 'v0.44.1.0 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.44.0.9";',
-    'Failed Guard presses no longer briefly block recovery and job helpers.',
-    '/seitonsam keeps cast protection when Chase retries the attack after you get in range.',
-    'Turning Smart Action off now releases SAM movement protection immediately.',
-    'AST keeps its Double Cast follow-up when Orbis succeeds on a later retry.',
-    'CC prediction keeps trying when players are still loading during preparation.'
-) 'v0.44.0.9 version-acknowledged player-facing What''s New content'
+    'private const string CurrentReleaseVersion = "0.44.1.0";',
+    'Job Tools now focuses on your current job. All other jobs remain one click away.',
+    'Helper Status explains why helpers wait; detailed numbers are tucked under Advanced.',
+    '/seitonsam now also covers the game''s movement-state and autorun input paths.',
+    'Bard''s Repelling Shot can retry sooner when the game becomes ready again.',
+    'More full-sequence tests and version-specific downloads help prevent repeat regressions.'
+) 'v0.44.1.0 version-acknowledged player-facing What''s New content'
 Assert-Literals $releaseNotesContentRules @(
     'public const int MaximumBulletCount = 5;',
     'if (bullets is null) return [];',
@@ -12791,21 +12902,76 @@ if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.44.0.9"',
-    'Failed Guard presses no longer briefly block helpers.',
-    '/seitonsam keeps cast protection through Chase retries and releases it when disabled.',
-    'AST keeps Double Cast after a successful Orbis retry.',
-    'CC prediction retries while players load in preparation.',
+    '"AssemblyVersion": "0.44.1.0"',
+    'Cleaner Job Tools with current-job focus and a simple Helper Status page.',
+    'Added gameplay movement-state and autorun coverage for /seitonsam cast protection.',
+    'Bard Repelling Shot can retry on a fresh ready signal.',
+    'Added real service-sequence tests and version-specific update downloads.',
     '"IsHide": false',
     '"IsTestingExclusive": false',
-    '"DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"',
-    '"DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"',
-    '"DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"'
-) 'v0.44.0.9 custom-repository metadata'
+    '"DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.1.0/dist/SeitonSense-0.44.1.0.zip"',
+    '"DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.1.0/dist/SeitonSense-0.44.1.0.zip"',
+    '"DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.1.0/dist/SeitonSense-0.44.1.0.zip"'
+) 'v0.44.1.0 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
 }
+$releaseArtifactScript = Read-RequiredSource (Join-Path $resolvedRoot 'scripts\ReleaseArtifact.ps1') 'Immutable release artifact helpers'
+$publishReleaseScript = Read-RequiredSource (Join-Path $resolvedRoot 'scripts\Publish-Release.ps1') 'Ordered release publisher'
+$verifyReleaseScript = Read-RequiredSource (Join-Path $resolvedRoot 'scripts\Verify-Release.ps1') 'Release verifier'
+$releaseScriptTests = Read-RequiredSource (Join-Path $resolvedRoot 'tests\ReleaseScripts.SelfTest.ps1') 'Offline release script scenarios'
+$releaseWorkflow = Read-RequiredSource (Join-Path $resolvedRoot '.github\workflows\verify.yml') 'Release CI workflow'
+Assert-Literals $releaseArtifactScript @(
+    '\A[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\z',
+    'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v$Version/dist/SeitonSense-$Version.zip',
+    '$Entry.DownloadLinkInstall -cne $expected',
+    '$Entry.DownloadLinkUpdate -cne $expected',
+    '$Entry.DownloadLinkTesting -cne $expected',
+    '-CommittedArchive $releasePath -BuiltArchive $builtPath',
+    '[System.IO.File]::Copy($builtPath, $releasePath, $false)',
+    'Existing versioned checksum differs',
+    'Copy-Item -LiteralPath $releasePath -Destination'
+) 'Immutable version payloads, preserved ZIP containers, exact download links, and compatibility alias'
+Assert-Literals $buildReleaseScript @(
+    'Assert-SeitonReleaseDownloadLinks -Entry $repo[0]',
+    'tests\ReleaseScripts.SelfTest.ps1',
+    '$artifact = Save-SeitonVersionedArchive -BuiltArchive $sourceZip',
+    '$releaseZip = $artifact.ArchivePath',
+    '$hash = $artifact.Hash'
+) 'Version-specific release build staging'
+Assert-Literals $verifyReleaseScript @(
+    'Assert-SeitonReleaseDownloadLinks -Entry $entry',
+    'Published ZIP is stale: source fingerprint changed.',
+    'Framework assemblies must not be bundled:'
+) 'Source/package provenance and framework-assembly separation'
+Assert-Literals $publishReleaseScript @(
+    '[switch]$Publish',
+    'Commit all release files before publishing; the working tree must be clean.',
+    'origin must point to kittenhaswares-ui/SeitonSense.',
+    'tags are never overwritten.',
+    'if (-not $Publish)',
+    'Remote tag $tag already points elsewhere; bump the version.',
+    'Invoke-WebRequest -Uri $url -OutFile $download -TimeoutSec 60',
+    '(Get-FileHash -LiteralPath $download -Algorithm SHA256).Hash.ToLowerInvariant() -cne $archiveHash',
+    'The public version-tag archive does not match the local release; main was not updated.',
+    '''HEAD:refs/heads/main'''
+) 'Explicit publish permission, tag conflict refusal, and public artifact verification'
+$publishTagPosition = $publishReleaseScript.IndexOf('''push'', ''origin'', "refs/tags/${tag}:refs/tags/$tag"', [StringComparison]::Ordinal)
+$publicVerifyPosition = $publishReleaseScript.IndexOf('Invoke-WebRequest -Uri $url', [StringComparison]::Ordinal)
+$publishMainPosition = $publishReleaseScript.IndexOf('''push'', ''origin'', ''HEAD:refs/heads/main''', [StringComparison]::Ordinal)
+if ($publishTagPosition -lt 0 -or $publicVerifyPosition -le $publishTagPosition -or $publishMainPosition -le $publicVerifyPosition) {
+    throw 'Release publishing must make the immutable tag available, verify its downloaded hash, and only then advance the feed on main.'
+}
+Assert-Literals $releaseScriptTests @(
+    'Repacking the same bytes must not change the versioned archive hash.',
+    'Reusing an archive must preserve its checksum file.',
+    'Changed payload under the same version must be rejected.',
+    'The changed payload can be packaged after a version bump.',
+    'An inconsistent existing checksum must be rejected, never silently replaced.',
+    'Refusing cleanup outside the generated release-test directory.'
+) 'Offline immutable-package and bounded temporary cleanup scenarios'
+Assert-Literals $releaseWorkflow @('./tests/ReleaseScripts.SelfTest.ps1') 'Hosted release script regression tests'
 Assert-Literals $combatConstants @(
     'MiracleOfNatureRange = 10f',
     'SilentNocturneRange = 20f'
@@ -13208,7 +13374,7 @@ Assert-Literals $normalizedReadme @(
     'BRD **Mannstopper** keeps Smart Action ranking but avoids Chiten, Guard, Purify protection, Meikyo, Paean, and other real CC immunity.',
     'PLD and DRK damage-only invulnerability remains a valid Mannstopper target',
     'The CC prediction panel now stays visible during preparation while the exact 5v5 roster is still loading.',
-    'For the current source, the exact 653-test Core registry, seventeen plugin self-tests, and source checks pin configuration schema 53',
+    'For the current source, the exact 659-test Core registry, twenty-five plugin self-tests, and source checks pin configuration schema 53',
     'the independent default-off automatic basic-shot cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
@@ -15098,4 +15264,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 53, local CC statistics schema 5, the exact 653-test Core registry, and 17 plugin persistence tests. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, PLD Guardian, Recuperate, then Auto-Guard own priority in that order. Guardian requires exact Guard and Guardian metadata/readiness through the final boundary: <=20% is unconditional, <=40% needs fresh exact 2+ focus, and <=50% needs fresh exact 3+ focus. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-actor reservation from either a certified direct standard hotbar press, an exact lease/generation-backed /smartaction visible-<t> fallback, or a target-independent CC Smart Action S1-S5 winner; only the first two bind the visible hard target. Queue stays rejected. Release cannot cancel it; new action, context, Guard, CC, identity, protection, or exact-action/actor drift does, only a post-revalidated clean native range/LoS false may retry, accepted or ambiguous outcomes are terminal, and it never reranks or writes target/facing. The optional quiet-held-errors setting avoids global sound hooks and suppresses only a plugin-owned synthetic repeat whose exact hostile target returns native line-of-sight code 562; the first press, out-of-range, and every unknown error remain native. /seitonfar remains reachable-only. Enabled Wolves Den Smart Action resolves the exact stable visible hard target or reviewed dummy; a matching native duel identity may replace a stale Hostile flag, conflicting actor views still fail closed, and only the first non-exact carrier per tap may preserve the one-shot for the following exact <t>. Every current damaging non-ground-target shape shares the same closed admission and final-protection path. Exact /seitonsam Ogi/Tendo request-in-flight ownership suppresses movement through native acceptance and then hands off to the bounded accepted-cast lease; merely arming /seitonsam does not suppress movement, and ordinary /smartaction never gains this behavior. Exact repeat-Guard protection is identity- and territory-bound: a client-accepted request or exact live Guard blocks plugin-owned repeats during propagation, while a rejected or ambiguous provisional request remains immediately retryable; the first visible Guard frame then owns the full 1000-ms exact-repeat window. Current-name semantic protection metadata tolerates removed historical duplicate rows while still requiring Guard, Covered, Hallowed Ground, and Undead Redemption. Metadata-verified Shield Smite and Chain Stratagem may select Guard; other primary protections remain candidate-local blockers and only incidental/global Chiten vetoes AoE. Every exact Smart Action-owned harmful non-ground-target PvP cast uses reachable S1-S5 ranking only in CC; in enabled Wolves Den it preserves the exact visible hostile/dummy target through the same closed protection path. Exact Near Help-owned friendly PvP casts use one-shot current ally ranking after atomic exact-generation consumption, while Near Assist retains cast-time hidden-carrier suppression with visible-target pass-through. A Smart Action fallback transfers only a live exact owner into the same bounded reservation. Auto-Zantetsuken uses an identity/context-bound 500-ms no-target collection from the first exact own-source Kuzushi, ranks the fresh live cluster only after maturity, and rechecks collection, frozen identity, current Kuzushi, protection, Bind, readiness, range, and line of sight at the final boundary. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not reset it, Guard refreshes the idle baseline through its exact status/propagation episode, and a complete idle interval must pass after Guard ends. Player Stats is a dedicated local-only searchable opponent view: ally-only identities stay HMAC-only, clear opponent Name + World appears only after enemy history, last-seen tracks later encounters in either role, and schema-4 PvpStats backfill is cutoff-bounded, contained-row-only, one-shot, and never double-adds participant W/L. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."
+Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 53, local CC statistics schema 5, the exact 659-test Core registry, and 25 plugin self-tests. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, PLD Guardian, Recuperate, then Auto-Guard own priority in that order. Guardian requires exact Guard and Guardian metadata/readiness through the final boundary: <=20% is unconditional, <=40% needs fresh exact 2+ focus, and <=50% needs fresh exact 3+ focus. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-actor reservation from either a certified direct standard hotbar press, an exact lease/generation-backed /smartaction visible-<t> fallback, or a target-independent CC Smart Action S1-S5 winner; only the first two bind the visible hard target. Queue stays rejected. Release cannot cancel it; new action, context, Guard, CC, identity, protection, or exact-action/actor drift does, only a post-revalidated clean native range/LoS false may retry, accepted or ambiguous outcomes are terminal, and it never reranks or writes target/facing. The optional quiet-held-errors setting avoids global sound hooks and suppresses only a plugin-owned synthetic repeat whose exact hostile target returns native line-of-sight code 562; the first press, out-of-range, and every unknown error remain native. /seitonfar remains reachable-only. Enabled Wolves Den Smart Action resolves the exact stable visible hard target or reviewed dummy; a matching native duel identity may replace a stale Hostile flag, conflicting actor views still fail closed, and only the first non-exact carrier per tap may preserve the one-shot for the following exact <t>. Every current damaging non-ground-target shape shares the same closed admission and final-protection path. Exact /seitonsam Ogi/Tendo request-in-flight ownership suppresses movement through native acceptance and then hands off to the bounded accepted-cast lease; merely arming /seitonsam does not suppress movement, and ordinary /smartaction never gains this behavior. Exact repeat-Guard protection is identity- and territory-bound: a client-accepted request or exact live Guard blocks plugin-owned repeats during propagation, while a rejected or ambiguous provisional request remains immediately retryable; the first visible Guard frame then owns the full 1000-ms exact-repeat window. Current-name semantic protection metadata tolerates removed historical duplicate rows while still requiring Guard, Covered, Hallowed Ground, and Undead Redemption. Metadata-verified Shield Smite and Chain Stratagem may select Guard; other primary protections remain candidate-local blockers and only incidental/global Chiten vetoes AoE. Every exact Smart Action-owned harmful non-ground-target PvP cast uses reachable S1-S5 ranking only in CC; in enabled Wolves Den it preserves the exact visible hostile/dummy target through the same closed protection path. Exact Near Help-owned friendly PvP casts use one-shot current ally ranking after atomic exact-generation consumption, while Near Assist retains cast-time hidden-carrier suppression with visible-target pass-through. A Smart Action fallback transfers only a live exact owner into the same bounded reservation. Auto-Zantetsuken uses an identity/context-bound 500-ms no-target collection from the first exact own-source Kuzushi, ranks the fresh live cluster only after maturity, and rechecks collection, frozen identity, current Kuzushi, protection, Bind, readiness, range, and line of sight at the final boundary. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not reset it, Guard refreshes the idle baseline through its exact status/propagation episode, and a complete idle interval must pass after Guard ends. Player Stats is a dedicated local-only searchable opponent view: ally-only identities stay HMAC-only, clear opponent Name + World appears only after enemy history, last-seen tracks later encounters in either role, and schema-4 PvpStats backfill is cutoff-bounded, contained-row-only, one-shot, and never double-adds participant W/L. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."

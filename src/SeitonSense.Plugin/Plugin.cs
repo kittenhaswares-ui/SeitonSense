@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.44.0.9";
+    private const string CurrentReleaseVersion = "0.44.1.0";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -470,11 +470,11 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Failed Guard presses no longer briefly block recovery and job helpers.",
-                "/seitonsam keeps cast protection when Chase retries the attack after you get in range.",
-                "Turning Smart Action off now releases SAM movement protection immediately.",
-                "AST keeps its Double Cast follow-up when Orbis succeeds on a later retry.",
-                "CC prediction keeps trying when players are still loading during preparation.",
+                "Job Tools now focuses on your current job. All other jobs remain one click away.",
+                "Helper Status explains why helpers wait; detailed numbers are tucked under Advanced.",
+                "/seitonsam now also covers the game's movement-state and autorun input paths.",
+                "Bard's Repelling Shot can retry sooner when the game becomes ready again.",
+                "More full-sequence tests and version-specific downloads help prevent repeat regressions.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

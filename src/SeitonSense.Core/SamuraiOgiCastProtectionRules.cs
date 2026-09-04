@@ -73,4 +73,9 @@ public static class SamuraiOgiCastProtectionRules
             >= 448 and <= 451 or        // retained/vertical movement commands
             526 or                     // gamepad jump / cancel cast
             >= 671 and <= 674;          // digital left-stick directions
+
+    // InputManager's gameplay-control codes are distinct from InputData's
+    // remappable UI input IDs above. Camera/target/confirm codes stay native.
+    public static bool IsMovementControlCode(uint inputCode) =>
+        inputCode is >= 107 and <= 110 or >= 112 and <= 117;
 }

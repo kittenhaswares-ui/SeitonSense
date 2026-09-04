@@ -6,6 +6,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'ReleaseArtifact.ps1')
 
 $resolvedArchive = (Resolve-Path -LiteralPath $ArchivePath).Path
 $resolvedRoot = (Resolve-Path -LiteralPath $RepositoryRoot).Path
@@ -24,12 +25,7 @@ if ($sourceManifest.InternalName -ne $entry.InternalName) { throw 'Source and re
 if ([int]$entry.DalamudApiLevel -ne 15 -or [int]$sourceManifest.DalamudApiLevel -ne 15) {
     throw 'Dalamud API level must be 15.'
 }
-$expectedDownloadLink = 'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip'
-if ($entry.DownloadLinkInstall -ne $expectedDownloadLink -or
-    $entry.DownloadLinkUpdate -ne $expectedDownloadLink -or
-    $entry.DownloadLinkTesting -ne $expectedDownloadLink) {
-    throw 'Install, update, and testing links must all target the canonical main/dist/latest.zip artifact.'
-}
+Assert-SeitonReleaseDownloadLinks -Entry $entry
 if ([bool]$entry.IsHide -or [bool]$entry.IsTestingExclusive) {
     throw 'The public release must be visible and available outside testing mode.'
 }

@@ -488,6 +488,10 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
         }
     }
 
+    internal bool GameplayMovementHooksOperational => hotbarInput?.GameplayMovementHooksOperational == true;
+    internal SamuraiMovementInputDiagnostics SamuraiMovementDiagnostics =>
+        hotbarInput?.SamuraiMovementDiagnostics ?? default;
+
     private bool ShouldSuppressActiveSprintRepeat(
         RaptureHotbarModule.HotbarSlot* slot)
     {
@@ -742,13 +746,7 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
             // one native attempt. Run it through the sole UseAction owner with
             // redirect/token rewriting disabled. NearAssist reports whether its
             // exact protection scope actually reached native Original.
-            var replayIntent = new IntegratedBufferedReplayIntent(
-                request.ActionType,
-                request.RequestedActionId,
-                request.ResolvedActionId,
-                request.TargetId,
-                request.RequiresSmartActionProtectionRecheck,
-                request.SamuraiCastTapGeneration);
+            var replayIntent = CreateBufferedReplayIntent(request);
             var replay = nearAssist.RunExactBufferedReplay(
                 replayIntent,
                 () => actionManager->UseAction(
@@ -779,6 +777,15 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
             return IntegratedActionBufferDispatchResult.AcceptanceUnknown;
         }
     }
+
+    internal static IntegratedBufferedReplayIntent CreateBufferedReplayIntent(
+        IntegratedActionBufferDispatchRequest request) => new(
+            request.ActionType,
+            request.RequestedActionId,
+            request.ResolvedActionId,
+            request.TargetId,
+            request.RequiresSmartActionProtectionRecheck,
+            request.Ownership);
 
     private static ClientActionAttemptFingerprint CaptureBufferedActionBoundary(
         ActionManager* actionManager,

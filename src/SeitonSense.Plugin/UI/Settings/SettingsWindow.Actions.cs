@@ -19,7 +19,7 @@ internal sealed partial class SettingsWindow
 
         if (ImGui.CollapsingHeader(
                 "Cast cancellation (experimental)",
-                ImGuiTreeNodeFlags.DefaultOpen))
+                ImGuiTreeNodeFlags.None))
             changed |= DrawHeldActionCastCancellationControls();
 
         ImGui.Separator();
@@ -31,15 +31,15 @@ internal sealed partial class SettingsWindow
             changed |= DrawSmartRecuperateControls();
 
         ImGui.Separator();
-        if (ImGui.CollapsingHeader("BRD Mannstopper", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("BRD Mannstopper"))
             changed |= DrawBardRepellingShotControls();
 
         ImGui.Separator();
-        if (ImGui.CollapsingHeader("Emergency Teleport", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("Emergency Teleport"))
             changed |= DrawEmergencyTeleportControls();
 
         ImGui.Separator();
-        if (ImGui.CollapsingHeader("Ally Rescue: Paean / Aquaveil", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("Ally Rescue: Paean / Aquaveil"))
         {
             changed |= DrawAllyRescueControls();
             ImGui.Spacing();
@@ -49,29 +49,29 @@ internal sealed partial class SettingsWindow
         ImGui.Separator();
         if (ImGui.CollapsingHeader(
                 "Reactive counter-CC: WHM / BRD / NIN / PLD / RDM / BLM / SAM",
-                ImGuiTreeNodeFlags.DefaultOpen))
+                ImGuiTreeNodeFlags.None))
         {
             changed |= DrawReactiveCcControls();
         }
 
         ImGui.Separator();
-        if (ImGui.CollapsingHeader("Reactive Purify → Guard", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("Reactive Purify → Guard"))
             changed |= DrawDefensiveUtilityControls();
 
         ImGui.Separator();
-        if (ImGui.CollapsingHeader("Pressure escape Sprint", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("Pressure escape Sprint"))
             changed |= DrawPressureEscapeSprintControls();
 
         ImGui.Separator();
-        if (ImGui.CollapsingHeader("Smart Sprint", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("Smart Sprint"))
             changed |= DrawSmartSprintControls();
 
         ImGui.Separator();
-        if (ImGui.CollapsingHeader("CC-immunity action brake", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("CC-immunity action brake"))
             changed |= DrawCcImmunityBrakeControls();
 
         ImGui.Separator();
-        if (ImGui.CollapsingHeader("Team-visible enemy focus sign", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("Team-visible enemy focus sign"))
             changed |= DrawAutoEnemyFocusMarkControls();
 
         return changed;

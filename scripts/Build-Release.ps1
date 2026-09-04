@@ -4,6 +4,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'ReleaseArtifact.ps1')
 
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $resolvedOutput = [System.IO.Path]::GetFullPath($OutputDirectory)
@@ -14,6 +15,7 @@ $sourceZip = Join-Path $projectRoot 'src\SeitonSense.Plugin\bin\Release\SeitonSe
 $repo = @(Get-Content -LiteralPath (Join-Path $projectRoot 'repo.json') -Raw | ConvertFrom-Json)
 if ($repo.Count -ne 1) { throw 'repo.json must contain exactly one plugin.' }
 $version = [string]$repo[0].AssemblyVersion
+Assert-SeitonReleaseDownloadLinks -Entry $repo[0]
 $projectXml = [xml](Get-Content -LiteralPath (Join-Path $projectRoot 'src\SeitonSense.Plugin\SeitonSense.Plugin.csproj') -Raw)
 $projectVersion = [string]$projectXml.Project.PropertyGroup.Version
 if ($version -ne $projectVersion) { throw "repo.json version $version differs from project version $projectVersion." }
@@ -21,6 +23,7 @@ if ($version -ne $projectVersion) { throw "repo.json version $version differs fr
 New-Item -ItemType Directory -Force -Path $resolvedOutput | Out-Null
 
 & (Join-Path $PSScriptRoot 'Verify-SafetyContract.ps1') -RepositoryRoot $projectRoot
+& (Join-Path $projectRoot 'tests\ReleaseScripts.SelfTest.ps1')
 
 dotnet restore $solution --locked-mode
 if ($LASTEXITCODE -ne 0) { throw 'Restore failed.' }
@@ -41,15 +44,11 @@ if (-not (Test-Path -LiteralPath $sourceZip -PathType Leaf)) {
     throw "Dalamud packager output not found: $sourceZip"
 }
 
-$releaseName = "SeitonSense-$version.zip"
-$releaseZip = Join-Path $resolvedOutput $releaseName
+$artifact = Save-SeitonVersionedArchive -BuiltArchive $sourceZip `
+    -OutputDirectory $resolvedOutput -Version $version
+$releaseZip = $artifact.ArchivePath
 $latestZip = Join-Path $resolvedOutput 'latest.zip'
-Copy-Item -LiteralPath $sourceZip -Destination $releaseZip -Force
-Copy-Item -LiteralPath $sourceZip -Destination $latestZip -Force
-
-$hash = (Get-FileHash -LiteralPath $releaseZip -Algorithm SHA256).Hash.ToLowerInvariant()
-Set-Content -LiteralPath (Join-Path $resolvedOutput "$releaseName.sha256") -Value "$hash  $releaseName" -Encoding ascii
-Set-Content -LiteralPath (Join-Path $resolvedOutput 'latest.zip.sha256') -Value $hash -Encoding ascii
+$hash = $artifact.Hash
 $sourceFingerprint = (& (Join-Path $PSScriptRoot 'Get-SourceFingerprint.ps1') -RepositoryRoot $projectRoot).Trim()
 Set-Content -LiteralPath (Join-Path $resolvedOutput 'source.sha256') -Value $sourceFingerprint -Encoding ascii
 
@@ -64,3 +63,4 @@ if ($latestHash -ne $hash) { throw 'dist/latest.zip differs from the versioned r
 
 Write-Host "Release: $releaseZip"
 Write-Host "SHA-256: $hash"
+if ($artifact.Reused) { Write-Host 'Reused the unchanged versioned archive and checksum.' }

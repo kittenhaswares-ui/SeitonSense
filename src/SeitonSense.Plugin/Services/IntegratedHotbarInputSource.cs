@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Dalamud.Hooking;
 using Dalamud.Plugin.Services;
+using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using FFXIVClientStructs.FFXIV.Client.System.Input;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using SeitonSense.Core;
@@ -157,6 +158,9 @@ internal sealed unsafe class IntegratedHotbarInputSource : IDisposable
     private readonly Hook<InputData.Delegates.IsInputIdPressed> pressedHook;
     private readonly Hook<InputData.Delegates.IsInputIdDown> downHook;
     private readonly Hook<InputData.Delegates.IsInputIdHeld> heldHook;
+    private readonly Hook<InputManager.Delegates.GetInputStatus>? controlInputHook;
+    private readonly Hook<InputManager.Delegates.IsAutoRunning>? autorunHook;
+    private readonly SamuraiCastMovementInputBoundary samuraiMovementBoundary;
     private readonly Hook<CheckHotbarBindingsDelegate> checkHotbarBindingsHook;
     private readonly Func<IntegratedHotbarInputSettings> getSettings;
     private readonly Action<IntegratedHotbarPress> onPhysicalPress;
@@ -245,6 +249,29 @@ internal sealed unsafe class IntegratedHotbarInputSource : IDisposable
             pressedHook.Dispose();
             throw;
         }
+
+        samuraiMovementBoundary = new SamuraiCastMovementInputBoundary(
+            ReadNativeMovementInput,
+            () => !disposed && this.shouldSuppressSamuraiCastMovement());
+        // These exported gameplay-control methods are a separate input route
+        // from InputData's remappable UI-key queries. A missing optional route
+        // never prevents the ordinary hotbar adapter from loading.
+        try
+        {
+            controlInputHook = interop.HookFromAddress<InputManager.Delegates.GetInputStatus>(
+                InputManager.MemberFunctionPointers.GetInputStatus,
+                GetControlInputStatusDetour);
+            autorunHook = interop.HookFromAddress<InputManager.Delegates.IsAutoRunning>(
+                InputManager.MemberFunctionPointers.IsAutoRunning,
+                IsAutoRunningDetour);
+        }
+        catch
+        {
+            try { autorunHook?.Dispose(); } catch { }
+            try { controlInputHook?.Dispose(); } catch { }
+            autorunHook = null;
+            controlInputHook = null;
+        }
     }
 
     public void Start()
@@ -268,6 +295,17 @@ internal sealed unsafe class IntegratedHotbarInputSource : IDisposable
             pressedHook.Disable();
             throw;
         }
+
+        try
+        {
+            controlInputHook?.Enable();
+            autorunHook?.Enable();
+        }
+        catch
+        {
+            if (controlInputHook is not null) TryDisable(controlInputHook);
+            if (autorunHook is not null) TryDisable(autorunHook);
+        }
     }
 
     public LogicalHotbarRepeatSnapshot RepeatSnapshot
@@ -285,6 +323,12 @@ internal sealed unsafe class IntegratedHotbarInputSource : IDisposable
         downHook.IsEnabled &&
         heldHook.IsEnabled &&
         checkHotbarBindingsHook.IsEnabled;
+
+    internal bool GameplayMovementHooksOperational =>
+        started && !disposed && controlInputHook?.IsEnabled == true && autorunHook?.IsEnabled == true;
+
+    internal SamuraiMovementInputDiagnostics SamuraiMovementDiagnostics =>
+        samuraiMovementBoundary.Diagnostics;
 
     public IntegratedHotbarInputSnapshot Snapshot
     {
@@ -455,6 +499,11 @@ internal sealed unsafe class IntegratedHotbarInputSource : IDisposable
         disposed = true;
         started = false;
 
+        // Disposing an optional movement route must not leave a different
+        // input hook active if one hook implementation throws during cleanup.
+        try { autorunHook?.Dispose(); } catch { }
+        try { controlInputHook?.Dispose(); } catch { }
+
         try
         {
             checkHotbarBindingsHook.Dispose();
@@ -538,8 +587,8 @@ internal sealed unsafe class IntegratedHotbarInputSource : IDisposable
     {
         // Native input is always evaluated first and remains the fallback for
         // every unsupported binding, unavailable raw state or adapter failure.
-        var nativePressed = pressedHook.Original(inputData, inputId);
-        if (ShouldSuppressSamuraiMovementInput(inputId)) return false;
+        var nativePressed = samuraiMovementBoundary.Read(
+            (nint)inputData, (uint)inputId, SamuraiMovementInputPath.Pressed);
         if (disposed
             || activeScanSource != this
             || inputData == null
@@ -772,44 +821,33 @@ internal sealed unsafe class IntegratedHotbarInputSource : IDisposable
 
     private bool IsInputIdDownDetour(InputData* inputData, InputId inputId)
     {
-        var nativeDown = downHook.Original(inputData, inputId);
-        return ShouldSuppressSamuraiMovementInput(inputId)
-            ? false
-            : nativeDown;
+        return samuraiMovementBoundary.Read(
+            (nint)inputData, (uint)inputId, SamuraiMovementInputPath.Down);
     }
 
     private bool IsInputIdHeldDetour(InputData* inputData, InputId inputId)
     {
-        var nativeHeld = heldHook.Original(inputData, inputId);
-        return ShouldSuppressSamuraiMovementInput(inputId)
-            ? false
-            : nativeHeld;
+        return samuraiMovementBoundary.Read(
+            (nint)inputData, (uint)inputId, SamuraiMovementInputPath.Held);
     }
 
-    /// <summary>
-    /// Movement is stateful: FFXIV reads a fresh press, the current down state,
-    /// and its held state through three different native functions. Blocking
-    /// only Pressed leaves an already-held WASD or stick direction untouched.
-    /// Released intentionally remains native so the client can clear its state.
-    /// </summary>
-    private bool ShouldSuppressSamuraiMovementInput(InputId inputId)
-    {
-        if (disposed ||
-            !SamuraiOgiCastProtectionRules.IsMovementInputId((uint)inputId))
-        {
-            return false;
-        }
+    private bool GetControlInputStatusDetour(InputManager* inputManager, InputCode inputCode) =>
+        samuraiMovementBoundary.Read(
+            (nint)inputManager, (uint)inputCode, SamuraiMovementInputPath.ControlState);
 
-        try
+    private bool IsAutoRunningDetour() =>
+        samuraiMovementBoundary.Read(0, 0, SamuraiMovementInputPath.Autorun);
+
+    private bool ReadNativeMovementInput(nint inputAddress, uint inputCode, SamuraiMovementInputPath path) =>
+        path switch
         {
-            return shouldSuppressSamuraiCastMovement();
-        }
-        catch
-        {
-            Interlocked.Increment(ref failedOpenEvents);
-            return false;
-        }
-    }
+            SamuraiMovementInputPath.Pressed => pressedHook.Original((InputData*)inputAddress, (InputId)inputCode),
+            SamuraiMovementInputPath.Down => downHook.Original((InputData*)inputAddress, (InputId)inputCode),
+            SamuraiMovementInputPath.Held => heldHook.Original((InputData*)inputAddress, (InputId)inputCode),
+            SamuraiMovementInputPath.ControlState => controlInputHook!.Original((InputManager*)inputAddress, (InputCode)inputCode),
+            SamuraiMovementInputPath.Autorun => autorunHook!.Original(),
+            _ => false,
+        };
 
     private static void TryDisable<T>(Hook<T> hook)
         where T : Delegate

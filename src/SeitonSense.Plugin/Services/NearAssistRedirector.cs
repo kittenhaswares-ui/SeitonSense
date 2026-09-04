@@ -160,14 +160,14 @@ internal readonly record struct IntegratedBufferedReplayIntent(
     uint ResolvedActionId,
     ulong TargetId,
     bool RequiresSmartActionProtectionRecheck,
-    long SamuraiCastTapGeneration = 0)
+    SmartActionTapOwnership Ownership = default)
 {
     internal bool IsValid =>
         ActionType is ActionType.Action or ActionType.PvPAction &&
         RequestedActionId != 0 &&
         ResolvedActionId != 0 &&
-        SamuraiCastTapGeneration >= 0 &&
-        (SamuraiCastTapGeneration == 0 ||
+        (Ownership == default || Ownership.IsValid) &&
+        (!Ownership.RequiresSamuraiCastProtection ||
          RequiresSmartActionProtectionRecheck &&
          SamuraiSmartActionCastRules.IsReviewedBaseCastPair(RequestedActionId, ResolvedActionId)) &&
         (!RequiresSmartActionProtectionRecheck ||
@@ -177,6 +177,14 @@ internal readonly record struct IntegratedBufferedReplayIntent(
 internal readonly record struct IntegratedBufferedReplayResult(
     bool NativeBoundaryInvoked,
     bool ClientReturnedAccepted);
+
+internal readonly record struct SamuraiCastInputStatus(
+    bool CastMetadataVerified,
+    bool GameplayMovementHooksReady,
+    bool ProtectedCastActive,
+    int RequestsInFlight,
+    long AcceptedOwnedCasts,
+    SamuraiMovementInputDiagnostics Movement);
 
 internal readonly record struct ExactAutomaticActionBoundaryIntent(
     ActionType ActionType,
@@ -302,6 +310,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private int smartTargetLastEnemySlot;
     private string smartTargetLastEvent = "Not started";
     private OwnedSamuraiCastProtection? ownedSamuraiCastProtection;
+    private long acceptedOwnedSamuraiCasts;
     private readonly HashSet<InFlightSamuraiCastScope> inFlightSamuraiCastScopes = [];
     private long helpArmedCount;
     private long helpRedirectedCount;
@@ -2728,7 +2737,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                         mode,
                         comboRouteId,
                         macroTapGeneration,
-                        samuraiCastTapGeneration: capturedSamuraiTapGeneration);
+                        ownership: SmartActionTapOwnership.Capture(
+                            macroTapGeneration,
+                            samurai: capturedSamuraiTapGeneration > 0));
             }
             catch (Exception exception)
             {
@@ -2818,7 +2829,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                     SamuraiOgiCastProtectionRules.GetExactReplayTapGeneration(
                         exactReplayScope: true,
                         samuraiReplay.Intent.RequiresSmartActionProtectionRecheck,
-                        samuraiReplay.Intent.SamuraiCastTapGeneration,
+                        samuraiReplay.Intent.Ownership.RequiresSamuraiCastProtection
+                            ? samuraiReplay.Intent.Ownership.Generation
+                            : 0,
                         samuraiSmartActionTapGeneration,
                         actionId,
                         samuraiReplay.Intent.ResolvedActionId);
@@ -4570,6 +4583,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 now,
                 now + SamuraiOgiCastProtectionRules.MaximumLeaseMilliseconds,
                 ObservedExactCast: false);
+            Interlocked.Increment(ref acceptedOwnedSamuraiCasts);
         }
     }
 
@@ -4596,6 +4610,24 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         return SamuraiOgiCastProtectionRules.ShouldSuppressMovement(
             exactSeitonSamRequestInFlight: false,
             acceptedOwnedCastActive: IsOwnedSamuraiCastProtected());
+    }
+
+    internal SamuraiCastInputStatus SamuraiCastInputStatus
+    {
+        get
+        {
+            var active = IsOwnedSamuraiCastProtected();
+            lock (tokenGate)
+            {
+                return new SamuraiCastInputStatus(
+                    samuraiSmartActionCastsMetadataVerified,
+                    integratedInputRuntime?.GameplayMovementHooksOperational == true,
+                    active,
+                    inFlightSamuraiCastScopes.Count,
+                    Interlocked.Read(ref acceptedOwnedSamuraiCasts),
+                    integratedInputRuntime?.SamuraiMovementDiagnostics ?? default);
+            }
+        }
     }
 
     internal bool IsOwnedSamuraiCastProtected()
@@ -4626,6 +4658,10 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                                 local.ClassJob.RowId ==
                                 SamuraiSmartActionCastRules.SamuraiJobId &&
                                 actionManager != null;
+            // BeingMoved also reports ordinary movement input. It must never
+            // revoke this shield, whose purpose is to stop that same input.
+            // CC and the disappearance of the exact native cast below remain
+            // the cancellation evidence, including a knockback-ended cast.
             if (!identityValid || HasCastBreakingCrowdControl(local!))
             {
                 ClearOwnedSamuraiCastProtection(lease);
