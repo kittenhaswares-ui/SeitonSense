@@ -85,8 +85,15 @@ internal static unsafe class StrictWolvesDenStrikingDummyResolver
             objectTable.SearchById(candidate!.GameObjectId) as DalamudBattleChara;
         var canonicalByEntityId =
             objectTable.SearchByEntityId(candidate.EntityId) as DalamudBattleChara;
-        if (!HasSameNativeIdentity(candidate, canonicalByObjectId) ||
-            !HasSameNativeIdentity(candidate, canonicalByEntityId) ||
+        var objectLookupMatches =
+            HasSameNativeIdentity(candidate, canonicalByObjectId);
+        var entityLookupMatches =
+            HasSameNativeIdentity(candidate, canonicalByEntityId);
+        if (!SmartActionContextRules.HasCanonicalNativeTargetIdentity(
+                canonicalByObjectId is not null,
+                objectLookupMatches,
+                canonicalByEntityId is not null,
+                entityLookupMatches) ||
             GetNativeHardTargetId(localPlayer!) != nativeHardTargetId)
         {
             return false;

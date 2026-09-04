@@ -368,6 +368,13 @@ internal sealed class SmartSprintProbe
         IPlayerCharacter localPlayer,
         long nowMilliseconds)
     {
+        // RemainingTime can briefly be zero while the exact Guard row is still
+        // present at a client update boundary. For an optional Sprint helper,
+        // membership itself is enough to wait; a false negative here could
+        // cancel the player's Guard, while a one-frame false positive is only
+        // a harmless delay.
+        if (HasGuardStatusMembership(localPlayer)) return true;
+
         nearAssist.TryGetRecentExactLocalGuardAttempt(
             clientState.TerritoryType,
             localPlayer.GameObjectId,
@@ -380,6 +387,20 @@ internal sealed class SmartSprintProbe
                 guardAttemptAt,
                 nowMilliseconds)
             .SuppressDirectActionHelpers;
+    }
+
+    private static bool HasGuardStatusMembership(IPlayerCharacter player)
+    {
+        foreach (var status in player.StatusList)
+        {
+            if (status.StatusId is EnemyCombatConstants.GuardStatusId or
+                EnemyCombatConstants.GuardStatusAlternateId)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static unsafe bool IsSprintActionSpecificallyReady(

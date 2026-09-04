@@ -24,6 +24,30 @@ public static class SmartActionContextRules
         bool exactVerifiedStrikingDummy) =>
         exactVerifiedStrikingDummy || isPlayerCharacter && hostileFlag;
 
+    /// <summary>
+    /// A selected Wolves' Den player is hostile when either the object-table
+    /// flag says so or the native duel manager independently identifies that
+    /// same exact actor. This never admits an unrelated selected player.
+    /// </summary>
+    public static bool HasExactWolvesDenDuelHostilityProof(
+        bool hostileFlag,
+        bool exactNativeDuelOpponent) =>
+        hostileFlag || exactNativeDuelOpponent;
+
+    /// <summary>
+    /// Object-ID and Entity-ID indexes are independent views of one native
+    /// actor. One exact live view is sufficient while the other is briefly
+    /// absent; if both are present, both must identify the same actor.
+    /// </summary>
+    public static bool HasCanonicalNativeTargetIdentity(
+        bool objectLookupPresent,
+        bool objectLookupMatches,
+        bool entityLookupPresent,
+        bool entityLookupMatches) =>
+        objectLookupPresent && entityLookupPresent
+            ? objectLookupMatches && entityLookupMatches
+            : objectLookupMatches || entityLookupMatches;
+
     public static bool IsSupported(
         SupportedPvPContext context,
         bool wolvesDenTestingEnabled) =>
@@ -41,6 +65,26 @@ public static class SmartActionContextRules
         context == SupportedPvPContext.WolvesDen &&
         wolvesDenTestingEnabled &&
         combatPriorityMode;
+
+    /// <summary>
+    /// A Wolves' Den macro can emit an unusable &lt;e1&gt; line before its
+    /// authored &lt;t&gt; fallback. Keep the one-shot only for that non-exact
+    /// carrier so the following exact visible-target line can still own it.
+    /// </summary>
+    public static bool ShouldPreserveExactVisibleTargetToken(
+        SupportedPvPContext context,
+        bool wolvesDenTestingEnabled,
+        bool combatPriorityMode,
+        bool eligibleHarmfulAction,
+        bool exactCurrentHardTarget,
+        bool alreadyPreservedForTapGeneration) =>
+        CanUseExactVisibleTargetTestFallback(
+            context,
+            wolvesDenTestingEnabled,
+            combatPriorityMode) &&
+        eligibleHarmfulAction &&
+        !exactCurrentHardTarget &&
+        !alreadyPreservedForTapGeneration;
 
     /// <summary>
     /// Shapes which can be protection-checked against the exact visible

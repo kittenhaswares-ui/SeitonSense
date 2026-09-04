@@ -314,7 +314,7 @@ internal sealed partial class SettingsWindow
             configuration.GuardOnStunPressure,
             value => configuration.GuardOnStunPressure = value);
         changed |= Checkbox(
-            "Ignore a second Guard press for 1 second (manual or automatic)",
+            "Protect Guard from repeated held/Buffer inputs",
             configuration.ProtectOwnGuardFromRepeatPress,
             value => configuration.ProtectOwnGuardFromRepeatPress = value);
         changed |= Checkbox(
@@ -339,10 +339,10 @@ internal sealed partial class SettingsWindow
             "Crystalline Conflict only and off by default. At 3+ enemies, Seiton can Purify a selected Stun and use " +
             "Guard after Resilience confirms the cleanse. The card, sound, and press protection start only after Guard " +
             "is visibly active. While it is active, Seiton blocks its other automatic actions so they cannot cancel it. " +
-            "Timing-buffer and Turbo retries may help the first Guard land, but cannot press it again while Guard is " +
-            "active or still appearing. Release and press Guard freshly if you intentionally want to end it. " +
-            "When the repeat-press option is on, a second Guard press is ignored for one second after every manual or " +
-            "automatic own Guard; other actions are unaffected by that repeat-only safety. Turning it off does not disable " +
+            "Timing-buffer and Turbo retries may help the first Guard land. After FFXIV accepts it or Guard becomes visible, " +
+            "those automatic repeats cannot press Guard again or replay another action that would cancel it. A false or " +
+            "uncertain first Guard attempt remains retryable. Release and press freshly for deliberate actions. " +
+            "The option also ignores a second Guard press for one second after every manual or automatic own Guard. Turning it off does not disable " +
             "Auto-Guard's separate protection from other actions. After one second you can end Guard normally. /panicshu " +
             "remains an intentional emergency override for automatically protected Guard.");
         ImGui.PopTextWrapPos();

@@ -98,7 +98,6 @@ internal static class SmartSprintSelfTests
         {
             eligible with { HeldGameplayKeyEligible = false },
             eligible with { GuardStateKnown = false },
-            eligible with { GuardActive = true },
             eligible with { IncapacitationStateKnown = false },
             eligible with { Incapacitated = true },
             eligible with { HigherPriorityClaimed = true },
@@ -120,6 +119,34 @@ internal static class SmartSprintSelfTests
             baseline,
             eligible with { NowMilliseconds = 4_001 });
         True(cleared.ShouldDispatch, "cleared gates use the still-open idle episode");
+    }
+
+    public static void GuardRefreshesTheIdleClockUntilItEnds()
+    {
+        var baseline = SmartSprintRules.ObserveIdle(
+            SmartSprintIdleState.Initial,
+            ValidObservation(now: 0, activityToken: 4)).NextState;
+        var guarded = SmartSprintRules.ObserveIdle(
+            baseline,
+            ValidObservation(now: 4_000, activityToken: 4) with
+            {
+                GuardActive = true,
+            });
+
+        False(guarded.ShouldDispatch, "Guard can never dispatch idle Sprint");
+        False(guarded.IdleThresholdReached, "Guard refreshes instead of retaining a ready edge");
+        Equal(4_000L, guarded.NextState.LastActionBarActivityAtMilliseconds,
+            "Guard owns the new idle baseline");
+
+        var justEnded = SmartSprintRules.ObserveIdle(
+            guarded.NextState,
+            ValidObservation(now: 4_001, activityToken: 4));
+        False(justEnded.ShouldDispatch, "Guard release cannot immediately Sprint");
+
+        var later = SmartSprintRules.ObserveIdle(
+            justEnded.NextState,
+            ValidObservation(now: 8_000, activityToken: 4));
+        True(later.ShouldDispatch, "a complete idle interval after Guard may Sprint");
     }
 
     public static void UnknownActivityAndContextDriftResetSafely()

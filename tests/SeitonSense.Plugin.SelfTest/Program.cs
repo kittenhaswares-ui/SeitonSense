@@ -645,6 +645,7 @@ static void RejectedGuardSpamRestoresOriginalAttempt()
         localGameObjectId,
         localEntityId,
         ObservedAtMilliseconds: 1_000,
+        ClientAccepted: true,
         GuardActivatedAtMilliseconds: 1_150,
         Generation: 1);
 
@@ -657,6 +658,9 @@ static void RejectedGuardSpamRestoresOriginalAttempt()
     True(
         afterSecondPress is { GuardActivatedAtMilliseconds: 1_150 },
         "second rejected press preserves the original activation timestamp");
+    True(
+        afterSecondPress is { ClientAccepted: true },
+        "second rejected press preserves exact client acceptance evidence");
 
     // A rejected replacement advances the global generation even though the
     // accepted original is restored. A third press must therefore preserve the

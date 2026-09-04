@@ -81,16 +81,16 @@ internal static unsafe class DarkKnightWolvesDenCurrentTargetResolver
         var candidate = HasValidNativeIdentity(byObjectId)
             ? byObjectId
             : byEntityId;
-        var hostileFlag = candidate is not null &&
-                          (candidate.StatusFlags & StatusFlags.Hostile) != 0;
+        var hostilityProven = candidate is not null &&
+                              HasExactDuelHostilityProof(objectTable, candidate);
         if (!HasValidNativeIdentity(candidate) ||
             !SmartActionContextRules.IsEligibleExactVisibleWolvesDenTarget(
                 isPlayerCharacter: true,
-                hostileFlag,
+                hostileFlag: hostilityProven,
                 exactVerifiedStrikingDummy: false) ||
             !ActorIdMatches(nativeHardTargetId, candidate!) ||
             HasSameNativeIdentity(localPlayer, candidate) ||
-            !IsLiveTargetablePlayer(localPlayer!, candidate!))
+            !IsLiveTargetablePlayer(localPlayer!, candidate!, hostilityProven))
         {
             return false;
         }
@@ -99,10 +99,23 @@ internal static unsafe class DarkKnightWolvesDenCurrentTargetResolver
             as IPlayerCharacter;
         var canonicalByEntityId = objectTable.SearchByEntityId(candidate.EntityId)
             as IPlayerCharacter;
-        if (!HasSameNativeIdentity(candidate, canonicalByObjectId) ||
-            !HasSameNativeIdentity(candidate, canonicalByEntityId) ||
+        var objectLookupMatches =
+            HasSameNativeIdentity(candidate, canonicalByObjectId);
+        var entityLookupMatches =
+            HasSameNativeIdentity(candidate, canonicalByEntityId);
+        var stableHostilityProven = HasExactDuelHostilityProof(
+            objectTable,
+            candidate);
+        if (!SmartActionContextRules.HasCanonicalNativeTargetIdentity(
+                canonicalByObjectId is not null,
+                objectLookupMatches,
+                canonicalByEntityId is not null,
+                entityLookupMatches) ||
             GetNativeHardTargetId(localPlayer!) != nativeHardTargetId ||
-            !IsLiveTargetablePlayer(localPlayer!, candidate))
+            !IsLiveTargetablePlayer(
+                localPlayer!,
+                candidate,
+                stableHostilityProven))
         {
             return false;
         }
@@ -160,7 +173,10 @@ internal static unsafe class DarkKnightWolvesDenCurrentTargetResolver
             !HasValidNativeIdentity(duelOpponent) ||
             nativeDuelEnemyEntityId != duelOpponent!.EntityId ||
             !ActorIdMatches(nativeHardTargetId, duelOpponent) ||
-            !IsLiveTargetablePlayer(localPlayer!, duelOpponent))
+            !IsLiveTargetablePlayer(
+                localPlayer!,
+                duelOpponent,
+                hostilityProven: true))
         {
             return false;
         }
@@ -234,12 +250,32 @@ internal static unsafe class DarkKnightWolvesDenCurrentTargetResolver
         return true;
     }
 
+    private static bool HasExactDuelHostilityProof(
+        IObjectTable objectTable,
+        IPlayerCharacter candidate)
+    {
+        var hostileFlag =
+            (candidate.StatusFlags & StatusFlags.Hostile) != 0;
+        if (hostileFlag) return true;
+
+        var duelOpponent = EnemySlotResolver.ResolveWolvesDenDuelOpponent(
+            objectTable,
+            out var nativeDuelEnemyEntityId);
+        var exactNativeDuelOpponent =
+            nativeDuelEnemyEntityId == candidate.EntityId &&
+            HasSameNativeIdentity(candidate, duelOpponent);
+        return SmartActionContextRules.HasExactWolvesDenDuelHostilityProof(
+            hostileFlag,
+            exactNativeDuelOpponent);
+    }
+
     private static bool IsLiveTargetablePlayer(
         IPlayerCharacter localPlayer,
-        IPlayerCharacter candidate) =>
+        IPlayerCharacter candidate,
+        bool hostilityProven) =>
         candidate.GameObjectId != localPlayer.GameObjectId &&
         candidate.EntityId != localPlayer.EntityId &&
-        (candidate.StatusFlags & StatusFlags.Hostile) != 0 &&
+        hostilityProven &&
         !candidate.IsDead &&
         candidate.CurrentHp > 0 &&
         candidate.MaxHp >= candidate.CurrentHp &&

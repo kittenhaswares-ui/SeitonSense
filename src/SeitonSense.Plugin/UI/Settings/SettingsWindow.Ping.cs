@@ -52,6 +52,14 @@ internal sealed partial class SettingsWindow
                 "Remember an out-of-range attack after I release the key",
                 configuration.EnableHoldToLandChaseBuffer,
                 value => configuration.EnableHoldToLandChaseBuffer = value);
+            changed |= Checkbox(
+                "Quiet repeated line-of-sight errors while holding",
+                configuration.SuppressRepeatedLineOfSightErrorSound,
+                value => configuration.SuppressRepeatedLineOfSightErrorSound = value);
+            ImGui.TextDisabled(
+                "Stops only Seiton's own Chase/Buffer retry or an enabled Turbo held-key retry before " +
+                "FFXIV makes the error sound when a wall blocks the exact enemy. Your first press, " +
+                "out-of-range sound, and all other game errors stay unchanged.");
             changed |= SliderInt(
                 "Tap-to-land time",
                 configuration.TapToLandReservationMilliseconds,

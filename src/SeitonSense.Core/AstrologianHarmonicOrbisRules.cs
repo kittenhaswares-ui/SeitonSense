@@ -96,7 +96,9 @@ public static class AstrologianHarmonicOrbisRules
     public const uint AstrologianJobId = 33;
     public const uint HarmonicOrbisActionId = 29_243;
     public const uint DoubleCastCarrierActionId = 29_245;
+    public const uint DoubleCastFallMaleficActionId = 29_246;
     public const uint DoubleCastHarmonicOrbisActionId = 29_247;
+    public const uint DoubleCastGravityIiActionId = 29_248;
     public const uint MaximumHarmonicOrbisCharges = 2;
     public const int MaximumTargetHealthPercent = 60;
 
@@ -125,12 +127,18 @@ public static class AstrologianHarmonicOrbisRules
         };
 
     public static bool IsDoubleCastAvailableBeforeBase(
-        uint adjustedCarrierActionId,
+        uint observedAdjustedCarrierActionId,
         bool carrierOffCooldown,
         uint currentCharges) =>
-        adjustedCarrierActionId == DoubleCastCarrierActionId &&
+        IsDoubleCastFamilyAction(observedAdjustedCarrierActionId) &&
         carrierOffCooldown &&
         currentCharges is > 0 and <= MaximumHarmonicOrbisCharges;
+
+    public static bool IsDoubleCastFamilyAction(uint actionId) =>
+        actionId is DoubleCastCarrierActionId or
+            DoubleCastFallMaleficActionId or
+            DoubleCastHarmonicOrbisActionId or
+            DoubleCastGravityIiActionId;
 
     /// <summary>
     /// Final fail-closed policy for the helper-owned native hook boundary. The
@@ -298,7 +306,8 @@ public static class AstrologianHarmonicOrbisRules
             return Cancelled(AstrologianHarmonicOrbisFollowUpReason.TargetChanged);
         if (!targetStillEligible)
             return Cancelled(AstrologianHarmonicOrbisFollowUpReason.TargetUnavailable);
-        if (resolvedDoubleCastActionId == DoubleCastCarrierActionId)
+        if (resolvedDoubleCastActionId != DoubleCastHarmonicOrbisActionId &&
+            IsDoubleCastFamilyAction(resolvedDoubleCastActionId))
         {
             return new AstrologianHarmonicOrbisFollowUpDecision(
                 AstrologianHarmonicOrbisFollowUpKind.Waiting,

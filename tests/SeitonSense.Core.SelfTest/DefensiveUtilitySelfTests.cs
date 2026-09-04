@@ -366,7 +366,8 @@ internal static class DefensiveUtilitySelfTests
             IsSupportedPvpContext: true,
             IsSyntheticRequest: true,
             ExactGuardRequest: true,
-            OwnGuardActiveOrPropagating: true);
+            ExactOwnGuardActive: true,
+            ExactClientAcceptedGuardPropagating: false);
         True(
             GuardRepeatProtectionRules.ShouldBlockSyntheticRepeat(syntheticRepeat),
             "a synthetic repeat cannot toggle an active or propagating Guard off");
@@ -376,8 +377,20 @@ internal static class DefensiveUtilitySelfTests
             "a fresh physical Guard press remains a deliberate toggle request");
         False(
             GuardRepeatProtectionRules.ShouldBlockSyntheticRepeat(
-                syntheticRepeat with { OwnGuardActiveOrPropagating = false }),
+                syntheticRepeat with
+                {
+                    ExactOwnGuardActive = false,
+                    ExactClientAcceptedGuardPropagating = false,
+                }),
             "a synthetic retry remains available to land the first Guard");
+        True(
+            GuardRepeatProtectionRules.ShouldBlockSyntheticRepeat(
+                syntheticRepeat with
+                {
+                    ExactOwnGuardActive = false,
+                    ExactClientAcceptedGuardPropagating = true,
+                }),
+            "a client-accepted Guard propagation window protects against synthetic cancel");
         False(
             GuardRepeatProtectionRules.ShouldBlockSyntheticRepeat(
                 syntheticRepeat with { ExactGuardRequest = false }),
@@ -390,6 +403,43 @@ internal static class DefensiveUtilitySelfTests
             GuardRepeatProtectionRules.ShouldBlockSyntheticRepeat(
                 syntheticRepeat with { IsSupportedPvpContext = false }),
             "synthetic protection fails open outside supported PvP");
+
+        var syntheticGuardCancellation =
+            new SyntheticGuardCancellationProtectionObservation(
+                RuntimeEnabled: true,
+                IsSupportedPvpContext: true,
+                PluginOwnedRepeat: true,
+                VerifiedGuardCancellingAction: true,
+                ExactOwnGuardActive: true,
+                ExactClientAcceptedGuardPropagating: false,
+                ExplicitGuardBreak: false);
+        True(
+            GuardRepeatProtectionRules.ShouldBlockSyntheticGuardCancellation(
+                syntheticGuardCancellation),
+            "an owned repeat cannot cancel an exact active Guard with another action");
+        True(
+            GuardRepeatProtectionRules.ShouldBlockSyntheticGuardCancellation(
+                syntheticGuardCancellation with
+                {
+                    ExactOwnGuardActive = false,
+                    ExactClientAcceptedGuardPropagating = true,
+                }),
+            "an owned repeat cannot race a client-accepted Guard propagation window");
+        False(
+            GuardRepeatProtectionRules.ShouldBlockSyntheticGuardCancellation(
+                syntheticGuardCancellation with { PluginOwnedRepeat = false }),
+            "a fresh physical action remains deliberate player intent");
+        False(
+            GuardRepeatProtectionRules.ShouldBlockSyntheticGuardCancellation(
+                syntheticGuardCancellation with { ExplicitGuardBreak = true }),
+            "the exact explicit Panic Shukuchi escape remains allowed");
+        False(
+            GuardRepeatProtectionRules.ShouldBlockSyntheticGuardCancellation(
+                syntheticGuardCancellation with
+                {
+                    VerifiedGuardCancellingAction = false,
+                }),
+            "an unknown action classification fails open");
 
         var explicitRelease = AutoGuardProtectionRules.Observe(
             armed,
@@ -474,6 +524,25 @@ internal static class DefensiveUtilitySelfTests
         False(
             GuardRepeatProtectionRules.ShouldBlock(immediateRetryAfterAmbiguousAttempt),
             "an ambiguous or unconfirmed Guard attempt cannot suppress the immediate retry");
+        var syntheticRetryAfterAmbiguousAttempt =
+            new SyntheticGuardRepeatProtectionObservation(
+                RuntimeEnabled: true,
+                IsSupportedPvpContext: true,
+                IsSyntheticRequest: true,
+                ExactGuardRequest: true,
+                ExactOwnGuardActive: false,
+                ExactClientAcceptedGuardPropagating: false);
+        False(
+            GuardRepeatProtectionRules.ShouldBlockSyntheticRepeat(
+                syntheticRetryAfterAmbiguousAttempt),
+            "a provisional false or ambiguous Guard call cannot suppress a synthetic retry");
+        True(
+            GuardRepeatProtectionRules.ShouldBlockSyntheticRepeat(
+                syntheticRetryAfterAmbiguousAttempt with
+                {
+                    ExactClientAcceptedGuardPropagating = true,
+                }),
+            "an exact client-accepted Guard call protects its propagation window");
         True(
             GuardRepeatProtectionRules.ShouldBlock(
                 immediateRetryAfterAmbiguousAttempt with

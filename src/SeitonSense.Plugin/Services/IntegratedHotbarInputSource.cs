@@ -155,6 +155,8 @@ internal sealed unsafe class IntegratedHotbarInputSource : IDisposable
     private static long activeScanId;
 
     private readonly Hook<InputData.Delegates.IsInputIdPressed> pressedHook;
+    private readonly Hook<InputData.Delegates.IsInputIdDown> downHook;
+    private readonly Hook<InputData.Delegates.IsInputIdHeld> heldHook;
     private readonly Hook<CheckHotbarBindingsDelegate> checkHotbarBindingsHook;
     private readonly Func<IntegratedHotbarInputSettings> getSettings;
     private readonly Action<IntegratedHotbarPress> onPhysicalPress;
@@ -207,12 +209,39 @@ internal sealed unsafe class IntegratedHotbarInputSource : IDisposable
             IsInputIdPressedDetour);
         try
         {
+            downHook = interop.HookFromAddress<InputData.Delegates.IsInputIdDown>(
+                InputData.MemberFunctionPointers.IsInputIdDown,
+                IsInputIdDownDetour);
+        }
+        catch
+        {
+            pressedHook.Dispose();
+            throw;
+        }
+
+        try
+        {
+            heldHook = interop.HookFromAddress<InputData.Delegates.IsInputIdHeld>(
+                InputData.MemberFunctionPointers.IsInputIdHeld,
+                IsInputIdHeldDetour);
+        }
+        catch
+        {
+            downHook.Dispose();
+            pressedHook.Dispose();
+            throw;
+        }
+
+        try
+        {
             checkHotbarBindingsHook = interop.HookFromSignature<CheckHotbarBindingsDelegate>(
                 CheckHotbarBindingsSignature,
                 CheckHotbarBindingsDetour);
         }
         catch
         {
+            heldHook.Dispose();
+            downHook.Dispose();
             pressedHook.Dispose();
             throw;
         }
@@ -226,11 +255,16 @@ internal sealed unsafe class IntegratedHotbarInputSource : IDisposable
         pressedHook.Enable();
         try
         {
+            downHook.Enable();
+            heldHook.Enable();
             checkHotbarBindingsHook.Enable();
             started = true;
         }
         catch
         {
+            TryDisable(checkHotbarBindingsHook);
+            TryDisable(heldHook);
+            TryDisable(downHook);
             pressedHook.Disable();
             throw;
         }
@@ -248,6 +282,8 @@ internal sealed unsafe class IntegratedHotbarInputSource : IDisposable
         started &&
         !disposed &&
         pressedHook.IsEnabled &&
+        downHook.IsEnabled &&
+        heldHook.IsEnabled &&
         checkHotbarBindingsHook.IsEnabled;
 
     public IntegratedHotbarInputSnapshot Snapshot
@@ -425,7 +461,21 @@ internal sealed unsafe class IntegratedHotbarInputSource : IDisposable
         }
         finally
         {
-            pressedHook.Dispose();
+            try
+            {
+                heldHook.Dispose();
+            }
+            finally
+            {
+                try
+                {
+                    downHook.Dispose();
+                }
+                finally
+                {
+                    pressedHook.Dispose();
+                }
+            }
         }
 
         lock (gate)
@@ -489,18 +539,7 @@ internal sealed unsafe class IntegratedHotbarInputSource : IDisposable
         // Native input is always evaluated first and remains the fallback for
         // every unsupported binding, unavailable raw state or adapter failure.
         var nativePressed = pressedHook.Original(inputData, inputId);
-        if (!disposed &&
-            SamuraiOgiCastProtectionRules.IsMovementInputId((uint)inputId))
-        {
-            try
-            {
-                if (shouldSuppressSamuraiCastMovement()) return false;
-            }
-            catch
-            {
-                Interlocked.Increment(ref failedOpenEvents);
-            }
-        }
+        if (ShouldSuppressSamuraiMovementInput(inputId)) return false;
         if (disposed
             || activeScanSource != this
             || inputData == null
@@ -728,6 +767,61 @@ internal sealed unsafe class IntegratedHotbarInputSource : IDisposable
         {
             Interlocked.Increment(ref failedOpenEvents);
             return nativePressed;
+        }
+    }
+
+    private bool IsInputIdDownDetour(InputData* inputData, InputId inputId)
+    {
+        var nativeDown = downHook.Original(inputData, inputId);
+        return ShouldSuppressSamuraiMovementInput(inputId)
+            ? false
+            : nativeDown;
+    }
+
+    private bool IsInputIdHeldDetour(InputData* inputData, InputId inputId)
+    {
+        var nativeHeld = heldHook.Original(inputData, inputId);
+        return ShouldSuppressSamuraiMovementInput(inputId)
+            ? false
+            : nativeHeld;
+    }
+
+    /// <summary>
+    /// Movement is stateful: FFXIV reads a fresh press, the current down state,
+    /// and its held state through three different native functions. Blocking
+    /// only Pressed leaves an already-held WASD or stick direction untouched.
+    /// Released intentionally remains native so the client can clear its state.
+    /// </summary>
+    private bool ShouldSuppressSamuraiMovementInput(InputId inputId)
+    {
+        if (disposed ||
+            !SamuraiOgiCastProtectionRules.IsMovementInputId((uint)inputId))
+        {
+            return false;
+        }
+
+        try
+        {
+            return shouldSuppressSamuraiCastMovement();
+        }
+        catch
+        {
+            Interlocked.Increment(ref failedOpenEvents);
+            return false;
+        }
+    }
+
+    private static void TryDisable<T>(Hook<T> hook)
+        where T : Delegate
+    {
+        try
+        {
+            hook.Disable();
+        }
+        catch
+        {
+            // Preserve the original startup failure. Plugin construction will
+            // dispose the entire input boundary immediately afterwards.
         }
     }
 

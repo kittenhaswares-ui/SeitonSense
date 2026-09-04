@@ -100,10 +100,10 @@ internal sealed record AstrologianHarmonicOrbisProbeSnapshot(
 /// <summary>
 /// Uses one held gameplay-key generation to heal one exact Near Help party
 /// target with Aspected Benefic (Harmonischer Orbis). If and only if an
-/// unadjusted Double Cast use was already available immediately before the
-/// accepted base request, the probe waits briefly for the carrier to become
-/// the exact same-target follow-up and requests that follow-up once. It never
-/// changes selected target state or adopts a manually prepared adjusted action.
+/// Double Cast charge was already available immediately before the accepted
+/// base request, the probe waits briefly for the transforming carrier to become
+/// the exact same-target follow-up and requests that follow-up once. A stale
+/// previously prepared form may propagate briefly but is never dispatched.
 /// </summary>
 internal sealed unsafe class AstrologianHarmonicOrbisProbe
 {
@@ -458,6 +458,15 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
                     case AstrologianHarmonicOrbisFollowUpKind.Waiting:
                         decision = AstrologianHarmonicOrbisProbeDecision.Waiting;
                         lastEvent = $"Base accepted; waiting for exact Double Cast Orbis transition ({followUpDecision.Reason})";
+                        // Keep lower-priority held helpers from replacing the
+                        // spell that Double Cast is still transforming into.
+                        // Purify, Guardian, Recuperate, and Auto-Guard have
+                        // already had their chance before this lane.
+                        if (!higherPriorityClaimed && !inputFrame.IsConsumed)
+                        {
+                            inputClaimed = true;
+                            inputFrame.Consume();
+                        }
                         break;
                     case AstrologianHarmonicOrbisFollowUpKind.Complete:
                         ClearEpisode();
@@ -1213,6 +1222,10 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
             DoubleCastCarrierActionId);
         currentCharges = actionManager->GetCurrentCharges(
             DoubleCastCarrierActionId);
+        // Double Cast is a transforming carrier. A ready charge can still show
+        // the repeat for the previously used AST spell until Orbis is accepted.
+        // The follow-up state machine separately requires the exact 29245 ->
+        // 29247 transition before it permits the native dispatch.
         return AstrologianHarmonicOrbisRules.IsDoubleCastAvailableBeforeBase(
             adjustedActionId,
             actionManager->IsActionOffCooldown(

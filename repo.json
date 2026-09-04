@@ -5,8 +5,8 @@
     "Punchline": "PvP cues, Smart Tab, responsive helpers, and survival tools.",
     "Description": "A local PvP HUD with searchable CC player rankings and prediction, nameplate cues, Limit Break alerts, pressure and CC information, Ping Helpers, medicine-kit beacons, range rings, a Wolves' Den map panel, recovery and job helpers, Smart Tab, assist macros, MP sounds, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.44.0.7",
-    "Changelog": "Fixed /seitonsam movement protection disabling itself when normal movement set the BeingMoved state. Ogi Namikiri and Tendo Setsugekka started by the macro now keep ordinary digital movement blocked throughout the active cast. Purify, native knockback or CC cancellation, and fresh manual Guard remain available.",
+    "AssemblyVersion": "0.44.0.8",
+    "Changelog": "Fixed Smart Action and /seitonsam in Wolves' Den. /seitonsam now protects Ogi and Tendo from held movement without a start gap. Guard retries stay responsive, and idle Sprint or Seiton-owned repeats can no longer cancel Guard. Fixed AST's same-target Double Cast follow-up. Added an optional quiet mode for repeated line-of-sight errors.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -36,6 +36,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1788531253"
+    "LastUpdate": "1788546529"
   }
 ]

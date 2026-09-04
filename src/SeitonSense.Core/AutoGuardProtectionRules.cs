@@ -30,7 +30,17 @@ public readonly record struct SyntheticGuardRepeatProtectionObservation(
     bool IsSupportedPvpContext,
     bool IsSyntheticRequest,
     bool ExactGuardRequest,
-    bool OwnGuardActiveOrPropagating);
+    bool ExactOwnGuardActive,
+    bool ExactClientAcceptedGuardPropagating);
+
+public readonly record struct SyntheticGuardCancellationProtectionObservation(
+    bool RuntimeEnabled,
+    bool IsSupportedPvpContext,
+    bool PluginOwnedRepeat,
+    bool VerifiedGuardCancellingAction,
+    bool ExactOwnGuardActive,
+    bool ExactClientAcceptedGuardPropagating,
+    bool ExplicitGuardBreak);
 
 /// <summary>
 /// Suppresses only an exact second local Guard request during the first second
@@ -66,7 +76,18 @@ public static class GuardRepeatProtectionRules
         observation.IsSupportedPvpContext &&
         observation.IsSyntheticRequest &&
         observation.ExactGuardRequest &&
-        observation.OwnGuardActiveOrPropagating;
+        (observation.ExactOwnGuardActive ||
+         observation.ExactClientAcceptedGuardPropagating);
+
+    public static bool ShouldBlockSyntheticGuardCancellation(
+        SyntheticGuardCancellationProtectionObservation observation) =>
+        observation.RuntimeEnabled &&
+        observation.IsSupportedPvpContext &&
+        observation.PluginOwnedRepeat &&
+        observation.VerifiedGuardCancellingAction &&
+        !observation.ExplicitGuardBreak &&
+        (observation.ExactOwnGuardActive ||
+         observation.ExactClientAcceptedGuardPropagating);
 }
 
 public readonly record struct AutoGuardProtectionState(

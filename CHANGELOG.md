@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.44.0.8
+
+- Fixed Smart Action and `/seitonsam` in Wolves' Den. A non-exact `<e1>` macro
+  line now leaves the one-shot intact for the following exact visible `<t>`.
+- Made `/seitonsam` cover the pressed, down, and held movement paths, including
+  the small gap between consuming the macro token and accepting Ogi/Tendo.
+- Fixed Guard responsiveness: a rejected first Guard request no longer creates
+  a false 1.5-second retry lock. Idle Sprint waits a full idle period after
+  Guard, and Seiton-owned Turbo/Buffer repeats cannot cancel active Guard.
+- Fixed AST Zweifacher Zauber after held Harmonischer Orbis. A ready charge may
+  still show the previously stored AST spell; Seiton now waits for the exact
+  Orbis repeat and never fires that stale spell.
+- Added an optional **Ping Helpers** setting that quiets only repeated,
+  Seiton-owned line-of-sight failures. The first press and other errors remain
+  unchanged.
+- Made plugin shutdown exception-safe so one cleanup failure cannot leave later
+  hooks or subscriptions active. Automated checks remain separate from live
+  in-game confirmation.
+
 ## 0.44.0.7
 
 - Fixed `/seitonsam` movement protection disabling itself as soon as ordinary

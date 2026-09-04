@@ -91,6 +91,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool AllowCriticalRecoveryThroughNativeQueue { get; set; } = true;
     public bool EnableSmartActionBuffer { get; set; } = true;
     public bool EnableHoldToLandChaseBuffer { get; set; } = true;
+    public bool SuppressRepeatedLineOfSightErrorSound { get; set; }
     public int TapToLandReservationMilliseconds { get; set; } =
         HeldChaseBufferWindowRules.DefaultMilliseconds;
     public int SmartActionBufferWindowMilliseconds { get; set; } =
@@ -947,6 +948,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         AllowCriticalRecoveryThroughNativeQueue = true;
         EnableSmartActionBuffer = true;
         EnableHoldToLandChaseBuffer = true;
+        SuppressRepeatedLineOfSightErrorSound = false;
         TapToLandReservationMilliseconds =
             HeldChaseBufferWindowRules.DefaultMilliseconds;
         SmartActionBufferWindowMilliseconds =

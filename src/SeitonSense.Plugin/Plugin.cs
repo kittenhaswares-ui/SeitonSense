@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.44.0.7";
+    private const string CurrentReleaseVersion = "0.44.0.8";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -88,6 +88,8 @@ public sealed class Plugin : IDalamudPlugin
     private readonly bool backwardPanicShukuchiCommandRegistered;
     private readonly bool movementEnAvantCommandRegistered;
     private readonly bool pressureCommandRegistered;
+    private int disposeState;
+    private long nextSmartActionArmFailureNoticeAt;
 
     public Plugin(
         IDalamudPluginInterface pluginInterface,
@@ -468,9 +470,11 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Fixed /seitonsam movement protection switching itself off as soon as normal movement began.",
-                "Ogi and Tendo casts started by /seitonsam now keep ordinary movement input blocked for the active cast.",
-                "Purify, native knockback or CC cancellation, and a fresh manual Guard remain available immediately.",
+                "Smart Action and /seitonsam now keep their exact visible duel target in Wolves' Den.",
+                "/seitonsam now protects Ogi and Tendo from held movement without a gap at cast start.",
+                "Guard retries stay responsive, and idle Sprint or Seiton-owned repeats cannot cancel Guard.",
+                "AST now follows held Harmonischer Orbis with a ready Zweifacher Zauber on the same ally.",
+                "Ping Helpers can optionally quiet repeated line-of-sight error sounds while Seiton retries.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
@@ -872,53 +876,72 @@ public sealed class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
-        pluginInterface.UiBuilder.Draw -= Draw;
-        pluginInterface.UiBuilder.OpenMainUi -= OpenSettings;
-        pluginInterface.UiBuilder.OpenConfigUi -= OpenSettings;
-        if (nearAssistCommandRegistered) commandManager.RemoveHandler(NearAssistCommand);
-        if (nearAssistAliasRegistered) commandManager.RemoveHandler(NearAssistAliasCommand);
-        if (smartTabCommandRegistered) commandManager.RemoveHandler(SmartTabCommand);
-        if (smartTabAliasRegistered) commandManager.RemoveHandler(SmartTabAliasCommand);
-        if (smartActionCommandRegistered) commandManager.RemoveHandler(SmartActionCommand);
-        if (smartActionAliasRegistered) commandManager.RemoveHandler(SmartActionAliasCommand);
-        if (seitonFarCommandRegistered) commandManager.RemoveHandler(SeitonFarCommand);
-        if (seitonSamCommandRegistered) commandManager.RemoveHandler(SeitonSamCommand);
-        if (autoSeitonCommandRegistered) commandManager.RemoveHandler(AutoSeitonCommand);
-        if (nearHelpCommandRegistered) commandManager.RemoveHandler(NearHelpCommand);
-        if (nearHelpAliasRegistered) commandManager.RemoveHandler(NearHelpAliasCommand);
-        if (farHelpCommandRegistered) commandManager.RemoveHandler(FarHelpCommand);
-        if (farHelpAliasRegistered) commandManager.RemoveHandler(FarHelpAliasCommand);
+        if (Interlocked.Exchange(ref disposeState, 1) != 0) return;
+
+        void Safe(Action cleanup)
+        {
+            try
+            {
+                cleanup();
+            }
+            catch (Exception exception)
+            {
+                log.Warning(
+                    exception,
+                    "Seiton Sense could not completely clean up one plugin disposal step.");
+            }
+        }
+
+        Safe(() => pluginInterface.UiBuilder.Draw -= Draw);
+        Safe(() => pluginInterface.UiBuilder.OpenMainUi -= OpenSettings);
+        Safe(() => pluginInterface.UiBuilder.OpenConfigUi -= OpenSettings);
+        if (nearAssistCommandRegistered) Safe(() => commandManager.RemoveHandler(NearAssistCommand));
+        if (nearAssistAliasRegistered) Safe(() => commandManager.RemoveHandler(NearAssistAliasCommand));
+        if (smartTabCommandRegistered) Safe(() => commandManager.RemoveHandler(SmartTabCommand));
+        if (smartTabAliasRegistered) Safe(() => commandManager.RemoveHandler(SmartTabAliasCommand));
+        if (smartActionCommandRegistered) Safe(() => commandManager.RemoveHandler(SmartActionCommand));
+        if (smartActionAliasRegistered) Safe(() => commandManager.RemoveHandler(SmartActionAliasCommand));
+        if (seitonFarCommandRegistered) Safe(() => commandManager.RemoveHandler(SeitonFarCommand));
+        if (seitonSamCommandRegistered) Safe(() => commandManager.RemoveHandler(SeitonSamCommand));
+        if (autoSeitonCommandRegistered) Safe(() => commandManager.RemoveHandler(AutoSeitonCommand));
+        if (nearHelpCommandRegistered) Safe(() => commandManager.RemoveHandler(NearHelpCommand));
+        if (nearHelpAliasRegistered) Safe(() => commandManager.RemoveHandler(NearHelpAliasCommand));
+        if (farHelpCommandRegistered) Safe(() => commandManager.RemoveHandler(FarHelpCommand));
+        if (farHelpAliasRegistered) Safe(() => commandManager.RemoveHandler(FarHelpAliasCommand));
         if (panicShukuchiCommandRegistered)
-            commandManager.RemoveHandler(PanicShukuchiService.Command);
+            Safe(() => commandManager.RemoveHandler(PanicShukuchiService.Command));
         if (backwardPanicShukuchiCommandRegistered)
-            commandManager.RemoveHandler(PanicShukuchiService.BackwardCameraCommand);
+            Safe(() => commandManager.RemoveHandler(PanicShukuchiService.BackwardCameraCommand));
         if (movementEnAvantCommandRegistered)
-            commandManager.RemoveHandler(PanicShukuchiService.MovementEnAvantCommand);
-        if (pressureCommandRegistered) commandManager.RemoveHandler(PressureCommand);
-        commandManager.RemoveHandler(Command);
-        commandManager.RemoveHandler(AliasCommand);
-        crystallineConflictInstantLeave.Dispose();
-        crystallineConflictPrediction.Dispose();
-        pvpStatsHistoryImport.Dispose();
-        crystallineConflictMapStatistics.Dispose();
-        combatLimitBreakRuntime.Dispose();
-        integratedInput.Dispose();
-        personalStatus.Dispose();
-        criticalUtilityCoordination.Dispose();
-        smartTabTargeting.Dispose();
-        movementDirectedEnAvant.Dispose();
-        panicShukuchi.Dispose();
-        nearAssist.Dispose();
-        isolationAwareness.Dispose();
-        autoLowMpFocusTarget.Dispose();
-        autoEnemyFocusMark.Dispose();
-        pressureTracker.Dispose();
-        opponentLimitBreakGauges.Dispose();
-        tracker.Dispose();
-        namePlateAnchors.Dispose();
-        pressureCounter.Dispose();
-        windowSystem.RemoveAllWindows();
-        responseClock.Dispose();
+            Safe(() => commandManager.RemoveHandler(PanicShukuchiService.MovementEnAvantCommand));
+        if (pressureCommandRegistered) Safe(() => commandManager.RemoveHandler(PressureCommand));
+        Safe(() => commandManager.RemoveHandler(Command));
+        Safe(() => commandManager.RemoveHandler(AliasCommand));
+        Safe(() => { crystallineConflictInstantLeave.Dispose(); });
+        Safe(() => { crystallineConflictPrediction.Dispose(); });
+        Safe(() => { pvpStatsHistoryImport.Dispose(); });
+        Safe(() => { crystallineConflictMapStatistics.Dispose(); });
+        Safe(() => { combatLimitBreakRuntime.Dispose(); });
+        Safe(() => { integratedInput.Dispose(); });
+        Safe(() => { personalStatus.Dispose(); });
+        // PersonalStatus normally owns this capture. Keep the explicit fallback
+        // for partial/exceptional teardown; the capture itself is idempotent.
+        Safe(() => { machinistLimitBreakCapture.Dispose(); });
+        Safe(() => { criticalUtilityCoordination.Dispose(); });
+        Safe(() => { smartTabTargeting.Dispose(); });
+        Safe(() => { movementDirectedEnAvant.Dispose(); });
+        Safe(() => { panicShukuchi.Dispose(); });
+        Safe(() => { nearAssist.Dispose(); });
+        Safe(() => { isolationAwareness.Dispose(); });
+        Safe(() => { autoLowMpFocusTarget.Dispose(); });
+        Safe(() => { autoEnemyFocusMark.Dispose(); });
+        Safe(() => { pressureTracker.Dispose(); });
+        Safe(() => { opponentLimitBreakGauges.Dispose(); });
+        Safe(() => { tracker.Dispose(); });
+        Safe(() => { namePlateAnchors.Dispose(); });
+        Safe(() => { pressureCounter.Dispose(); });
+        Safe(() => { windowSystem.RemoveAllWindows(); });
+        Safe(() => { responseClock.Dispose(); });
     }
 
     private void Draw()
@@ -1654,7 +1677,8 @@ public sealed class Plugin : IDalamudPlugin
 
         try
         {
-            nearAssist.ArmSmartActionTarget();
+            var result = nearAssist.ArmSmartActionTarget();
+            ReportSmartActionArmFailure("Smart Action", result);
         }
         catch (Exception exception)
         {
@@ -1713,12 +1737,28 @@ public sealed class Plugin : IDalamudPlugin
 
         try
         {
-            nearAssist.ArmSamuraiSmartActionTarget();
+            var result = nearAssist.ArmSamuraiSmartActionTarget();
+            ReportSmartActionArmFailure("Seiton SAM", result);
         }
         catch (Exception exception)
         {
             log.Error(exception, "Seiton Sense Samurai Smart Action command failed closed.");
         }
+    }
+
+    private void ReportSmartActionArmFailure(
+        string displayName,
+        NearAssistArmResult result)
+    {
+        if (result.Success) return;
+
+        var now = Environment.TickCount64;
+        if (now < nextSmartActionArmFailureNoticeAt) return;
+        nextSmartActionArmFailureNoticeAt = now + 5_000;
+        var detail = nearAssist.SmartTargetDiagnostics.LastEvent;
+        chatGui.PrintError(
+            $"[Seiton Sense] {displayName} did not arm: {detail}. " +
+            "Check Action Helpers and Wolves' Den testing in Seiton settings.");
     }
 
     private void OnFarHelpCommand(string _, string arguments)

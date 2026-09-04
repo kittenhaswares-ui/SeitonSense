@@ -9,9 +9,15 @@ internal static class AstrologianHarmonicOrbisSelfTests
             "Harmonic Orbis PvP action");
         Equal(29_245u, AstrologianHarmonicOrbisRules.DoubleCastCarrierActionId,
             "Double Cast carrier");
+        Equal(29_246u,
+            AstrologianHarmonicOrbisRules.DoubleCastFallMaleficActionId,
+            "Double Cast Fall Malefic adjusted action");
         Equal(29_247u,
             AstrologianHarmonicOrbisRules.DoubleCastHarmonicOrbisActionId,
             "Double Cast Harmonic Orbis adjusted action");
+        Equal(29_248u,
+            AstrologianHarmonicOrbisRules.DoubleCastGravityIiActionId,
+            "Double Cast Gravity II adjusted action");
         Equal(2u, AstrologianHarmonicOrbisRules.MaximumHarmonicOrbisCharges,
             "Harmonic Orbis maximum charges");
         Equal(60, AstrologianHarmonicOrbisRules.MaximumTargetHealthPercent,
@@ -90,11 +96,31 @@ internal static class AstrologianHarmonicOrbisSelfTests
                 carrierOffCooldown: true,
                 currentCharges: 2),
             "two exact carrier charges prove pre-base availability");
-        False(AstrologianHarmonicOrbisRules.IsDoubleCastAvailableBeforeBase(
+        True(AstrologianHarmonicOrbisRules.IsDoubleCastAvailableBeforeBase(
                 AstrologianHarmonicOrbisRules.DoubleCastHarmonicOrbisActionId,
                 carrierOffCooldown: true,
                 currentCharges: 1),
-            "already-adjusted carrier cannot be snapshotted before base");
+            "a ready carrier may still show its previously stored Orbis form");
+        True(AstrologianHarmonicOrbisRules.IsDoubleCastAvailableBeforeBase(
+                AstrologianHarmonicOrbisRules.DoubleCastFallMaleficActionId,
+                carrierOffCooldown: true,
+                currentCharges: 1),
+            "a ready carrier may still show its previously stored Malefic form");
+        True(AstrologianHarmonicOrbisRules.IsDoubleCastAvailableBeforeBase(
+                AstrologianHarmonicOrbisRules.DoubleCastGravityIiActionId,
+                carrierOffCooldown: true,
+                currentCharges: 1),
+            "a ready carrier may still show its previously stored Gravity form");
+        False(AstrologianHarmonicOrbisRules.IsDoubleCastAvailableBeforeBase(
+                0,
+                carrierOffCooldown: true,
+                currentCharges: 1),
+            "missing adjusted carrier telemetry fails closed");
+        False(AstrologianHarmonicOrbisRules.IsDoubleCastAvailableBeforeBase(
+                99_999,
+                carrierOffCooldown: true,
+                currentCharges: 1),
+            "an unrelated adjusted action fails closed");
         False(AstrologianHarmonicOrbisRules.IsDoubleCastAvailableBeforeBase(
                 AstrologianHarmonicOrbisRules.DoubleCastCarrierActionId,
                 carrierOffCooldown: false,
@@ -229,6 +255,17 @@ internal static class AstrologianHarmonicOrbisSelfTests
         Equal(AstrologianHarmonicOrbisFollowUpKind.Waiting,
             carrierPropagation.Kind, "unadjusted carrier is a soft wait");
 
+        var stalePreparedSpell = Evaluate(
+            intent,
+            ClientActionAttemptOutcome.ClientAccepted,
+            frame: 101,
+            target: intent.Target,
+            resolvedActionId:
+                AstrologianHarmonicOrbisRules.DoubleCastGravityIiActionId);
+        Equal(AstrologianHarmonicOrbisFollowUpKind.Waiting,
+            stalePreparedSpell.Kind,
+            "a stale prepared spell waits for the exact Orbis transition");
+
         var accepted = Evaluate(
             intent,
             ClientActionAttemptOutcome.ClientAccepted,
@@ -316,14 +353,24 @@ internal static class AstrologianHarmonicOrbisSelfTests
         Equal(AstrologianHarmonicOrbisFollowUpReason.TargetChanged,
             changedTarget.Reason, "follow-up cannot rerank or substitute");
 
-        var wrongAdjusted = Evaluate(
+        var missingAdjusted = Evaluate(
             pair,
             ClientActionAttemptOutcome.ClientAccepted,
             frame: 401,
             target: pair.Target,
-            resolvedActionId: 29_248);
+            resolvedActionId: 0);
         Equal(AstrologianHarmonicOrbisFollowUpReason.WrongAdjustedAction,
-            wrongAdjusted.Reason, "another Double Cast form fails closed");
+            missingAdjusted.Reason, "missing adjusted carrier fails closed");
+
+        var unrelatedAdjusted = Evaluate(
+            pair,
+            ClientActionAttemptOutcome.ClientAccepted,
+            frame: 401,
+            target: pair.Target,
+            resolvedActionId: 99_999);
+        Equal(AstrologianHarmonicOrbisFollowUpReason.WrongAdjustedAction,
+            unrelatedAdjusted.Reason,
+            "an unrelated adjusted action fails closed");
     }
 
     internal static void NativeGuardBoundaryIsExactAndFailClosed()

@@ -118,6 +118,25 @@ public static class SmartSprintRules
                 IdleThresholdReached: false);
         }
 
+        // Guard lasts roughly as long as the default idle threshold. Keeping
+        // the original Guard-button timestamp would therefore make automatic
+        // Sprint fire on the first frame where Guard's status briefly drops or
+        // expires. Refresh the quiet-action baseline for the whole exact Guard
+        // episode so Sprint can become eligible only after a complete idle
+        // interval following Guard, never at its release edge.
+        if (observation.GuardStateKnown && observation.GuardActive)
+        {
+            return new SmartSprintIdleDecision(
+                previous with
+                {
+                    LastActionBarActivityAtMilliseconds = observation.NowMilliseconds,
+                    IdleEpisodeSpent = false,
+                },
+                ShouldDispatch: false,
+                ActionBarActivityChanged: false,
+                IdleThresholdReached: false);
+        }
+
         var threshold = NormalizeInactivityMilliseconds(observation.InactivityMilliseconds);
         var idleThresholdReached =
             observation.NowMilliseconds - previous.LastActionBarActivityAtMilliseconds >= threshold;

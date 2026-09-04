@@ -125,7 +125,7 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
                 // Gating on it made WASD disable its own cast protection.
                 // Native knockback/forced movement does not depend on this
                 // digital input result and still cancels the cast normally.
-                () => nearAssist.IsOwnedSamuraiCastProtected());
+                () => nearAssist.IsSamuraiCastMovementSuppressed());
             Volatile.Write(ref available, 1);
             SetLastEvent("Ready to start");
         }

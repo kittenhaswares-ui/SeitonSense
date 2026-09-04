@@ -58,9 +58,10 @@ internal sealed partial class SettingsWindow
             ImGui.TextUnformatted("SAM: use /seitonsam to choose one safe enemy within 5y and protect the Ogi/Tendo cast from movement.");
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
-                "Crystalline Conflict only. Seiton chooses a living, reachable, safe enemy. It prefers low HP, team " +
-                "focus, unavailable Guard, and low MP. Melee jobs prefer melee range first. /seitonfar chooses the " +
-                "farthest safe enemy instead. Your visible target does not change. /ssaction is an alias.");
+                "In Crystalline Conflict, Seiton chooses a living, reachable, safe enemy. It prefers low HP, team " +
+                "focus, unavailable Guard, and low MP. Melee jobs prefer melee range first. With Wolves' Den testing, " +
+                "Smart Action and /seitonsam safely keep your exact visible duel target instead. /seitonfar stays CC-only. " +
+                "Your visible target does not change. /ssaction is an alias.");
             ImGui.TextDisabled(
                 "Most cast-time attacks keep your visible target so FFXIV does not turn you unexpectedly. Instant " +
                 "attacks use Smart Action. /seitonsam supports Ogi Namikiri and Tendo Setsugekka: movement and helper " +

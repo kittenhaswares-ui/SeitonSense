@@ -3,6 +3,16 @@
 Seiton Sense is a local PvP awareness HUD with pressure tracking, nameplate
 cues, warnings, job helpers, Smart Action, and target highlights.
 
+Version 0.44.0.8 fixes Smart Action and `/seitonsam` in Wolves' Den: an invalid
+`<e1>` macro line no longer spends the one-shot before the exact visible `<t>`
+line. `/seitonsam` now blocks the game's pressed, down, and held movement paths
+from the exact cast request through the accepted Ogi Namikiri or Tendo
+Setsugekka cast. Guard retries stay responsive after a rejected first press;
+idle Sprint and Seiton-owned repeats cannot cancel active Guard. **Ping
+Helpers** also has an optional quiet mode for repeated line-of-sight errors.
+AST held healing now recognizes a ready Zweifacher Zauber even while its button
+still shows the previously stored spell, then waits for the exact Orbis repeat.
+
 Version 0.44.0.7 fixes `/seitonsam` cast protection switching itself off as
 soon as ordinary movement set the game's `BeingMoved` state. Ogi Namikiri and
 Tendo Setsugekka now keep digital movement input blocked for the active cast.
@@ -2668,7 +2678,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 646-test Core registry, sixteen plugin self-tests,
+For the current source, the exact 651-test Core registry, sixteen plugin self-tests,
 and source checks pin configuration schema 53, the shared monotonic response clock and framework
 epoch, true not-ready-to-ready wakeups, strict unchanged-queue critical recovery,
 the immutable release-independent tap-to-land buffer, active-Sprint repeat

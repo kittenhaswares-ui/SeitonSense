@@ -56,6 +56,43 @@ internal static class SmartActionContextSelfTests
             "CC never enters the Den fallback lane");
 
         True(
+            SmartActionContextRules.ShouldPreserveExactVisibleTargetToken(
+                SupportedPvPContext.WolvesDen,
+                wolvesDenTestingEnabled: true,
+                combatPriorityMode: true,
+                eligibleHarmfulAction: true,
+                exactCurrentHardTarget: false,
+                alreadyPreservedForTapGeneration: false),
+            "a non-exact Den e1 carrier preserves the token for the visible t line");
+        False(
+            SmartActionContextRules.ShouldPreserveExactVisibleTargetToken(
+                SupportedPvPContext.WolvesDen,
+                wolvesDenTestingEnabled: true,
+                combatPriorityMode: true,
+                eligibleHarmfulAction: true,
+                exactCurrentHardTarget: false,
+                alreadyPreservedForTapGeneration: true),
+            "the same Den token never preserves a second non-exact carrier");
+        False(
+            SmartActionContextRules.ShouldPreserveExactVisibleTargetToken(
+                SupportedPvPContext.WolvesDen,
+                wolvesDenTestingEnabled: true,
+                combatPriorityMode: true,
+                eligibleHarmfulAction: true,
+                exactCurrentHardTarget: true,
+                alreadyPreservedForTapGeneration: false),
+            "the exact visible Den target consumes the token normally");
+        False(
+            SmartActionContextRules.ShouldPreserveExactVisibleTargetToken(
+                SupportedPvPContext.CrystallineConflict,
+                wolvesDenTestingEnabled: true,
+                combatPriorityMode: true,
+                eligibleHarmfulAction: true,
+                exactCurrentHardTarget: false,
+                alreadyPreservedForTapGeneration: false),
+            "CC never enters the Den token-preservation lane");
+
+        True(
             SmartActionContextRules.CanUseSameCallVisibleTargetFallback(
                 SupportedPvPContext.WolvesDen,
                 wolvesDenTestingEnabled: true,
@@ -73,6 +110,59 @@ internal static class SmartActionContextSelfTests
                 rankedWinnerSelected: false,
                 exactCurrentHardTarget: false),
             "a hidden or changed target cannot own the same-call fallback");
+    }
+
+    public static void WolvesDenMacroPreservesE1ThenConsumesExactVisibleTarget()
+    {
+        foreach (var castTimeProven in new[] { false, true })
+        {
+            var tokenArmed = true;
+
+            var preserveForHiddenEnemySlot =
+                SmartActionContextRules.ShouldPreserveExactVisibleTargetToken(
+                    SupportedPvPContext.WolvesDen,
+                    wolvesDenTestingEnabled: true,
+                    combatPriorityMode: true,
+                    eligibleHarmfulAction: true,
+                    exactCurrentHardTarget: false,
+                    alreadyPreservedForTapGeneration: false);
+            if (!preserveForHiddenEnemySlot) tokenArmed = false;
+            True(
+                tokenArmed,
+                $"the non-exact e1 line preserves the {(castTimeProven ? "cast" : "instant")} token");
+
+            var preserveForVisibleTarget =
+                SmartActionContextRules.ShouldPreserveExactVisibleTargetToken(
+                    SupportedPvPContext.WolvesDen,
+                    wolvesDenTestingEnabled: true,
+                    combatPriorityMode: true,
+                    eligibleHarmfulAction: true,
+                    exactCurrentHardTarget: true,
+                    alreadyPreservedForTapGeneration: true);
+            if (!preserveForVisibleTarget) tokenArmed = false;
+            False(
+                tokenArmed,
+                $"the exact t line consumes the {(castTimeProven ? "cast" : "instant")} token");
+        }
+
+        False(
+            SmartActionContextRules.ShouldPreserveExactVisibleTargetToken(
+                SupportedPvPContext.WolvesDen,
+                wolvesDenTestingEnabled: false,
+                combatPriorityMode: true,
+                eligibleHarmfulAction: true,
+                exactCurrentHardTarget: false,
+                alreadyPreservedForTapGeneration: false),
+            "the disabled Den test path never captures a macro carrier");
+        False(
+            SmartActionContextRules.ShouldPreserveExactVisibleTargetToken(
+                SupportedPvPContext.WolvesDen,
+                wolvesDenTestingEnabled: true,
+                combatPriorityMode: true,
+                eligibleHarmfulAction: false,
+                exactCurrentHardTarget: false,
+                alreadyPreservedForTapGeneration: false),
+            "an unrelated macro action never borrows the Den token");
     }
 
     public static void WolvesDenVisibleTargetShapeEligibilityIsExact()
@@ -223,6 +313,61 @@ internal static class SmartActionContextSelfTests
                 exactNativeHardTargetResolved: false,
                 explicitTargetMatchesNativeHardTarget: true),
             "an explicit comparison cannot pass when native target resolution failed");
+    }
+
+    public static void WolvesDenRuntimeTargetProofUsesIndependentExactSignals()
+    {
+        True(
+            SmartActionContextRules.HasExactWolvesDenDuelHostilityProof(
+                hostileFlag: true,
+                exactNativeDuelOpponent: false),
+            "the exact hostile flag remains sufficient");
+        True(
+            SmartActionContextRules.HasExactWolvesDenDuelHostilityProof(
+                hostileFlag: false,
+                exactNativeDuelOpponent: true),
+            "the exact native duel opponent survives a stale hostile flag");
+        False(
+            SmartActionContextRules.HasExactWolvesDenDuelHostilityProof(
+                hostileFlag: false,
+                exactNativeDuelOpponent: false),
+            "an unrelated non-hostile selected player remains rejected");
+
+        True(
+            SmartActionContextRules.HasCanonicalNativeTargetIdentity(
+                objectLookupPresent: true,
+                objectLookupMatches: true,
+                entityLookupPresent: false,
+                entityLookupMatches: false),
+            "one exact object-ID lookup is sufficient");
+        True(
+            SmartActionContextRules.HasCanonicalNativeTargetIdentity(
+                objectLookupPresent: false,
+                objectLookupMatches: false,
+                entityLookupPresent: true,
+                entityLookupMatches: true),
+            "one exact entity-ID lookup is sufficient");
+        True(
+            SmartActionContextRules.HasCanonicalNativeTargetIdentity(
+                objectLookupPresent: true,
+                objectLookupMatches: true,
+                entityLookupPresent: true,
+                entityLookupMatches: true),
+            "two agreeing exact indexes are sufficient");
+        False(
+            SmartActionContextRules.HasCanonicalNativeTargetIdentity(
+                objectLookupPresent: true,
+                objectLookupMatches: true,
+                entityLookupPresent: true,
+                entityLookupMatches: false),
+            "two present but disagreeing indexes fail closed");
+        False(
+            SmartActionContextRules.HasCanonicalNativeTargetIdentity(
+                objectLookupPresent: false,
+                objectLookupMatches: false,
+                entityLookupPresent: false,
+                entityLookupMatches: false),
+            "no canonical lookup never proves a target");
     }
 
     public static void WolvesDenCastsKeepTheExactSelectedTargetFallback()
