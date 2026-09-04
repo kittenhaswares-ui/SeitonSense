@@ -120,7 +120,9 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
                 interop,
                 GetHotbarInputSettings,
                 OnCertifiedPhysicalPress,
-                OnUnconsumedInjectedRepeat);
+                OnUnconsumedInjectedRepeat,
+                () => !condition[ConditionFlag.BeingMoved] &&
+                      nearAssist.IsOwnedSamuraiCastProtected());
             Volatile.Write(ref available, 1);
             SetLastEvent("Ready to start");
         }

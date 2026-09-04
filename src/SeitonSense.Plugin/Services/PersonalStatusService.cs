@@ -134,7 +134,8 @@ internal sealed class PersonalStatusService : IDisposable
         heldCastCancellation = new HeldCastCancellationService(
             log,
             nearAssist.IsExactLocalGuardActiveOrPropagating,
-            automaticRecoveryShotCastMetadata);
+            automaticRecoveryShotCastMetadata,
+            nearAssist.IsOwnedSamuraiCastProtected);
         emergencyPurify = new EmergencyPurifyProbe(
             log,
             nearAssist,

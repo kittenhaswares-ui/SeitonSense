@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.44.0.6
+
+- Added `/seitonsam`, a SAM-only one-shot Smart Action helper for one safe enemy
+  within 5 yalms. No selected target is required in Crystalline Conflict;
+  enabled Wolves' Den testing uses the exact visible `<t>`.
+- Targets with the local Samurai's Kuzushi or Debana, or exact Stun, are
+  preferred before nearest distance, low HP, team pressure, Guard cooldown, MP,
+  and stable enemy slot.
+- Ogi Namikiri and Tendo Setsugekka started by the exact `/seitonsam` request
+  cannot be interrupted by ordinary movement, Recuperate, or lower plugin
+  helpers. Purify remains immediate and a fresh manual Guard remains available.
+- Cast completion, native interruption, CC, forced movement, or context drift
+  releases the protection without reranking or changing the visible target.
+- Automated checks remain separate from live in-game confirmation.
+
 ## 0.44.0.5
 
 - Guard remains eligible for the timing/action buffer when its first request

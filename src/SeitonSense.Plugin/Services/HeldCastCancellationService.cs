@@ -17,6 +17,7 @@ internal enum HeldCastCancellationNativeStatus : byte
     RequestFaulted = 3,
     BlockedByOwnGuard = 4,
     BlockedByAutomaticRecoveryCastBoundary = 5,
+    BlockedByOwnedSamuraiCast = 6,
 }
 
 internal sealed record HeldCastCancellationSnapshot(
@@ -67,6 +68,7 @@ internal sealed unsafe class HeldCastCancellationService
         finalOwnGuardActiveOrPropagating;
     private readonly AutomaticRecoveryShotCastMetadataValidation
         automaticRecoveryShotCastMetadata;
+    private readonly Func<bool> ownedSamuraiCastProtected;
     private HeldCastCancellationState state = HeldCastCancellationState.Initial;
     private HeldCastCancellationSnapshot snapshot = HeldCastCancellationSnapshot.Initial;
     private HeldCastCancellationRequest? lastRequestedIntent;
@@ -80,7 +82,8 @@ internal sealed unsafe class HeldCastCancellationService
         Func<TargetPressureActorIdentity, bool>
             finalOwnGuardActiveOrPropagating,
         AutomaticRecoveryShotCastMetadataValidation
-            automaticRecoveryShotCastMetadata)
+            automaticRecoveryShotCastMetadata,
+        Func<bool> ownedSamuraiCastProtected)
     {
         this.log = log;
         this.finalOwnGuardActiveOrPropagating =
@@ -91,6 +94,8 @@ internal sealed unsafe class HeldCastCancellationService
             automaticRecoveryShotCastMetadata ??
             throw new ArgumentNullException(
                 nameof(automaticRecoveryShotCastMetadata));
+        this.ownedSamuraiCastProtected = ownedSamuraiCastProtected
+            ?? throw new ArgumentNullException(nameof(ownedSamuraiCastProtected));
     }
 
     internal HeldCastCancellationSnapshot Snapshot => Volatile.Read(ref snapshot);
@@ -189,6 +194,13 @@ internal sealed unsafe class HeldCastCancellationService
                 {
                     nativeStatus = HeldCastCancellationNativeStatus.NativeBoundaryUnavailable;
                     nativeFaultCount++;
+                }
+                else if (request!.Value.HelperKind !=
+                             HeldCastCancellationHelperKind.Purify &&
+                         ownedSamuraiCastProtected())
+                {
+                    nativeStatus = HeldCastCancellationNativeStatus
+                        .BlockedByOwnedSamuraiCast;
                 }
                 else if (request!.Value.HelperKind is
                              HeldCastCancellationHelperKind.Purify or
@@ -368,6 +380,8 @@ internal sealed unsafe class HeldCastCancellationService
                 "Native cast cancellation vetoed by a fresh exact own-Guard check",
             HeldCastCancellationNativeStatus.BlockedByAutomaticRecoveryCastBoundary =>
                 "Keyless helper cast cancellation vetoed by the final exact reviewed basic-shot boundary",
+            HeldCastCancellationNativeStatus.BlockedByOwnedSamuraiCast =>
+                "Helper cast cancellation vetoed while /seitonsam protects the current SAM cast",
             HeldCastCancellationNativeStatus.NativeBoundaryUnavailable =>
                 "Native cast-cancel boundary unavailable; no retry in this cast epoch",
             HeldCastCancellationNativeStatus.RequestFaulted =>

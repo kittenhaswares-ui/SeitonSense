@@ -244,7 +244,11 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private readonly SmartActionProtectionStatusCatalog smartActionProtectionStatuses;
     private readonly SmartActionGuardBypassCatalog smartActionGuardBypassActions;
     private readonly bool samuraiSmartActionCastsMetadataVerified;
+    private readonly bool samuraiKuzushiMetadataVerified;
     private readonly bool chitenMetadataVerified;
+    private readonly bool stunMetadataVerified;
+    private readonly bool debanaMetadataVerified;
+    private readonly uint debanaStatusId;
     private readonly bool wolvesDenStrikingDummyMetadataVerified;
     private readonly bool pvpSprintMetadataVerified;
     private readonly object tokenGate = new();
@@ -261,6 +265,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private SmartActionSafetyLeaseState smartActionSafetyLeaseState =
         SmartActionSafetyLeaseState.Initial;
     private long smartActionTapGeneration;
+    private long samuraiSmartActionTapGeneration;
     private long smartActionSafetyTapGeneration;
     private long smartActionFallbackTapGeneration;
     private ArmedNearHelpTarget? armedHelpTarget;
@@ -289,6 +294,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private long smartTargetFallbackCount;
     private int smartTargetLastEnemySlot;
     private string smartTargetLastEvent = "Not started";
+    private OwnedSamuraiCastProtection? ownedSamuraiCastProtection;
     private long helpArmedCount;
     private long helpRedirectedCount;
     private long helpFallbackCount;
@@ -321,7 +327,11 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         SmartActionProtectionStatusCatalog smartActionProtectionStatuses,
         SmartActionGuardBypassCatalog smartActionGuardBypassActions,
         bool samuraiSmartActionCastsMetadataVerified,
+        bool samuraiKuzushiMetadataVerified,
         bool chitenMetadataVerified,
+        bool stunMetadataVerified,
+        bool debanaMetadataVerified,
+        uint debanaStatusId,
         bool wolvesDenStrikingDummyMetadataVerified,
         IPluginLog log)
     {
@@ -340,7 +350,11 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         this.smartActionGuardBypassActions = smartActionGuardBypassActions;
         this.samuraiSmartActionCastsMetadataVerified =
             samuraiSmartActionCastsMetadataVerified;
+        this.samuraiKuzushiMetadataVerified = samuraiKuzushiMetadataVerified;
         this.chitenMetadataVerified = chitenMetadataVerified;
+        this.stunMetadataVerified = stunMetadataVerified;
+        this.debanaMetadataVerified = debanaMetadataVerified;
+        this.debanaStatusId = debanaStatusId;
         this.wolvesDenStrikingDummyMetadataVerified =
             wolvesDenStrikingDummyMetadataVerified;
         this.log = log;
@@ -1348,6 +1362,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     internal NearAssistArmResult ArmFarthestSmartActionTarget() =>
         ArmSmartActionTarget(SmartTargetRedirectMode.FarthestReachable, "Seiton Far");
 
+    internal NearAssistArmResult ArmSamuraiSmartActionTarget() =>
+        ArmSmartActionTarget(SmartTargetRedirectMode.SamuraiMelee, "Seiton SAM");
+
     private NearAssistArmResult ArmSmartActionTarget(
         SmartTargetRedirectMode selectionMode,
         string displayName)
@@ -1372,7 +1389,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                                    context,
                                    configuration.EnableWolvesDenTesting) &&
                                (context != SupportedPvPContext.WolvesDen ||
-                                selectionMode == SmartTargetRedirectMode.CombatPriority);
+                                selectionMode is SmartTargetRedirectMode.CombatPriority or
+                                    SmartTargetRedirectMode.SamuraiMelee);
         if (!contextSupported)
             return SmartTargetArmFailure(
                 NearAssistArmOutcome.NotCrystallineConflict,
@@ -1383,6 +1401,14 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             return SmartTargetArmFailure(
                 NearAssistArmOutcome.LocalPlayerUnavailable,
                 $"{displayName} arm ignored: local player unavailable");
+        if (selectionMode == SmartTargetRedirectMode.SamuraiMelee &&
+            (localPlayer!.ClassJob.IsValid != true ||
+             localPlayer.ClassJob.RowId != SamuraiSmartActionCastRules.SamuraiJobId))
+        {
+            return SmartTargetArmFailure(
+                NearAssistArmOutcome.Disabled,
+                "Seiton SAM arm ignored: local job is not Samurai");
+        }
 
         try
         {
@@ -1392,6 +1418,10 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 smartActionTapGeneration = smartActionTapGeneration == long.MaxValue
                     ? 1
                     : smartActionTapGeneration + 1;
+                samuraiSmartActionTapGeneration =
+                    selectionMode == SmartTargetRedirectMode.SamuraiMelee
+                        ? smartActionTapGeneration
+                        : 0;
                 var token = new ArmedSmartTarget(
                     clientState.TerritoryType,
                     localPlayer!.EntityId,
@@ -1707,6 +1737,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
         var bypassRedirect = internalRedirectBypassDepth > 0;
         var integratedRuntime = integratedInputRuntime;
+        if (ShouldBlockActionDuringOwnedSamuraiCast(thisPtr, actionType, actionId))
+            return false;
         // A ranked Smart Action target may be invisible to <t>. When its first
         // macro line cleanly arms Chase, suppress the following authored <t>
         // line by exact macro mode, action, and tap generation before that line
@@ -2071,8 +2103,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                     SmartActionContextRules.CanUseSameCallVisibleTargetFallback(
                         ResolveContext(),
                         configuration.EnableWolvesDenTesting,
-                        smartToken.SelectionMode ==
-                            SmartTargetRedirectMode.CombatPriority,
+                        smartToken.SelectionMode !=
+                            SmartTargetRedirectMode.FarthestReachable,
                         rewritten,
                         smartWinnerSelected,
                         IsExactCurrentHardTarget(targetId));
@@ -2108,7 +2140,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 lock (tokenGate)
                 {
                     smartActionFallbackTapGeneration =
-                        smartToken.SelectionMode == SmartTargetRedirectMode.CombatPriority &&
+                        smartToken.SelectionMode != SmartTargetRedirectMode.FarthestReachable &&
                         ((!rewritten && !smartWinnerSelected) ||
                          rewritten) &&
                         smartToken.TapGeneration > 0
@@ -2635,6 +2667,30 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             exactAutomaticScope.Consumed = true;
         }
 
+        var ownedSamuraiCastActionId = 0u;
+        var ownedSamuraiCastRequest = false;
+        if (samuraiSmartActionCastsMetadataVerified &&
+            (handlingSmartTargetToken is
+                 { SelectionMode: SmartTargetRedirectMode.SamuraiMelee } ||
+             (smartActionSafetyInspection == SmartActionSafetyInspectionOutcome.Safe &&
+              smartActionFallbackTapGeneration > 0 &&
+              smartActionFallbackTapGeneration == samuraiSmartActionTapGeneration)))
+        {
+            try
+            {
+                ownedSamuraiCastActionId = ResolveActionId(thisPtr, actionType, actionId);
+                ownedSamuraiCastRequest = SamuraiSmartActionCastRules.IsReviewedBaseCastPair(
+                    actionId,
+                    ownedSamuraiCastActionId);
+            }
+            catch (Exception exception)
+            {
+                LogFailure(
+                    exception,
+                    "Seiton Sense could not classify the exact /seitonsam cast boundary.");
+            }
+        }
+
         // Observe Guard only after every redirect, brake, replay, and final
         // helper veto has passed. Capture the exact native boundary so a clean
         // client rejection can retract only the just-created generation.
@@ -2678,6 +2734,13 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 integratedAttempt,
                 "Native action boundary threw; buffer observation retired");
             throw;
+        }
+
+        if (clientAccepted && ownedSamuraiCastRequest)
+        {
+            ArmOwnedSamuraiCastProtection(
+                ownedSamuraiCastActionId,
+                forwardedTargetId);
         }
 
         if (localGuardBoundary.IsObserved)
@@ -2905,8 +2968,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                     context,
                     configuration.EnableWolvesDenTesting) &&
                 (context != SupportedPvPContext.WolvesDen ||
-                 claim.SmartTarget.SelectionMode ==
-                     SmartTargetRedirectMode.CombatPriority) &&
+                 claim.SmartTarget.SelectionMode !=
+                     SmartTargetRedirectMode.FarthestReachable) &&
                 claim.SmartTarget.ExpiresAtMilliseconds > now &&
                 claim.SmartTarget.TerritoryId == territoryId &&
                 claim.SmartTarget.LocalEntityId == local.EntityId &&
@@ -3913,7 +3976,6 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 return false;
             }
         }
-
         if (!exactGuardRequest) return false;
 
         try
@@ -4004,6 +4066,162 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             autoGuardProtectionLastEvent = reason;
         }
     }
+
+    private void ArmOwnedSamuraiCastProtection(
+        uint resolvedCastActionId,
+        ulong targetGameObjectId)
+    {
+        var local = objectTable.LocalPlayer;
+        if (!SamuraiOgiCastProtectionRules.IsReviewedCastAction(resolvedCastActionId) ||
+            !IsLivePlayer(local) ||
+            local!.ClassJob.IsValid != true ||
+            local.ClassJob.RowId != SamuraiSmartActionCastRules.SamuraiJobId ||
+            !IsNetworkObjectId(targetGameObjectId))
+        {
+            return;
+        }
+
+        var now = Environment.TickCount64;
+        lock (tokenGate)
+        {
+            ownedSamuraiCastProtection = new OwnedSamuraiCastProtection(
+                clientState.TerritoryType,
+                local.GameObjectId,
+                local.EntityId,
+                resolvedCastActionId,
+                targetGameObjectId,
+                now,
+                now + SamuraiOgiCastProtectionRules.MaximumLeaseMilliseconds,
+                ObservedExactCast: false);
+        }
+    }
+
+    internal bool IsOwnedSamuraiCastProtected()
+    {
+        OwnedSamuraiCastProtection lease;
+        lock (tokenGate)
+        {
+            if (ownedSamuraiCastProtection is not { } current) return false;
+            lease = current;
+        }
+
+        try
+        {
+            var now = Environment.TickCount64;
+            var local = objectTable.LocalPlayer;
+            var actionManager = ActionManager.Instance();
+            var identityValid = now <= lease.ExpiresAtMilliseconds &&
+                                clientState.TerritoryType == lease.TerritoryId &&
+                                IsLivePlayer(local) &&
+                                local!.GameObjectId == lease.LocalGameObjectId &&
+                                local.EntityId == lease.LocalEntityId &&
+                                local.ClassJob.IsValid &&
+                                local.ClassJob.RowId ==
+                                SamuraiSmartActionCastRules.SamuraiJobId &&
+                                actionManager != null;
+            if (!identityValid || HasCastBreakingCrowdControl(local!))
+            {
+                ClearOwnedSamuraiCastProtection(lease);
+                return false;
+            }
+
+            if (local!.IsCasting)
+            {
+                var castActionId = actionManager->CastActionId;
+                var adjustedCastActionId = castActionId == 0
+                    ? 0
+                    : actionManager->GetAdjustedActionId(castActionId);
+                var exactCast = castActionId == lease.ResolvedCastActionId ||
+                                adjustedCastActionId == lease.ResolvedCastActionId;
+                if (exactCast)
+                {
+                    if (!lease.ObservedExactCast)
+                    {
+                        lock (tokenGate)
+                        {
+                            if (ownedSamuraiCastProtection == lease)
+                                ownedSamuraiCastProtection = lease with { ObservedExactCast = true };
+                        }
+                    }
+
+                    return true;
+                }
+
+                ClearOwnedSamuraiCastProtection(lease);
+                return false;
+            }
+
+            // Once the exact native cast was observed, its disappearance is
+            // authoritative. Release movement and helpers on that same poll.
+            if (lease.ObservedExactCast)
+            {
+                ClearOwnedSamuraiCastProtection(lease);
+                return false;
+            }
+
+            if (now - lease.AcceptedAtMilliseconds <=
+                SamuraiOgiCastProtectionRules.StartPropagationMilliseconds)
+            {
+                return true;
+            }
+
+            ClearOwnedSamuraiCastProtection(lease);
+            return false;
+        }
+        catch (Exception exception)
+        {
+            ClearOwnedSamuraiCastProtection(lease);
+            LogFailure(
+                exception,
+                "Seiton Sense /seitonsam cast protection failed open.");
+            return false;
+        }
+    }
+
+    private bool ShouldBlockActionDuringOwnedSamuraiCast(
+        ActionManager* actionManager,
+        ActionType actionType,
+        uint actionId)
+    {
+        if (!IsOwnedSamuraiCastProtected() || !IsSupportedActionType(actionType))
+            return false;
+
+        try
+        {
+            var resolvedActionId = ResolveActionId(actionManager, actionType, actionId);
+            if (resolvedActionId == HeldCastCancellationRules.AutomaticPurifyActionId)
+                return false;
+            if (resolvedActionId == EnemyCombatConstants.GuardActionId)
+                return exactAutomaticActionBoundaryScope is not null;
+
+            return true;
+        }
+        catch (Exception exception)
+        {
+            LogFailure(
+                exception,
+                "Seiton Sense blocked one ambiguous action while protecting an owned SAM cast.");
+            return true;
+        }
+    }
+
+    private void ClearOwnedSamuraiCastProtection(OwnedSamuraiCastProtection expected)
+    {
+        lock (tokenGate)
+        {
+            if (ownedSamuraiCastProtection == expected)
+                ownedSamuraiCastProtection = null;
+        }
+    }
+
+    private static bool HasCastBreakingCrowdControl(IPlayerCharacter player) =>
+        player.StatusList.Any(static status =>
+            (status.StatusId is EnemyCombatConstants.PvPStunStatusId or
+                EnemyCombatConstants.PvPSilenceStatusId or
+                EnemyCombatConstants.DeepFreezeStatusId or
+                EnemyCombatConstants.MiracleOfNatureStatusId) &&
+            float.IsFinite(status.RemainingTime) &&
+            status.RemainingTime > 0f);
 
     private bool IsLocalGuardActiveOrPropagating()
     {
@@ -4254,6 +4472,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
         var farthestReachable =
             token.SelectionMode == SmartTargetRedirectMode.FarthestReachable;
+        var samuraiMelee =
+            token.SelectionMode == SmartTargetRedirectMode.SamuraiMelee;
 
         var now = Environment.TickCount64;
         var localPlayer = objectTable.LocalPlayer;
@@ -4270,9 +4490,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                                    : SmartActionContextRules.IsSupported(
                                          context,
                                          configuration.EnableWolvesDenTesting) &&
-                                     (context != SupportedPvPContext.WolvesDen ||
-                                      token.SelectionMode ==
-                                          SmartTargetRedirectMode.CombatPriority)) &&
+                                      (context != SupportedPvPContext.WolvesDen ||
+                                       token.SelectionMode !=
+                                           SmartTargetRedirectMode.FarthestReachable)) &&
                                localIdentityValid;
         var supportedMode = heldActionSelection
             ? mode == ActionManager.UseActionMode.None
@@ -4307,7 +4527,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             SmartActionContextRules.CanUseExactVisibleTargetTestFallback(
                 context,
                 configuration.EnableWolvesDenTesting,
-                token.SelectionMode == SmartTargetRedirectMode.CombatPriority))
+                token.SelectionMode != SmartTargetRedirectMode.FarthestReachable))
         {
             reason = "Wolves' Den exact visible-target test fallback";
             return originalTargetId;
@@ -4390,7 +4610,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             }
 
             var edgeDistanceYalms = float.NaN;
-            if (farthestReachable &&
+            if ((farthestReachable || samuraiMelee) &&
                 !SmartTargetFarthestSelectionRules.TryMeasureEdgeDistance(
                     local.Position,
                     local.HitboxRadius,
@@ -4398,8 +4618,16 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                     enemy.HitboxRadius,
                     out edgeDistanceYalms))
             {
-                reason = "Seiton Far fallback: enemy distance snapshot ambiguous";
+                reason = samuraiMelee
+                    ? "Seiton SAM fallback: enemy distance snapshot ambiguous"
+                    : "Seiton Far fallback: enemy distance snapshot ambiguous";
                 return originalTargetId;
+            }
+            if (samuraiMelee &&
+                edgeDistanceYalms >
+                SamuraiSeitonTargetSelectionRules.MaximumEdgeDistanceYalms)
+            {
+                continue;
             }
 
             var targetObject = GetNativeObject(enemy);
@@ -4474,7 +4702,22 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             var runtimeCandidate = new SmartTargetRuntimeCandidate(
                 enemy,
                 selection,
-                edgeDistanceYalms);
+                edgeDistanceYalms,
+                samuraiMelee && samuraiKuzushiMetadataVerified
+                    ? CountExactCurrentStatus(
+                        enemy,
+                        SamuraiZantetsukenRules.KuzushiStatusId,
+                        local.EntityId)
+                    : 0,
+                samuraiMelee && debanaMetadataVerified
+                    ? CountExactCurrentStatus(enemy, debanaStatusId, local.EntityId)
+                    : 0,
+                samuraiMelee && stunMetadataVerified
+                    ? CountExactCurrentStatus(
+                        enemy,
+                        EnemyCombatConstants.PvPStunStatusId,
+                        requiredSourceEntityId: null)
+                    : 0);
             candidates.Add(runtimeCandidate);
             if (normalReachEligible)
                 normalReachCandidates.Add(runtimeCandidate);
@@ -4497,13 +4740,28 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                     .ToArray(),
                 localActor,
                 out var intent)
-            : SmartTargetSelectionRules.TryCreateIntent(
+            : samuraiMelee
+                ? SamuraiSeitonTargetSelectionRules.TryCreateIntent(
+                    resolvedActionId,
+                    normalReachCandidates
+                        .Select(static candidate =>
+                            new SamuraiSeitonTargetSelectionCandidate(
+                                candidate.Selection,
+                                candidate.EdgeDistanceYalms,
+                                candidate.OwnSourceKuzushiCount,
+                                candidate.OwnSourceDebanaCount,
+                                candidate.ExactStunCount))
+                        .ToArray(),
+                    localActor,
+                    out intent)
+                : SmartTargetSelectionRules.TryCreateIntent(
                 resolvedActionId,
                 selectionCandidates,
                 localActor,
                 out intent);
         if (!selectedIntent &&
             !farthestReachable &&
+            !samuraiMelee &&
             spatialChaseEnabled)
         {
             selectedIntent = SmartTargetSelectionRules
@@ -4519,7 +4777,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         {
             reason = farthestReachable
                 ? "Seiton Far fallback: no exact reachable safe candidate"
-                : "Smart Action fallback: no exact reachable candidate";
+                : samuraiMelee
+                    ? "Seiton SAM fallback: no exact safe target inside 5y"
+                    : "Smart Action fallback: no exact reachable candidate";
             return originalTargetId;
         }
 
@@ -4578,7 +4838,30 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 SeitonRangeRules.HasNativeRangeAndLineOfSight(finalRange),
             CallerProvenProtectionSafe = finalProtectionSafe,
         };
-        var frozenIntentStillValid = spatialChaseSelection
+        var finalEdgeDistanceYalms = selected.EdgeDistanceYalms;
+        if (samuraiMelee && currentEnemy is not null &&
+            !SmartTargetFarthestSelectionRules.TryMeasureEdgeDistance(
+                local.Position,
+                local.HitboxRadius,
+                currentEnemy.Position,
+                currentEnemy.HitboxRadius,
+                out finalEdgeDistanceYalms))
+        {
+            reason = "Seiton SAM fallback: final distance became ambiguous";
+            return originalTargetId;
+        }
+        var frozenIntentStillValid = samuraiMelee
+            ? SamuraiSeitonTargetSelectionRules.CanUseExactIntent(
+                intent,
+                new SamuraiSeitonTargetSelectionCandidate(
+                    finalCandidate,
+                    finalEdgeDistanceYalms,
+                    selected.OwnSourceKuzushiCount,
+                    selected.OwnSourceDebanaCount,
+                    selected.ExactStunCount),
+                localActor,
+                resolvedActionId)
+            : spatialChaseSelection
             ? SmartTargetSelectionRules.CanUseExactSpatialIntent(
                 intent,
                 finalCandidate,
@@ -4615,7 +4898,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         reason = farthestReachable
             ? $"Seiton Far redirected S{selectedSlot}, resolved={resolvedActionId}, " +
               $"distance={selected.EdgeDistanceYalms:F1}, range={finalRange}"
-            : spatialChaseSelection
+            : samuraiMelee
+                ? $"Seiton SAM redirected S{selectedSlot}, resolved={resolvedActionId}, distance={finalEdgeDistanceYalms:F1}"
+                : spatialChaseSelection
                 ? $"Smart Action froze S{selectedSlot} for Chase, resolved={resolvedActionId}, range={finalRange}"
                 : $"Smart Action redirected S{selectedSlot}, resolved={resolvedActionId}, range={finalRange}";
         return intent.Target.GameObjectId;
@@ -5220,9 +5505,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 shouldClear |= !SmartActionContextRules.IsSupported(
                     context,
                     configuration.EnableWolvesDenTesting);
-                shouldClear |= context == SupportedPvPContext.WolvesDen &&
-                               smartTargetToken.SelectionMode !=
-                                   SmartTargetRedirectMode.CombatPriority;
+                    shouldClear |= context == SupportedPvPContext.WolvesDen &&
+                                   smartTargetToken.SelectionMode ==
+                                   SmartTargetRedirectMode.FarthestReachable;
                 shouldClear |= !configuration.EnableSmartActionMacro;
                 shouldClear |= smartTargetToken.ExpiresAtMilliseconds <= Environment.TickCount64;
             }
@@ -6877,6 +7162,35 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         return false;
     }
 
+    private static int CountExactCurrentStatus(
+        IPlayerCharacter player,
+        uint statusId,
+        uint? requiredSourceEntityId)
+    {
+        if (statusId == 0 ||
+            requiredSourceEntityId is 0 or 0xE0000000 or uint.MaxValue)
+        {
+            return -1;
+        }
+
+        var count = 0;
+        foreach (var status in player.StatusList)
+        {
+            if (status.StatusId != statusId ||
+                requiredSourceEntityId is { } source && status.SourceId != source)
+            {
+                continue;
+            }
+
+            if (!float.IsFinite(status.RemainingTime) || status.RemainingTime <= 0f)
+                return -1;
+            count++;
+            if (count > 1) return -1;
+        }
+
+        return count;
+    }
+
     private static bool IsAlly(IPlayerCharacter player, HashSet<uint> partyEntityIds) =>
         partyEntityIds.Contains(player.EntityId) ||
         (player.StatusFlags & (StatusFlags.PartyMember | StatusFlags.AllianceMember)) != 0;
@@ -7064,6 +7378,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     {
         CombatPriority,
         FarthestReachable,
+        SamuraiMelee,
     }
 
     private readonly record struct ArmedSmartTarget(
@@ -7079,7 +7394,20 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private readonly record struct SmartTargetRuntimeCandidate(
         IPlayerCharacter Player,
         SmartTargetSelectionCandidate Selection,
-        float EdgeDistanceYalms);
+        float EdgeDistanceYalms,
+        int OwnSourceKuzushiCount = 0,
+        int OwnSourceDebanaCount = 0,
+        int ExactStunCount = 0);
+
+    private readonly record struct OwnedSamuraiCastProtection(
+        uint TerritoryId,
+        ulong LocalGameObjectId,
+        uint LocalEntityId,
+        uint ResolvedCastActionId,
+        ulong TargetGameObjectId,
+        long AcceptedAtMilliseconds,
+        long ExpiresAtMilliseconds,
+        bool ObservedExactCast);
 
     private readonly record struct ArmedNearHelpTarget(
         uint TerritoryId,

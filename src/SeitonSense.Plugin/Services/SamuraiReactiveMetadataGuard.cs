@@ -16,6 +16,8 @@ internal sealed record SamuraiReactiveMetadataValidation(
     bool ChitenVerified,
     bool ProtectionSignalPrerequisitesVerified,
     bool SmartActionCastsVerified,
+    bool DebanaVerified,
+    uint DebanaStatusId,
     bool WolvesDenStrikingDummyVerified)
 {
     internal bool CounterCcVerified =>
@@ -33,6 +35,8 @@ internal sealed record SamuraiReactiveMetadataValidation(
         false,
         false,
         false,
+        false,
+        0,
         false);
 }
 
@@ -239,6 +243,24 @@ internal static class SamuraiReactiveMetadataGuard
                 ogiNamikiriFollowUp &&
                 tendoSetsugekkaCarrier &&
                 tendoSetsugekka;
+            var debanaMatches = statuses
+                .Where(static status =>
+                    string.Equals(
+                        status.Name.ExtractText(),
+                        "Debana",
+                        StringComparison.Ordinal) &&
+                    status.RowId != 0 &&
+                    status.Icon != 0 &&
+                    status.StatusCategory == 2 &&
+                    !status.CanDispel &&
+                    !status.IsPermanent &&
+                    status.Description.ExtractText().Contains(
+                        "15%",
+                        StringComparison.Ordinal))
+                .Take(2)
+                .ToArray();
+            var debanaVerified = debanaMatches.Length == 1;
+            var debanaStatusId = debanaVerified ? debanaMatches[0].RowId : 0;
             var dummy = StrictWolvesDenStrikingDummyResolver.ValidateMetadata(
                 dataManager,
                 log);
@@ -270,6 +292,11 @@ internal static class SamuraiReactiveMetadataGuard
                 log.Warning(
                     "Seiton Sense kept Ogi Namikiri and Tendo Setsugekka on the normal visible-target cast path because reviewed SAM cast metadata drifted.");
             }
+            if (!debanaVerified)
+            {
+                log.Warning(
+                    "Seiton Sense disabled the own-Debana preference for /seitonsam because exact status metadata drifted.");
+            }
 
             return new SamuraiReactiveMetadataValidation(
                 soten,
@@ -280,6 +307,8 @@ internal static class SamuraiReactiveMetadataGuard
                 chiten,
                 protectionSignalPrerequisites,
                 smartActionCasts,
+                debanaVerified,
+                debanaStatusId,
                 dummy);
         }
         catch (Exception exception)

@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.44.0.5";
+    private const string CurrentReleaseVersion = "0.44.0.6";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -23,6 +23,7 @@ public sealed class Plugin : IDalamudPlugin
     private const string SmartActionCommand = "/smartaction";
     private const string SmartActionAliasCommand = "/ssaction";
     private const string SeitonFarCommand = "/seitonfar";
+    private const string SeitonSamCommand = "/seitonsam";
     private const string AutoSeitonCommand = "/autoseiton";
     private const string NearHelpCommand = "/nearhelp";
     private const string NearHelpAliasCommand = "/sshelp";
@@ -77,6 +78,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly bool smartActionCommandRegistered;
     private readonly bool smartActionAliasRegistered;
     private readonly bool seitonFarCommandRegistered;
+    private readonly bool seitonSamCommandRegistered;
     private readonly bool autoSeitonCommandRegistered;
     private readonly bool nearHelpCommandRegistered;
     private readonly bool nearHelpAliasRegistered;
@@ -242,7 +244,11 @@ public sealed class Plugin : IDalamudPlugin
             metadata.SmartActionProtectionStatuses,
             metadata.SmartActionGuardBypassActions,
             samuraiReactiveMetadata.SmartActionCastsVerified,
+            samuraiReactiveMetadata.KuzushiVerified,
             samuraiReactiveMetadata.ChitenVerified,
+            metadata.AllyRescueStatusesVerified,
+            samuraiReactiveMetadata.DebanaVerified,
+            samuraiReactiveMetadata.DebanaStatusId,
             samuraiReactiveMetadata.WolvesDenStrikingDummyVerified,
             log);
         smartTabTargeting = new SmartTabTargetingService(
@@ -462,9 +468,9 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Guard can still use the action buffer when the first press does not land.",
-                "Buffer and Turbo repeats can no longer press Guard again while it is active or still appearing.",
-                "Far Help now always chooses the farthest reachable ally, regardless of healer, job, or nearby enemies.",
+                "New /seitonsam chooses one safe SAM target within 5 yalms; no selected target is needed in CC.",
+                "Own Kuzushi or Debana and Stun are preferred before distance and the normal Smart Action signals.",
+                "Ogi and Tendo casts started by /seitonsam ignore normal movement and helper cancellation; Purify and manual Guard still work.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
@@ -610,6 +616,21 @@ public sealed class Plugin : IDalamudPlugin
             log.Warning("/seitonfar is already owned by another plugin.");
             chatGui.PrintError(
                 "[Seiton Sense] /seitonfar is owned by another plugin. Disable the conflicting plugin and reload.");
+        }
+
+        seitonSamCommandRegistered = commandManager.AddHandler(
+            SeitonSamCommand,
+            new CommandInfo(OnSeitonSamCommand)
+            {
+                AllowedInMacros = true,
+                HelpMessage =
+                    "SAM-only 5y nearest/vulnerable Smart Action redirect with protected Ogi/Tendo casting.",
+            });
+        if (!seitonSamCommandRegistered)
+        {
+            log.Warning("/seitonsam is already owned by another plugin.");
+            chatGui.PrintError(
+                "[Seiton Sense] /seitonsam is owned by another plugin. Disable the conflicting plugin and reload.");
         }
 
         autoSeitonCommandRegistered = commandManager.AddHandler(
@@ -810,6 +831,7 @@ public sealed class Plugin : IDalamudPlugin
         if (smartActionCommandRegistered) Safe(() => commandManager.RemoveHandler(SmartActionCommand));
         if (smartActionAliasRegistered) Safe(() => commandManager.RemoveHandler(SmartActionAliasCommand));
         if (seitonFarCommandRegistered) Safe(() => commandManager.RemoveHandler(SeitonFarCommand));
+        if (seitonSamCommandRegistered) Safe(() => commandManager.RemoveHandler(SeitonSamCommand));
         if (autoSeitonCommandRegistered) Safe(() => commandManager.RemoveHandler(AutoSeitonCommand));
         if (nearHelpCommandRegistered) Safe(() => commandManager.RemoveHandler(NearHelpCommand));
         if (nearHelpAliasRegistered) Safe(() => commandManager.RemoveHandler(NearHelpAliasCommand));
@@ -860,6 +882,7 @@ public sealed class Plugin : IDalamudPlugin
         if (smartActionCommandRegistered) commandManager.RemoveHandler(SmartActionCommand);
         if (smartActionAliasRegistered) commandManager.RemoveHandler(SmartActionAliasCommand);
         if (seitonFarCommandRegistered) commandManager.RemoveHandler(SeitonFarCommand);
+        if (seitonSamCommandRegistered) commandManager.RemoveHandler(SeitonSamCommand);
         if (autoSeitonCommandRegistered) commandManager.RemoveHandler(AutoSeitonCommand);
         if (nearHelpCommandRegistered) commandManager.RemoveHandler(NearHelpCommand);
         if (nearHelpAliasRegistered) commandManager.RemoveHandler(NearHelpAliasCommand);
@@ -1541,6 +1564,7 @@ public sealed class Plugin : IDalamudPlugin
             "/smarttab and /sstarget [on|off|toggle] control the melee override for FFXIV's normal forward targeting. " +
             "/smartaction and /ssaction optionally arm one harmful-action target redirect. " +
             "/seitonfar arms the same safe one-shot redirect but chooses the farthest reachable enemy. " +
+            "/seitonsam chooses one safe enemy within 5y for SAM and protects an owned Ogi/Tendo cast from movement. " +
             "/nearhelp and /sshelp arm the one-shot survival-target helper (pressure/self when the action allows). " +
             "/farhelp and /ssfar arm the one-shot farthest friendly movement helper. " +
             "/panicshu immediately makes one NIN-only Shukuchi attempt 19.5 yalms straight ahead in CC or enabled " +
@@ -1680,6 +1704,20 @@ public sealed class Plugin : IDalamudPlugin
         catch (Exception exception)
         {
             log.Error(exception, "Seiton Sense farthest Smart Action command failed closed.");
+        }
+    }
+
+    private void OnSeitonSamCommand(string _, string arguments)
+    {
+        if (!string.IsNullOrWhiteSpace(arguments)) return;
+
+        try
+        {
+            nearAssist.ArmSamuraiSmartActionTarget();
+        }
+        catch (Exception exception)
+        {
+            log.Error(exception, "Seiton Sense Samurai Smart Action command failed closed.");
         }
     }
 

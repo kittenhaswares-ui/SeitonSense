@@ -159,6 +159,7 @@ internal sealed unsafe class IntegratedHotbarInputSource : IDisposable
     private readonly Func<IntegratedHotbarInputSettings> getSettings;
     private readonly Action<IntegratedHotbarPress> onPhysicalPress;
     private readonly Action<IntegratedHotbarActivation> onUnconsumedInjectedRepeat;
+    private readonly Func<bool> shouldSuppressSamuraiCastMovement;
     private readonly object gate = new();
     private readonly PendingActivation?[] pendingActivations =
         new PendingActivation?[IntegratedHotbarBinding.BindingCount];
@@ -190,13 +191,16 @@ internal sealed unsafe class IntegratedHotbarInputSource : IDisposable
         IGameInteropProvider interop,
         Func<IntegratedHotbarInputSettings> getSettings,
         Action<IntegratedHotbarPress> onPhysicalPress,
-        Action<IntegratedHotbarActivation> onUnconsumedInjectedRepeat)
+        Action<IntegratedHotbarActivation> onUnconsumedInjectedRepeat,
+        Func<bool> shouldSuppressSamuraiCastMovement)
     {
         ArgumentNullException.ThrowIfNull(interop);
         this.getSettings = getSettings ?? throw new ArgumentNullException(nameof(getSettings));
         this.onPhysicalPress = onPhysicalPress ?? throw new ArgumentNullException(nameof(onPhysicalPress));
         this.onUnconsumedInjectedRepeat = onUnconsumedInjectedRepeat
             ?? throw new ArgumentNullException(nameof(onUnconsumedInjectedRepeat));
+        this.shouldSuppressSamuraiCastMovement = shouldSuppressSamuraiCastMovement
+            ?? throw new ArgumentNullException(nameof(shouldSuppressSamuraiCastMovement));
 
         pressedHook = interop.HookFromAddress<InputData.Delegates.IsInputIdPressed>(
             InputData.MemberFunctionPointers.IsInputIdPressed,
@@ -485,6 +489,18 @@ internal sealed unsafe class IntegratedHotbarInputSource : IDisposable
         // Native input is always evaluated first and remains the fallback for
         // every unsupported binding, unavailable raw state or adapter failure.
         var nativePressed = pressedHook.Original(inputData, inputId);
+        if (!disposed &&
+            SamuraiOgiCastProtectionRules.IsMovementInputId((uint)inputId))
+        {
+            try
+            {
+                if (shouldSuppressSamuraiCastMovement()) return false;
+            }
+            catch
+            {
+                Interlocked.Increment(ref failedOpenEvents);
+            }
+        }
         if (disposed
             || activeScanSource != this
             || inputData == null

@@ -602,7 +602,8 @@ Assert-Literals $integratedInputRuntime @(
     'new IntegratedHotbarInputSource(',
     'GetHotbarInputSettings,',
     'OnCertifiedPhysicalPress,',
-    'OnUnconsumedInjectedRepeat)',
+    'OnUnconsumedInjectedRepeat,',
+    'nearAssist.IsOwnedSamuraiCastProtected())',
     'var replayIntent = new IntegratedBufferedReplayIntent(',
     'request.ResolvedActionId,',
     'request.RequiresSmartActionProtectionRecheck);',
@@ -881,7 +882,7 @@ if ($normalizedNearAssistForIntegratedInput -notmatch 'TryConsumeCastedMacroRedi
 }
 
 # Pin all retained buffer/repeat/compatibility suites and the exact current
-# 640-test registry.
+# 646-test registry.
 $integratedCoreTestProgram = Read-RequiredSource (Join-Path $coreSelfTestRoot 'Program.cs') 'Integrated Core self-test registry'
 $smartActionBufferSelfTests = Read-RequiredSource $smartActionBufferSelfTestsPath 'Smart action-buffer self-tests'
 $logicalHotbarRepeatSelfTests = Read-RequiredSource $logicalHotbarRepeatSelfTestsPath 'Logical hotbar repeat self-tests'
@@ -905,11 +906,11 @@ Assert-Literals $smartActionBufferCompatibilitySelfTests @(
     'reActionOwnsExactAction: false)',
     'reActionOwnsExactAction: true)'
 ) 'Generic-buffer compatibility self-tests'
-if ($staticIntegratedTestCount -ne 599 -or
+if ($staticIntegratedTestCount -ne 605 -or
     $logicalRepeatTestCount -ne 31 -or
     $physicalLatchTestCount -ne 6 -or
     $repeatPolicyTestCount -ne 4 -or
-    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 640 -or
+    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 646 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches($smartActionBufferSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferCompatibilitySelfTests\.\w+').Count -ne 6 -or
@@ -919,7 +920,7 @@ if ($staticIntegratedTestCount -ne 599 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatPolicySelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartSprintSelfTests\.\w+').Count -ne 6 -or
     [regex]::Matches((Read-RequiredSource $smartSprintSelfTestsPath 'Smart Sprint self-tests'), '\bpublic static void\s+\w+\s*\(').Count -ne 6) {
-    throw 'Schema 53 must retain seven smart-buffer tests, six compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, six Smart Sprint tests, four Player Stats tests, and the exact 640-test combined Core registry.'
+    throw 'Schema 53 must retain seven smart-buffer tests, six compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, six Smart Sprint tests, four Player Stats tests, and the exact 646-test combined Core registry.'
 }
 
 # Pin the two schema-42 visual overlays and the fail-closed local map-result
@@ -1614,6 +1615,7 @@ Assert-Literals $pluginSource @(
     'SmartActionCommand = "/smartaction"',
     'SmartActionAliasCommand = "/ssaction"',
     'SeitonFarCommand = "/seitonfar"',
+    'SeitonSamCommand = "/seitonsam"',
     'new SmartTabTargetingService(',
     'smartTabTargeting.Start()',
     'smartTabCommandRegistered = commandManager.AddHandler(',
@@ -1626,13 +1628,35 @@ Assert-Literals $pluginSource @(
     'seitonFarCommandRegistered = commandManager.AddHandler(',
     'new CommandInfo(OnSeitonFarCommand)',
     'nearAssist.ArmFarthestSmartActionTarget()',
+    'seitonSamCommandRegistered = commandManager.AddHandler(',
+    'new CommandInfo(OnSeitonSamCommand)',
+    'nearAssist.ArmSamuraiSmartActionTarget()',
     'if (smartTabCommandRegistered) commandManager.RemoveHandler(SmartTabCommand)',
     'if (smartTabAliasRegistered) commandManager.RemoveHandler(SmartTabAliasCommand)',
     'if (smartActionCommandRegistered) commandManager.RemoveHandler(SmartActionCommand)',
     'if (smartActionAliasRegistered) commandManager.RemoveHandler(SmartActionAliasCommand)',
     'if (seitonFarCommandRegistered) commandManager.RemoveHandler(SeitonFarCommand)',
+    'if (seitonSamCommandRegistered) commandManager.RemoveHandler(SeitonSamCommand)',
     'smartTabTargeting.Dispose()'
-) 'Separate Smart Tab toggle plus Smart Action and Seiton Far macro command ownership and lifecycle'
+) 'Separate Smart Tab toggle plus Smart Action, Seiton Far, and Seiton SAM command ownership and lifecycle'
+
+$samuraiOgiCastProtectionRules = Read-RequiredSource (Join-Path $coreRoot 'SamuraiOgiCastProtectionRules.cs') 'SAM Ogi cast-protection rules'
+$samuraiSeitonTargetSelectionRules = Read-RequiredSource (Join-Path $coreRoot 'SamuraiSeitonTargetSelectionRules.cs') 'SAM Seiton target-selection rules'
+Assert-Literals $samuraiOgiCastProtectionRules @(
+    'StartPropagationMilliseconds = 750',
+    'MaximumLeaseMilliseconds = 4_000',
+    'SamuraiSmartActionCastRules.OgiNamikiriActionId',
+    'SamuraiSmartActionCastRules.TendoSetsugekkaActionId',
+    'inputId is >= 321 and <= 327',
+    '>= 671 and <= 674'
+) 'Bounded /seitonsam cast and movement identities'
+Assert-Literals $samuraiSeitonTargetSelectionRules @(
+    'MaximumEdgeDistanceYalms = 5f',
+    'OwnSourceKuzushiCount',
+    'OwnSourceDebanaCount',
+    'ExactStunCount',
+    'SmartTargetSelectionRules.IsEligible'
+) 'Five-yalm /seitonsam target ranking and shared Smart Action safety'
 if ($pluginSource -match 'lowest-health ally helper') {
     throw 'Near Help command copy must describe survival targeting with bounded pressure and action-gated self eligibility.'
 }
@@ -1994,13 +2018,13 @@ $smartActionConsumeMethod = [regex]::Match(
 if ($normalizedNearAssistForSmartAction -notmatch 'internal NearAssistArmResult ArmSmartActionTarget\(\).*?configuration\.EnableSmartActionMacro' -or
     $normalizedNearAssistForSmartAction -notmatch 'internal NearAssistArmResult ArmSmartActionTarget\(\) => ArmSmartActionTarget\(SmartTargetRedirectMode\.CombatPriority, "Smart Action"\);' -or
     $normalizedNearAssistForSmartAction -notmatch 'internal NearAssistArmResult ArmFarthestSmartActionTarget\(\) => ArmSmartActionTarget\(SmartTargetRedirectMode\.FarthestReachable, "Seiton Far"\);' -or
-    $normalizedNearAssistForSmartAction -notmatch 'var context = ResolveContext\(\); var contextSupported = SmartActionContextRules\.IsSupported\( context, configuration\.EnableWolvesDenTesting\) && \(context != SupportedPvPContext\.WolvesDen \|\| selectionMode == SmartTargetRedirectMode\.CombatPriority\);' -or
-    $normalizedNearAssistForSmartAction -notmatch 'var supportedContext = configuration\.Enabled && \(heldActionSelection \|\| configuration\.EnableSmartActionMacro\) && clientState\.TerritoryType == token\.TerritoryId && \(heldActionSelection \? context == SupportedPvPContext\.CrystallineConflict : SmartActionContextRules\.IsSupported\( context, configuration\.EnableWolvesDenTesting\) && \(context != SupportedPvPContext\.WolvesDen \|\| token\.SelectionMode == SmartTargetRedirectMode\.CombatPriority\)\) && localIdentityValid;' -or
-    $normalizedNearAssistForSmartAction -notmatch 'SmartActionContextRules\.CanUseExactVisibleTargetTestFallback\( context, configuration\.EnableWolvesDenTesting, token\.SelectionMode == SmartTargetRedirectMode\.CombatPriority\).*?return originalTargetId;' -or
-    $normalizedNearAssistForSmartAction -notmatch 'SmartActionContextRules\.CanUseSameCallVisibleTargetFallback\( ResolveContext\(\), configuration\.EnableWolvesDenTesting, smartToken\.SelectionMode == SmartTargetRedirectMode\.CombatPriority, rewritten, smartWinnerSelected, IsExactCurrentHardTarget\(targetId\)\)' -or
-    $normalizedNearAssistForSmartAction -notmatch 'if \(armedSmartTarget is \{ \} smartTargetToken\).*?SmartActionContextRules\.IsSupported\( context, configuration\.EnableWolvesDenTesting\).*?smartTargetToken\.SelectionMode != SmartTargetRedirectMode\.CombatPriority;.*?shouldClear \|= !configuration\.EnableSmartActionMacro;' -or
+    $normalizedNearAssistForSmartAction -notmatch 'var context = ResolveContext\(\); var contextSupported = SmartActionContextRules\.IsSupported\( context, configuration\.EnableWolvesDenTesting\) && \(context != SupportedPvPContext\.WolvesDen \|\| selectionMode is SmartTargetRedirectMode\.CombatPriority or SmartTargetRedirectMode\.SamuraiMelee\);' -or
+    $normalizedNearAssistForSmartAction -notmatch 'var supportedContext = configuration\.Enabled && \(heldActionSelection \|\| configuration\.EnableSmartActionMacro\) && clientState\.TerritoryType == token\.TerritoryId && \(heldActionSelection \? context == SupportedPvPContext\.CrystallineConflict : SmartActionContextRules\.IsSupported\( context, configuration\.EnableWolvesDenTesting\) && \(context != SupportedPvPContext\.WolvesDen \|\| token\.SelectionMode != SmartTargetRedirectMode\.FarthestReachable\)\) && localIdentityValid;' -or
+    $normalizedNearAssistForSmartAction -notmatch 'SmartActionContextRules\.CanUseExactVisibleTargetTestFallback\( context, configuration\.EnableWolvesDenTesting, token\.SelectionMode != SmartTargetRedirectMode\.FarthestReachable\).*?return originalTargetId;' -or
+    $normalizedNearAssistForSmartAction -notmatch 'SmartActionContextRules\.CanUseSameCallVisibleTargetFallback\( ResolveContext\(\), configuration\.EnableWolvesDenTesting, smartToken\.SelectionMode != SmartTargetRedirectMode\.FarthestReachable, rewritten, smartWinnerSelected, IsExactCurrentHardTarget\(targetId\)\)' -or
+    $normalizedNearAssistForSmartAction -notmatch 'if \(armedSmartTarget is \{ \} smartTargetToken\).*?SmartActionContextRules\.IsSupported\( context, configuration\.EnableWolvesDenTesting\).*?smartTargetToken\.SelectionMode == SmartTargetRedirectMode\.FarthestReachable;.*?shouldClear \|= !configuration\.EnableSmartActionMacro;' -or
     $normalizedNearAssistForSmartAction -match 'internal NearAssistArmResult ArmSmartTarget\(') {
-    throw 'The one-shot harmful-action redirect must remain separately gated from Smart Tab: ranked S-slot selection is exact-CC-only, while Wolves Den is an opt-in Combat Priority exact-visible-target test path and /seitonfar stays closed there.'
+    throw 'The one-shot harmful-action redirect must remain separately gated from Smart Tab: ranked S-slot selection is exact-CC-only, while Wolves Den is an opt-in Combat Priority or Seiton SAM exact-visible-target test path and /seitonfar stays closed there.'
 }
 if (!$smartActionArmMethod.Success -or
     $smartActionArmMethod.Value -notmatch 'new ArmedSmartTarget\( clientState\.TerritoryType, localPlayer!\.EntityId, localPlayer\.GameObjectId, now \+ TokenLifetimeMilliseconds\)' -or
@@ -2205,20 +2229,20 @@ Assert-Literals $smartActionTestProgram @(
 if ($smartTargetFarthestSelectionRules -match '\b(?:ActionManager|IPlayerCharacter|ObjectTable|UseAction|SetTarget|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b') {
     throw 'Seiton Far ranking must remain pure value-only Core code with no action, target, actor-table, time, or thread boundary.'
 }
-if ($normalizedSmartActionRuntime -notmatch 'private enum SmartTargetRedirectMode : byte \{ CombatPriority, FarthestReachable, \}' -or
+if ($normalizedSmartActionRuntime -notmatch 'private enum SmartTargetRedirectMode : byte \{ CombatPriority, FarthestReachable, SamuraiMelee, \}' -or
     $normalizedSmartActionRuntime -notmatch 'var farthestReachable = token\.SelectionMode == SmartTargetRedirectMode\.FarthestReachable;' -or
     $normalizedSmartActionRuntime -notmatch 'if \(!farthestReachable && !TryResolveSmartTargetReachTier\(local, enemy, out reachTier\)\)' -or
     $normalizedSmartActionRuntime -notmatch 'SmartTargetFarthestSelectionRules\.TryMeasureEdgeDistance\( local\.Position, local\.HitboxRadius, enemy\.Position, enemy\.HitboxRadius, out edgeDistanceYalms\)' -or
     $normalizedSmartActionRuntime -notmatch 'ActionManager\.GetActionInRangeOrLoS\(resolvedActionId, sourceObject, targetObject\)' -or
-    $normalizedSmartActionRuntime -notmatch 'SmartTargetFarthestSelectionRules\.TryCreateIntent\( resolvedActionId, normalReachCandidates .*?SmartTargetFarthestCandidate\( candidate\.Selection, candidate\.EdgeDistanceYalms\).*?localActor, out var intent\)' -or
+    $normalizedSmartActionRuntime -notmatch 'SmartTargetFarthestSelectionRules\.TryCreateIntent\( resolvedActionId, normalReachCandidates .*?SmartTargetFarthestCandidate\( candidate\.Selection, candidate\.EdgeDistanceYalms\).*?localActor, out var intent\).*?: samuraiMelee.*?: SmartTargetSelectionRules\.TryCreateIntent\(' -or
     $normalizedSmartActionRuntime -notmatch 'Revalidate the frozen tuple immediately before forwarding the sole.*?incoming native call\. Never rerun ranking or select a second actor\.' -or
     $normalizedSmartActionRuntime -notmatch 'SmartTargetSelectionRules\.CanUseExactIntent\( intent, finalCandidate, localActor, resolvedActionId\)') {
     throw 'Seiton Far must change only ranking on the shared one-shot Smart Action token while retaining exact CC, protection, action-native range/LoS, frozen-actor revalidation, and fallback behavior.'
 }
 if ($normalizedSmartActionRuntime -notmatch 'var spatialChaseEnabled = !heldActionSelection && token\.SelectionMode == SmartTargetRedirectMode\.CombatPriority && configuration\.EnableSmartActionBuffer && configuration\.EnableHoldToLandChaseBuffer && HeldChaseBufferWindowRules\.Normalize\( configuration\.TapToLandReservationMilliseconds\) > 0 && integratedInputRuntime\?\.ActionBuffer\.IsEligibleSmartActionChaseAction\( actionType, resolvedActionId\) == true;' -or
     $normalizedSmartActionRuntime -notmatch 'if \(!farthestReachable && !TryResolveSmartTargetReachTier\(local, enemy, out reachTier\)\) \{ normalReachEligible = false; if \(!spatialChaseEnabled \|\| !TryResolveSmartTargetChaseReachTier\( local, enemy, out reachTier\)\) \{ continue; \} \}' -or
-    $normalizedSmartActionRuntime -notmatch 'var selectionCandidates = normalReachCandidates.*?var spatialSelectionCandidates = candidates.*?var selectedIntent = farthestReachable.*?: SmartTargetSelectionRules\.TryCreateIntent\( resolvedActionId, selectionCandidates, localActor, out intent\); if \(!selectedIntent && !farthestReachable && spatialChaseEnabled\).*?TryCreateSpatialIntentAfterReachableMiss\( resolvedActionId, selectionCandidates, spatialSelectionCandidates, localActor, out intent\); spatialChaseSelection = selectedIntent;' -or
-    $normalizedSmartActionRuntime -notmatch 'var frozenIntentStillValid = spatialChaseSelection \? SmartTargetSelectionRules\.CanUseExactSpatialIntent\( intent, finalCandidate, localActor, resolvedActionId\) : SmartTargetSelectionRules\.CanUseExactIntent\( intent, finalCandidate, localActor, resolvedActionId\);.*?if \(!frozenIntentStillValid && !spatialChaseSelection && spatialChaseEnabled && SmartTargetSelectionRules\.CanUseExactSpatialIntent\( intent, finalCandidate, localActor, resolvedActionId\)\).*?spatialChaseSelection = true; frozenIntentStillValid = true;.*?return intent\.Target\.GameObjectId;') {
+    $normalizedSmartActionRuntime -notmatch 'var selectionCandidates = normalReachCandidates.*?var spatialSelectionCandidates = candidates.*?var selectedIntent = farthestReachable.*?: samuraiMelee.*?: SmartTargetSelectionRules\.TryCreateIntent\( resolvedActionId, selectionCandidates, localActor, out intent\); if \(!selectedIntent && !farthestReachable && !samuraiMelee && spatialChaseEnabled\).*?TryCreateSpatialIntentAfterReachableMiss\( resolvedActionId, selectionCandidates, spatialSelectionCandidates, localActor, out intent\); spatialChaseSelection = selectedIntent;' -or
+    $normalizedSmartActionRuntime -notmatch 'var frozenIntentStillValid = samuraiMelee.*?: spatialChaseSelection \? SmartTargetSelectionRules\.CanUseExactSpatialIntent\( intent, finalCandidate, localActor, resolvedActionId\) : SmartTargetSelectionRules\.CanUseExactIntent\( intent, finalCandidate, localActor, resolvedActionId\);.*?if \(!frozenIntentStillValid && !spatialChaseSelection && spatialChaseEnabled && SmartTargetSelectionRules\.CanUseExactSpatialIntent\( intent, finalCandidate, localActor, resolvedActionId\)\).*?spatialChaseSelection = true; frozenIntentStillValid = true;.*?return intent\.Target\.GameObjectId;') {
     throw 'CC Smart Action Chase must first rank reachable safe S1-S5 candidates; only after that view misses may it freeze one safe spatial action/actor tuple, revalidate that exact tuple without reranking, and leave /seitonfar reachable-only.'
 }
 Assert-Literals $smartActionSafetyLeaseRules @(
@@ -2368,7 +2392,7 @@ if ([regex]::Matches($normalizedSmartActionRuntime, 'SmartActionProtectionRules\
     $normalizedSmartActionRuntime -notmatch 'if \(ShouldVetoExactAutomaticSmartActionAtFinalBoundary\( actionType, actionId, forwardedTargetId, mode\)\) \{ return false; \}.*?var exactAutomaticScope = exactAutomaticActionBoundaryScope;' -or
     $normalizedSmartActionRuntime -notmatch 'private bool ShouldVetoExactAutomaticSmartActionAtFinalBoundary\(.*?scope\.Intent\.RequiresSmartActionProtectionRecheck.*?TryValidateExactHeldSmartActionTarget\( actionId, targetId, expectedSlot: 0, expectedTarget: default, out _, out _\).*?context != SupportedPvPContext\.WolvesDen.*?actionId != BardRepellingShotRules\.RepellingShotActionId.*?DarkKnightWolvesDenCurrentTargetResolver\.TryResolveExactCurrentHardTarget\(.*?IsExactCrowdControlUtilityTargetStatusSafe\(actionId, player\).*?protectionKind & ~SmartActionProtectionKind\.Invulnerability' -or
     $normalizedSmartActionRuntime -notmatch 'forwardedTargetId = TryResolveSmartTargetRedirect\( thisPtr, actionType, actionId, mode, targetId, smartToken, heldActionSelection: false, out var rewritten, out var smartWinnerSelected, out var selectedSlot, out var reason\);.*?useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId,' -or
-    $normalizedSmartActionRuntime -notmatch 'private ulong TryResolveSmartTargetRedirect\(.*?bool heldActionSelection, out bool rewritten, out bool smartWinnerSelected,.*?smartWinnerSelected = true;.*?var frozenIntentStillValid = spatialChaseSelection.*?if \(!frozenIntentStillValid\).*?rewritten = true; selectedSlot = intent\.EnemySlot;.*?return intent\.Target\.GameObjectId;' -or
+    $normalizedSmartActionRuntime -notmatch 'private ulong TryResolveSmartTargetRedirect\(.*?bool heldActionSelection, out bool rewritten, out bool smartWinnerSelected,.*?smartWinnerSelected = true;.*?var frozenIntentStillValid = samuraiMelee.*?if \(!frozenIntentStillValid\).*?rewritten = true; selectedSlot = intent\.EnemySlot;.*?return intent\.Target\.GameObjectId;' -or
     $normalizedSmartActionRuntime -notmatch 'private bool TryEvaluateExactSmartActionTargetProtection\(.*?if \(context == SupportedPvPContext\.CrystallineConflict\).*?exactMatches\.Length != 1.*?IsSmartActionProtectionSafe\(.*?canonicalTargetId = target\.Player\.GameObjectId;.*?SmartActionContextRules\.CanInspectExactVisibleTargetTestFallback\( context, configuration\.EnableWolvesDenTesting, combatPriorityMode: true, attackShape\).*?TryResolveExactCurrentHardTargetDirect\(.*?TryBuildWolvesDenSmartActionProtectionSnapshot\( localPlayer, wolvesTarget, targetGeometry, attackShape, protectionKind, out var wolvesProtectedActors\).*?IsSmartActionProtectionSafe\(' -or
     $normalizedSmartActionRuntime -notmatch 'private bool TryBuildWolvesDenSmartActionProtectionSnapshot\(.*?SmartActionProtectionRules\.RequiresCompleteHostileSnapshot\(attackShape\).*?player\.StatusFlags & StatusFlags\.Hostile.*?status\.StatusId != SmartActionProtectionRules\.ChitenStatusId.*?nextSyntheticSlot > EnemySlotRules\.LastSlot.*?protectedActors = protections\.ToArray\(\); return true;' -or
     $normalizedSmartActionRuntime -notmatch '\$"\{displayName\} arm failed closed: protection metadata unverified"') {
@@ -5332,8 +5356,8 @@ if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
     [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 11 -or
     [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 11 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 599) {
-    throw 'All four shared protection-end tests, all eleven SAM reactive tests, four Player Stats tests, and the exact 599-test static Core registry before the appended repeat-policy suites must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 605) {
+    throw 'All four shared protection-end tests, all eleven SAM reactive tests, four Player Stats tests, and the exact 605-test static Core registry before the appended repeat-policy suites must remain pinned.'
 }
 Assert-Literals $samuraiReactiveRuntimeRules @(
     'public static bool IsExactCurrentOwnSourceKuzushi(',
@@ -5949,7 +5973,7 @@ Assert-Literals $heldCastCancellationForAstrologian @(
     'DefensiveUtilityProbe.HasActiveGuard(localPlayer)',
     'Native cast cancellation vetoed by a fresh exact own-Guard check'
 ) 'Recovery-priority exact Guard and lower-helper propagated-Guard veto immediately before held cast cancellation'
-if ($normalizedHeldCastCancellationForAstrologian -notmatch 'HeldCastCancellationService\( IPluginLog log, Func<TargetPressureActorIdentity, bool> finalOwnGuardActiveOrPropagating, AutomaticRecoveryShotCastMetadataValidation automaticRecoveryShotCastMetadata\).*?this\.finalOwnGuardActiveOrPropagating = finalOwnGuardActiveOrPropagating \?\? throw new ArgumentNullException' -or
+if ($normalizedHeldCastCancellationForAstrologian -notmatch 'HeldCastCancellationService\( IPluginLog log, Func<TargetPressureActorIdentity, bool> finalOwnGuardActiveOrPropagating, AutomaticRecoveryShotCastMetadataValidation automaticRecoveryShotCastMetadata, Func<bool> ownedSamuraiCastProtected\).*?this\.finalOwnGuardActiveOrPropagating = finalOwnGuardActiveOrPropagating \?\? throw new ArgumentNullException' -or
     $normalizedHeldCastCancellationForAstrologian -notmatch 'if \(decision\.ShouldInvokeNative\).*?request!\.Value\.HelperKind is HeldCastCancellationHelperKind\.Purify or HeldCastCancellationHelperKind\.SmartRecuperate \? DefensiveUtilityProbe\.HasActiveGuard\(localPlayer\) : finalOwnGuardActiveOrPropagating\( request\.Value\.LocalPlayer\).*?HeldCastCancellationNativeStatus\.BlockedByOwnGuard;.*?else if \(!AutomaticKeylessCastBoundaryStillValid\(.*?BlockedByAutomaticRecoveryCastBoundary.*?else.*?uiState->Hotbar\.CancelCast\(\);.*?HeldCastCancellationNativeStatus\.Requested;' -or
     [regex]::Matches($heldCastCancellationForAstrologian, '\bCancelCast\s*\(').Count -ne 1) {
     throw 'Held cast cancellation must give Purify/Recuperate priority over a provisional Guard latch, retain propagated-Guard protection for lower helpers, and call the sole native CancelCast boundary only after its fresh veto passes.'
@@ -9415,7 +9439,7 @@ if ([regex]::Matches($nearAssist, '\bTryConsumeCastedMacroRedirect\s*\(').Count 
     $normalizedNearAssist -notmatch
         'if \(!IsLiveCastedMacroRedirectClaim\(claim\)\).*?TryConsumeCastedMacroRedirectClaim\( claim, CastedMacroRedirectDecision\.PassThroughStaleLifecycle\);.*?return CastedMacroRedirectDecision\.PassThroughStaleLifecycle;' -or
     $normalizedNearAssist -notmatch
-        'private bool IsLiveCastedMacroRedirectClaim\(.*?!configuration\.Enabled \|\| !clientState\.IsLoggedIn \|\| !IsLivePlayer\(localPlayer\).*?var context = ResolveContext\(\); return claim\.Owner switch.*?CastedMacroRedirectOwner\.SmartAction => configuration\.EnableSmartActionMacro && SmartActionContextRules\.IsSupported\( context, configuration\.EnableWolvesDenTesting\) && \(context != SupportedPvPContext\.WolvesDen \|\| claim\.SmartTarget\.SelectionMode == SmartTargetRedirectMode\.CombatPriority\).*?CastedMacroRedirectOwner\.NearAssist => configuration\.EnableNearAssistMacro && context == SupportedPvPContext\.CrystallineConflict.*?claim\.NearAssistState\.IsArmed.*?CastedMacroRedirectOwner\.NearHelp => configuration\.EnableNearAssistMacro && context == SupportedPvPContext\.CrystallineConflict.*?claim\.NearHelpState\.IsArmed' -or
+        'private bool IsLiveCastedMacroRedirectClaim\(.*?!configuration\.Enabled \|\| !clientState\.IsLoggedIn \|\| !IsLivePlayer\(localPlayer\).*?var context = ResolveContext\(\); return claim\.Owner switch.*?CastedMacroRedirectOwner\.SmartAction => configuration\.EnableSmartActionMacro && SmartActionContextRules\.IsSupported\( context, configuration\.EnableWolvesDenTesting\) && \(context != SupportedPvPContext\.WolvesDen \|\| claim\.SmartTarget\.SelectionMode != SmartTargetRedirectMode\.FarthestReachable\).*?CastedMacroRedirectOwner\.NearAssist => configuration\.EnableNearAssistMacro && context == SupportedPvPContext\.CrystallineConflict.*?claim\.NearAssistState\.IsArmed.*?CastedMacroRedirectOwner\.NearHelp => configuration\.EnableNearAssistMacro && context == SupportedPvPContext\.CrystallineConflict.*?claim\.NearHelpState\.IsArmed' -or
     $normalizedNearAssist -notmatch
         'CastedMacroRedirectOwner\.SmartAction => IsEligibleSmartActionRedirectAction\(.*?CastedMacroRedirectOwner\.NearAssist => IsEligibleRedirectAction\(.*?CastedMacroRedirectOwner\.NearHelp => IsEligibleHelpAction\(' -or
     $normalizedNearAssist -notmatch
@@ -11607,14 +11631,15 @@ Assert-Literals $settingsWindow @(
     'Turn it off for normal FFXIV targeting.',
     'cycle from there. Smart Tab changes only your target; it never uses an action.',
     'Enable one-shot /nearassist, /nearhelp, and /farhelp targeting',
-    'Enable optional /smartaction and /seitonfar harmful-action targeting',
+    'Enable optional /smartaction, /seitonfar, and /seitonsam targeting',
     'Smart Action macro',
     'Smart Action chooses a safe enemy for your next attack. If it cannot find one, the macro uses your normal <t> target.',
     'Use /seitonfar instead of /smartaction to choose the farthest reachable safe enemy.',
+    'SAM: use /seitonsam to choose one safe enemy within 5y and protect the Ogi/Tendo cast from movement.',
     'Crystalline Conflict only. Seiton chooses a living, reachable, safe enemy.',
     'farthest safe enemy instead. Your visible target does not change.',
     'Most cast-time attacks keep your visible target so FFXIV does not turn you unexpectedly.',
-    'attacks use Smart Action. Ogi Namikiri and Tendo Setsugekka are the supported cast exceptions.',
+    'actions wait, while Purify and a manual Guard still work.',
     'Use /autoseiton (or click the movable action-bar tile) to switch this availability ON/OFF.',
     'ON is fully automatic',
     'and needs no held or freshly pressed gameplay key.',
@@ -12462,16 +12487,16 @@ $whatsNewWindow = Read-RequiredSource $whatsNewWindowPath 'What''s New window'
 $releaseNotesContentRules = Read-RequiredSource $releaseNotesContentRulesPath 'Release-note content rules'
 $releaseNotesContentSelfTests = Read-RequiredSource $releaseNotesContentSelfTestsPath 'Release-note content self-tests'
 Assert-Literals $projectFile @(
-    '<Version>0.44.0.5</Version>',
-    '<AssemblyVersion>0.44.0.5</AssemblyVersion>',
-    '<FileVersion>0.44.0.5</FileVersion>'
-) 'v0.44.0.5 project version'
+    '<Version>0.44.0.6</Version>',
+    '<AssemblyVersion>0.44.0.6</AssemblyVersion>',
+    '<FileVersion>0.44.0.6</FileVersion>'
+) 'v0.44.0.6 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.44.0.5";',
-    'Guard can still use the action buffer when the first press does not land.',
-    'Buffer and Turbo repeats can no longer press Guard again while it is active or still appearing.',
-    'Far Help now always chooses the farthest reachable ally, regardless of healer, job, or nearby enemies.'
-) 'v0.44.0.5 version-acknowledged player-facing What''s New content'
+    'private const string CurrentReleaseVersion = "0.44.0.6";',
+    'New /seitonsam chooses one safe SAM target within 5 yalms; no selected target is needed in CC.',
+    'Own Kuzushi or Debana and Stun are preferred before distance and the normal Smart Action signals.',
+    'Ogi and Tendo casts started by /seitonsam ignore normal movement and helper cancellation; Purify and manual Guard still work.'
+) 'v0.44.0.6 version-acknowledged player-facing What''s New content'
 Assert-Literals $releaseNotesContentRules @(
     'public const int MaximumBulletCount = 5;',
     'if (bullets is null) return [];',
@@ -12525,23 +12550,22 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.44.0.5 plugin manifest metadata'
+) 'v0.44.0.6 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.44.0.5"',
-    'Guard remains bufferable when the first press does not land',
-    'action-buffer and Turbo repeats can no longer cancel an active or still-appearing Guard.',
-    'A fresh manual press remains an intentional cancel.',
-    'Far Help now always chooses the farthest reachable friendly party member',
-    'regardless of healer, role, job, or nearby enemies.',
+    '"AssemblyVersion": "0.44.0.6"',
+    'Added /seitonsam: a SAM-only 5-yalm Smart Action target helper',
+    'Own Kuzushi or Debana and Stun are preferred.',
+    'Ogi Namikiri and Tendo Setsugekka started by /seitonsam are protected from ordinary movement and helper cancellation',
+    'Purify and manual Guard remain available.',
     '"IsHide": false',
     '"IsTestingExclusive": false',
     '"DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"',
     '"DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"',
     '"DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip"'
-) 'v0.44.0.5 custom-repository metadata'
+) 'v0.44.0.6 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -12706,6 +12730,12 @@ Assert-Literals $normalizedPrivacy @(
     'Automatic Zantetsuken and Auto-Seiton never use this permission.'
 ) 'v0.42.0.8 retained required-Kuzushi Zantetsuken, Auto-Seiton/Namikiri, and safety/privacy disclosure'
 Assert-Literals $normalizedReadme @(
+    'Version 0.44.0.6 adds `/seitonsam`, a SAM-only one-shot Smart Action helper.',
+    'In Crystalline Conflict it needs no selected target and chooses one safe enemy within 5 yalms',
+    'preferring own Kuzushi or Debana and exact Stun.',
+    'Enabled Wolves'' Den testing uses the exact visible `<t>`.',
+    'Ogi Namikiri and Tendo Setsugekka started through `/seitonsam` ignore normal movement and plugin helper cancellation;',
+    'Purify remains immediate and a fresh manual Guard can still cancel intentionally.',
     'Version 0.44.0.5 keeps Guard usable with the timing/action buffer when the first press does not land',
     'attributable buffer and Turbo repeats can no longer press Guard again while it is active or still appearing.',
     'Release and freshly press Guard to cancel it intentionally.',
@@ -12793,7 +12823,8 @@ Assert-Literals $normalizedReadme @(
     'Version 0.42.0.5 makes the existing Auto-Zantetsuken and `/autoseiton` switches fully automatic while armed, without held-key consent or automatic cast cancellation.',
     'Zantetsuken now ranks the largest vulnerable target-centered 5-yalm cluster, while NIN base and Unsealed Seiton use separate readiness epochs with safe pre-request reranking.',
     'repairs Smart Action Ogi, Kaeshi: Namikiri, and Tendo so an unrelated protected enemy no longer stalls them;',
-    '`/smartaction` (`/ssaction`) or `/seitonfar` arms one 750-ms Crystalline Conflict token for the next already incoming harmful PvP macro action.',
+    'Smart Action option. `/smartaction` (`/ssaction`), `/seitonfar`, or `/seitonsam`',
+    'arms one 750-ms',
     'Replace `/smartaction` with `/seitonfar` when the endpoint itself should be as far away as possible.',
     'Eligible actors rank by descending hitbox-edge distance and stable native S-slot',
     'HP, pressure, Guard-cooldown, and MP order.',
@@ -12932,7 +12963,7 @@ Assert-Literals $normalizedReadme @(
     'BRD **Mannstopper** keeps Smart Action ranking but avoids Chiten, Guard, Purify protection, Meikyo, Paean, and other real CC immunity.',
     'PLD and DRK damage-only invulnerability remains a valid Mannstopper target',
     'The CC prediction panel now stays visible during preparation while the exact 5v5 roster is still loading.',
-    'For the current source, the exact 640-test Core registry, sixteen plugin self-tests, and source checks pin configuration schema 53',
+    'For the current source, the exact 646-test Core registry, sixteen plugin self-tests, and source checks pin configuration schema 53',
     'the independent default-off automatic basic-shot cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
@@ -12947,8 +12978,15 @@ Assert-Literals $normalizedReadme @(
     'constructs fifteen reviewed request shapes across seventeen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.44.0.5 Guard-buffer and Far Help release with retained safety history'
+) 'v0.44.0.6 Seiton SAM release with retained safety history'
 Assert-Literals $normalizedChangelog @(
+    '## 0.44.0.6',
+    'Added `/seitonsam`, a SAM-only one-shot Smart Action helper for one safe enemy within 5 yalms.',
+    'No selected target is required in Crystalline Conflict;',
+    'enabled Wolves'' Den testing uses the exact visible `<t>`.',
+    'Targets with the local Samurai''s Kuzushi or Debana, or exact Stun, are preferred',
+    'Ogi Namikiri and Tendo Setsugekka started by the exact `/seitonsam` request',
+    'Purify remains immediate and a fresh manual Guard remains available.',
     '## 0.44.0.5',
     'Guard remains eligible for the timing/action buffer when its first request does not land.',
     'Attributable timing-buffer, Turbo, and delegated held repeats can no longer press Guard again while it is active or still propagating from the server.',
@@ -14802,4 +14840,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 53, local CC statistics schema 5, the exact 640-test Core registry, and 16 plugin persistence tests. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, PLD Guardian, Recuperate, then Auto-Guard own priority in that order. Guardian requires exact Guard and Guardian metadata/readiness through the final boundary: <=20% is unconditional, <=40% needs fresh exact 2+ focus, and <=50% needs fresh exact 3+ focus. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-actor reservation from either a certified direct standard hotbar press, an exact lease/generation-backed /smartaction visible-<t> fallback, or a target-independent CC Smart Action S1-S5 winner; only the first two bind the visible hard target. Queue stays rejected. Release cannot cancel it; new action, context, Guard, CC, identity, protection, or exact-action/actor drift does, only a post-revalidated clean native range/LoS false may retry, accepted or ambiguous outcomes are terminal, and it never reranks or writes target/facing. /seitonfar remains reachable-only. Enabled Wolves Den Smart Action resolves FFXIV's native zero/default selected-target carrier through the exact stable visible hostile hard target or reviewed dummy without depending on the optional duel-manager enemy slot, and every current damaging non-ground-target shape shares the same closed admission and final-protection path. Exact repeat-Guard protection is identity- and territory-bound: a recent hook-observed request may record its first visible Guard frame only once within the 1500-ms propagation latch, then blocks only exact Guard reuse for the full 1000-ms activation window. Current-name semantic protection metadata tolerates removed historical duplicate rows while still requiring Guard, Covered, Hallowed Ground, and Undead Redemption. Metadata-verified Shield Smite and Chain Stratagem may select Guard; other primary protections remain candidate-local blockers and only incidental/global Chiten vetoes AoE. Every exact Smart Action-owned harmful non-ground-target PvP cast uses reachable S1-S5 ranking only in CC; in enabled Wolves Den it preserves the exact visible hostile/dummy target through the same closed protection path. Exact Near Help-owned friendly PvP casts use one-shot current ally ranking after atomic exact-generation consumption, while Near Assist retains authored-target anti-spin. A Smart Action fallback transfers only an exactly consumed live token into the same bounded reservation. Auto-Zantetsuken uses an identity/context-bound 500-ms no-target collection from the first exact own-source Kuzushi, ranks the fresh live cluster only after maturity, and rechecks collection, frozen identity, current Kuzushi, protection, Bind, readiness, range, and line of sight at the final boundary. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not reset it, Guard/CC/cast/priority/native waits do not spend, and automatic Sprint/replay cannot rearm themselves. Player Stats is a dedicated local-only searchable opponent view: ally-only identities stay HMAC-only, clear opponent Name + World appears only after enemy history, last-seen tracks later encounters in either role, and schema-4 PvpStats backfill is cutoff-bounded, contained-row-only, one-shot, and never double-adds participant W/L. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."
+Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 53, local CC statistics schema 5, the exact 646-test Core registry, and 16 plugin persistence tests. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, PLD Guardian, Recuperate, then Auto-Guard own priority in that order. Guardian requires exact Guard and Guardian metadata/readiness through the final boundary: <=20% is unconditional, <=40% needs fresh exact 2+ focus, and <=50% needs fresh exact 3+ focus. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-actor reservation from either a certified direct standard hotbar press, an exact lease/generation-backed /smartaction visible-<t> fallback, or a target-independent CC Smart Action S1-S5 winner; only the first two bind the visible hard target. Queue stays rejected. Release cannot cancel it; new action, context, Guard, CC, identity, protection, or exact-action/actor drift does, only a post-revalidated clean native range/LoS false may retry, accepted or ambiguous outcomes are terminal, and it never reranks or writes target/facing. /seitonfar remains reachable-only. Enabled Wolves Den Smart Action resolves FFXIV's native zero/default selected-target carrier through the exact stable visible hostile hard target or reviewed dummy without depending on the optional duel-manager enemy slot, and every current damaging non-ground-target shape shares the same closed admission and final-protection path. Exact repeat-Guard protection is identity- and territory-bound: a recent hook-observed request may record its first visible Guard frame only once within the 1500-ms propagation latch, then blocks only exact Guard reuse for the full 1000-ms activation window. Current-name semantic protection metadata tolerates removed historical duplicate rows while still requiring Guard, Covered, Hallowed Ground, and Undead Redemption. Metadata-verified Shield Smite and Chain Stratagem may select Guard; other primary protections remain candidate-local blockers and only incidental/global Chiten vetoes AoE. Every exact Smart Action-owned harmful non-ground-target PvP cast uses reachable S1-S5 ranking only in CC; in enabled Wolves Den it preserves the exact visible hostile/dummy target through the same closed protection path. Exact Near Help-owned friendly PvP casts use one-shot current ally ranking after atomic exact-generation consumption, while Near Assist retains authored-target anti-spin. A Smart Action fallback transfers only an exactly consumed live token into the same bounded reservation. Auto-Zantetsuken uses an identity/context-bound 500-ms no-target collection from the first exact own-source Kuzushi, ranks the fresh live cluster only after maturity, and rechecks collection, frozen identity, current Kuzushi, protection, Bind, readiness, range, and line of sight at the final boundary. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not reset it, Guard/CC/cast/priority/native waits do not spend, and automatic Sprint/replay cannot rearm themselves. Player Stats is a dedicated local-only searchable opponent view: ally-only identities stay HMAC-only, clear opponent Name + World appears only after enemy history, last-seen tracks later encounters in either role, and schema-4 PvpStats backfill is cutoff-bounded, contained-row-only, one-shot, and never double-adds participant W/L. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."

@@ -3,6 +3,14 @@
 Seiton Sense is a local PvP awareness HUD with pressure tracking, nameplate
 cues, warnings, job helpers, Smart Action, and target highlights.
 
+Version 0.44.0.6 adds `/seitonsam`, a SAM-only one-shot Smart Action helper.
+In Crystalline Conflict it needs no selected target and chooses one safe enemy
+within 5 yalms, preferring own Kuzushi or Debana and exact Stun. Enabled Wolves'
+Den testing uses the exact visible `<t>`. Ogi Namikiri and Tendo Setsugekka
+started through `/seitonsam` ignore normal movement and plugin helper
+cancellation; Purify remains immediate and a fresh manual Guard can still
+cancel intentionally.
+
 Version 0.44.0.5 keeps Guard usable with the timing/action buffer when the first
 press does not land, but attributable buffer and Turbo repeats can no longer
 press Guard again while it is active or still appearing. Release and freshly
@@ -1695,7 +1703,8 @@ spatial validity; Smart Tab never sends a combat action or keeps pending work.
 ## One-shot Smart Action macro
 
 The previous harmful-action targeting helper is now the separately default-off
-Smart Action option. `/smartaction` (`/ssaction`) or `/seitonfar` arms one 750-ms
+Smart Action option. `/smartaction` (`/ssaction`), `/seitonfar`, or `/seitonsam`
+arms one 750-ms
 Crystalline Conflict token for the next already incoming harmful PvP macro
 action. Smart Action replaces only that call's target ID with its selected Smart
 Target; it never changes your visible hard, soft, Focus, or mouseover target. The
@@ -1714,6 +1723,18 @@ result is the reach authority. Eligible actors rank by descending hitbox-edge
 distance and stable native S-slot, without Smart Action's normal melee-first/gap-
 closer tier or HP, pressure, Guard-cooldown, and MP order. Every protection,
 cast, frozen-target, fallback, and final-revalidation rule below remains shared.
+
+SAM can use `/seitonsam` for a tighter melee choice. In Crystalline Conflict it
+needs no selected target and considers only safe enemies within 5 yalms of your
+hitbox edge. Own Kuzushi or Debana and exact Stun are preferred, followed by
+distance and the usual Smart Action combat signals. In enabled Wolves' Den
+testing it uses the exact visible `<t>` instead of enemy slots.
+
+If that exact `/seitonsam` call starts Ogi Namikiri or Tendo Setsugekka, normal
+movement and plugin helper actions wait so they cannot accidentally interrupt
+the cast. Purify remains immediate, a fresh manual Guard may cancel, and native
+cast loss from CC, forced movement, target/range loss, or cast completion releases
+movement immediately. The instant follow-up actions are not locked.
 
 Smart Action-owned cast-time actions now use ordinary Smart Target ranking. The
 incoming action must resolve to one exact harmful, non-ground-target PvP row with
@@ -2332,6 +2353,10 @@ update through the same repository.
   exact safe candidates by farthest action-reachable hitbox-edge distance; it
   shares the Smart Action toggle and has no alias because `/ssfar` belongs to
   friendly Far Help
+- `/seitonsam` - SAM-only one-shot Smart Action choice inside 5 yalms; no target
+  is required in CC, while enabled Wolves' Den testing uses the exact `<t>`.
+  Owned Ogi/Tendo casts ignore ordinary movement and helper cancellation, but
+  Purify and a manual Guard remain available
 - `/autoseiton [on|off|toggle]` - arm or disarm fully automatic NIN Auto-Seiton;
   ON needs no held or freshly pressed gameplay key
 - `/nearassist` - arm one CC-only 750 ms target choice for the immediately
@@ -2637,7 +2662,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 640-test Core registry, sixteen plugin self-tests,
+For the current source, the exact 646-test Core registry, sixteen plugin self-tests,
 and source checks pin configuration schema 53, the shared monotonic response clock and framework
 epoch, true not-ready-to-ready wakeups, strict unchanged-queue critical recovery,
 the immutable release-independent tap-to-land buffer, active-Sprint repeat

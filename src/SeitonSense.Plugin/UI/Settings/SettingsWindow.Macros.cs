@@ -15,7 +15,7 @@ internal sealed partial class SettingsWindow
             configuration.EnableNearAssistMacro,
             value => configuration.EnableNearAssistMacro = value);
         changed |= Checkbox(
-            "Enable optional /smartaction and /seitonfar harmful-action targeting",
+            "Enable optional /smartaction, /seitonfar, and /seitonsam targeting",
             configuration.EnableSmartActionMacro,
             value => configuration.EnableSmartActionMacro = value);
         ImGui.TextUnformatted("Near Assist preferences");
@@ -55,6 +55,7 @@ internal sealed partial class SettingsWindow
             ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Ability\" <e1>");
             ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Ability\" <t>");
             ImGui.TextUnformatted("Use /seitonfar instead of /smartaction to choose the farthest reachable safe enemy.");
+            ImGui.TextUnformatted("SAM: use /seitonsam to choose one safe enemy within 5y and protect the Ogi/Tendo cast from movement.");
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
                 "Crystalline Conflict only. Seiton chooses a living, reachable, safe enemy. It prefers low HP, team " +
@@ -62,7 +63,8 @@ internal sealed partial class SettingsWindow
                 "farthest safe enemy instead. Your visible target does not change. /ssaction is an alias.");
             ImGui.TextDisabled(
                 "Most cast-time attacks keep your visible target so FFXIV does not turn you unexpectedly. Instant " +
-                "attacks use Smart Action. Ogi Namikiri and Tendo Setsugekka are the supported cast exceptions.");
+                "attacks use Smart Action. /seitonsam supports Ogi Namikiri and Tendo Setsugekka: movement and helper " +
+                "actions wait, while Purify and a manual Guard still work.");
             ImGui.PopTextWrapPos();
         }
 
