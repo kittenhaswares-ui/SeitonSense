@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.44.5.0";
+    private const string CurrentReleaseVersion = "0.44.5.1";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -479,11 +479,11 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "SAM: queued Ogi/Tendo no longer blocks its own cast. Nearby safe targets come first for cast starters.",
-                "SAM late-facing test is off by default and needs game automatic facing. It turns once toward the same cast target.",
-                "Ping Helpers now show timing and Chase failures separately, with added buffer and queue regression tests.",
-                "Longer enemy arrows and blue ally-to-enemy arrows show who your team is targeting.",
-                "Smart Action checks are separated from execution. Medicine-kit preview and detection details help identify missing beacons.",
+                "SAM facing now defaults to 0.60 seconds before cast end, instead of 0.15 seconds.",
+                "The old default upgrades automatically. Custom timing and your on/off choice stay saved.",
+                "Adjust facing from 0.05 to 1.00 seconds remaining. Larger values turn earlier.",
+                "Still one turn toward the same cast target; requires the game's automatic facing setting.",
+                "Timing remains experimental. It cannot save a cast that already lost range, sight, or its target.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

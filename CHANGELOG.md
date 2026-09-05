@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.44.5.1
+
+- The optional SAM turn now defaults to 0.60 seconds remaining, instead of
+  0.15. This happens earlier than the reported 0.25-0.33-second interruptions.
+- Ogi Namikiri and Tendo Setsugekka both list 1.3-second PvP cast times. The
+  runtime uses the actual observed cast remaining time, not a hard-coded delay
+  from the button press. The new lead is experimental, not a proven server cutoff.
+- The timing slider now allows 0.05-1.00 seconds; larger values turn earlier.
+  Existing exact 0.15-second defaults upgrade to 0.60. Custom values and the
+  user's on/off choice stay saved; fresh/reset configurations remain off.
+- Still one turn toward the same frozen cast target, with the game's automatic
+  facing setting required. No retarget, repeated turning, movement change, or
+  range/line-of-sight override. A cast already cancelled by the game stays cancelled.
+- Added timing-boundary and migration scenarios to the existing test groups.
+  Live success remains unconfirmed; see the SAM timing research note.
+
 ## 0.44.5.0
 
 - SAM: an exact queued Ogi/Tendo request can continue into its cast instead of

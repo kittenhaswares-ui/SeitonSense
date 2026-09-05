@@ -1023,7 +1023,7 @@ if ($staticIntegratedTestCount -ne 659 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatPolicySelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartSprintSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches((Read-RequiredSource $smartSprintSelfTestsPath 'Smart Sprint self-tests'), '\bpublic static void\s+\w+\s*\(').Count -ne 7) {
-    throw 'Schema 54 must retain seven smart-buffer tests, six compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, seven Smart Sprint tests, four Player Stats tests, and the exact 700-test combined Core registry.'
+    throw 'Schema 55 must retain seven smart-buffer tests, six compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, seven Smart Sprint tests, four Player Stats tests, and the exact 700-test combined Core registry.'
 }
 
 # Pin the two schema-42 visual overlays and the fail-closed local map-result
@@ -1928,7 +1928,7 @@ if ($normalizedSamuraiAdapter -notmatch 'internal void UpdateSamuraiLateCastFaci
     $samuraiOgiCastProtectionAdapter -match '\b(?:UseAction|UseActionLocation|CancelCast|HookFromAddress|SetRotation|SetTarget)\s*\(|\.Rotation\s*=|\.(?:Target|FocusTarget|SoftTarget)\s*=' -or
     $normalizedSamuraiCastCoordinator -notmatch 'internal TargetPressureActorIdentity\? GetLateFacingTarget\(.*?if \(accepted is null \|\| accepted\.FacingClaimed\) return null;.*?IsInsideFacingWindow\(snapshot, windowSeconds\).*?var target = new TargetPressureActorIdentity\(lease\.Request\.TargetId, lease\.Request\.TargetEntityId\);' -or
     $normalizedSamuraiCastCoordinator -notmatch 'internal SamuraiCastProtectionRequest\? TryClaimLateFacing\(.*?currentTarget\.GameObjectId != lease\.Request\.TargetId.*?currentTarget\.EntityId != lease\.Request\.TargetEntityId.*?!HasExactCast\(snapshot, lease\.Request\).*?accepted = lease with \{ FacingClaimed = true \}; lateFacingAttempts\+\+;' -or
-    $normalizedSamuraiCastCoordinator -notmatch 'float\.IsFinite\(windowSeconds\) && windowSeconds is >= 0\.05f and <= 0\.30f &&.*?snapshot\.CurrentCastTime < snapshot\.TotalCastTime && snapshot\.TotalCastTime - snapshot\.CurrentCastTime <= windowSeconds;') {
+    $normalizedSamuraiCastCoordinator -notmatch 'float\.IsFinite\(windowSeconds\) && windowSeconds >= SamuraiOgiCastProtectionRules\.MinimumFacingLeadSeconds && windowSeconds <= SamuraiOgiCastProtectionRules\.MaximumFacingLeadSeconds &&.*?snapshot\.CurrentCastTime < snapshot\.TotalCastTime && snapshot\.TotalCastTime - snapshot\.CurrentCastTime <= windowSeconds;') {
     throw 'SAM late facing must be a default-off explicit frame operation: no idle/pre-window target lookup, exactly one frozen entity-safe cast claim, fresh protection recheck, finite end-of-cast timing, one native auto-face call and no direct rotation, target swap, action dispatch or new hook.'
 }
 Assert-Literals $samuraiSettingsTests @('LateFacingIsOptInBoundedAndResettable') 'Late-facing default/reset/clamp regression'
@@ -2217,16 +2217,34 @@ if ($smartTabConfiguration -notmatch '(?m)^\s*public bool EnableSmartTabTargetin
     [regex]::Matches($smartTabConfiguration, '\bEnableSmartActionMacro\s*=\s*EnableNearAssistMacro\s*;').Count -ne 1 -or
     [regex]::Matches($smartTabConfiguration, '\bEnableSmartActionMacro\s*=\s*false\s*;').Count -ne 1 -or
     $normalizedSmartTabConfiguration -notmatch 'if \(Version < 33\) \{.*?EnableSmartTabTargeting = false; EnableSmartActionMacro = EnableNearAssistMacro; \}' -or
-    $normalizedSmartTabConfiguration -notmatch 'Version = 54;') {
-    throw 'Schema 54 must preserve the schema-33 Smart Tab migration, keep Smart Tab false for upgrades/fresh/reset, and migrate only the prior explicit macro-helper choice to separate default-off Smart Action.'
+    $normalizedSmartTabConfiguration -notmatch 'Version = 55;') {
+    throw 'Schema 55 must preserve the schema-33 Smart Tab migration, keep Smart Tab false for upgrades/fresh/reset, and migrate only the prior explicit macro-helper choice to separate default-off Smart Action.'
 }
 if ($smartTabConfiguration -notmatch '(?m)^\s*public bool EnableSamuraiLateCastFacing \{ get; set; \}\s*$' -or
-    $normalizedSmartTabConfiguration -notmatch 'public float SamuraiLateCastFacingWindowSeconds \{ get; set; \} = 0\.15f;' -or
-    $normalizedSmartTabConfiguration -notmatch 'public void ResetToDefaults\(\).*?EnableSamuraiLateCastFacing = false; SamuraiLateCastFacingWindowSeconds = 0\.15f;' -or
-    $normalizedSmartTabConfiguration -notmatch 'Clamp\(SamuraiLateCastFacingWindowSeconds, 0\.05f, 0\.30f, 0\.15f, value => SamuraiLateCastFacingWindowSeconds = value\)' -or
+    $normalizedSmartTabConfiguration -notmatch 'public float SamuraiLateCastFacingWindowSeconds \{ get; set; \} = SamuraiOgiCastProtectionRules\.DefaultFacingLeadSeconds;' -or
+    $normalizedSmartTabConfiguration -notmatch 'public void ResetToDefaults\(\).*?EnableSamuraiLateCastFacing = false; SamuraiLateCastFacingWindowSeconds = SamuraiOgiCastProtectionRules\.DefaultFacingLeadSeconds;' -or
+    $normalizedSmartTabConfiguration -notmatch 'Clamp\(SamuraiLateCastFacingWindowSeconds, SamuraiOgiCastProtectionRules\.MinimumFacingLeadSeconds, SamuraiOgiCastProtectionRules\.MaximumFacingLeadSeconds, SamuraiOgiCastProtectionRules\.DefaultFacingLeadSeconds, value => SamuraiLateCastFacingWindowSeconds = value\)' -or
+    $normalizedSmartTabConfiguration -notmatch 'if \(Version < 55\) \{[^{}]*?SamuraiLateCastFacingWindowSeconds = SamuraiOgiCastProtectionRules\.MigrateLegacyFacingLead\( SamuraiLateCastFacingWindowSeconds\); \}' -or
     $smartTabConfiguration -match '\bEnableSamuraiLateCastFacing\s*=\s*true\s*;') {
-    throw 'Optional SAM late facing must remain off for fresh/upgraded/reset settings, with a finite 0.05-0.30-second window defaulting to 0.15 seconds.'
+    throw 'Optional SAM late facing must remain default-off, preserve existing opt-in choices, and share finite 0.05-1.00-second bounds with a 0.60-second default; only pre-55 settings migrate the exact old timing default.'
 }
+Assert-Literals $samuraiOgiCastProtectionRules @(
+    'public const float MinimumFacingLeadSeconds = 0.05f;',
+    'public const float MaximumFacingLeadSeconds = 1.00f;',
+    'public const float DefaultFacingLeadSeconds = 0.60f;',
+    'public static float MigrateLegacyFacingLead(float seconds) =>',
+    'seconds == 0.15f ? DefaultFacingLeadSeconds : seconds;'
+) 'Experimental SAM facing lead bounds and exact legacy-default migration'
+Assert-Literals $samuraiSettingsTests @(
+    'legacy.Initialize(null!);',
+    'legacy.EnableSamuraiLateCastFacing == enabled',
+    'customized.SamuraiLateCastFacingWindowSeconds == 0.20f',
+    'MathF.BitDecrement(0.15f)',
+    'MathF.BitIncrement(0.15f)',
+    'current.SamuraiLateCastFacingWindowSeconds == 0.15f',
+    'float.NaN, float.PositiveInfinity, float.NegativeInfinity',
+    'restored.ResetToDefaults();'
+) 'Actual settings initialization, exact-only migration, finite clamping, opt-in preservation and reset regressions'
 
 $normalizedNearAssistForSmartAction = (Read-RequiredSource $nearAssistPath 'Smart Action shared redirector') -replace '\s+', ' '
 $smartActionContextRules = Read-RequiredSource $smartActionContextRulesPath 'Smart Action closed context rules'
@@ -6853,8 +6871,8 @@ if ($castConfiguration -notmatch '(?m)^\s*public bool AllowHeldHelpersToCancelOw
     $castConfiguration -match '(?m)^\s*public bool AllowHeldHelpersToCancelOwnCast \{ get; set; \}\s*=\s*true;' -or
     [regex]::Matches($castConfiguration, '\bAllowHeldHelpersToCancelOwnCast\s*=\s*false\s*;').Count -ne 2 -or
     $normalizedCastConfiguration -notmatch 'if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;' -or
-    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 54;.*?AllowHeldHelpersToCancelOwnCast = false;') {
-    throw 'Schema 54 must preserve held-helper cast cancellation as plain default-false, force it off for pre-30 upgrades, and restore it off on Reset Defaults.'
+    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 55;.*?AllowHeldHelpersToCancelOwnCast = false;') {
+    throw 'Schema 55 must preserve held-helper cast cancellation as plain default-false, force it off for pre-30 upgrades, and restore it off on Reset Defaults.'
 }
 
 # Schema 45 introduces two genuinely automatic self-actions. Both are plain
@@ -6865,27 +6883,27 @@ Assert-Literals $castConfiguration @(
     'if (Version < 45)',
     'EnableAutomaticPurify = false;',
     'EnableAutomaticRecuperate = false;',
-    'Version = 54;'
+    'Version = 55;'
 ) 'Schema-45 default-off automatic Purify and Recuperate configuration'
 if ($castConfiguration -match '(?m)^\s*public bool EnableAutomatic(?:Purify|Recuperate) \{ get; set; \}\s*=\s*true;' -or
     [regex]::Matches($castConfiguration, '\bEnableAutomaticPurify\s*=\s*false\s*;').Count -ne 2 -or
     [regex]::Matches($castConfiguration, '\bEnableAutomaticRecuperate\s*=\s*false\s*;').Count -ne 2 -or
-    $normalizedCastConfiguration -notmatch 'if \(Version < 45\) \{.*?EnableAutomaticPurify = false; EnableAutomaticRecuperate = false; \}.*?Version = 54;' -or
-    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 54;.*?EnableSmartRecuperateOnHeldKey = false; EnableAutomaticRecuperate = false;.*?ExperimentalPurifyOnNextKey = false;.*?PurifyOnHeldGameplayKey = false; EnableAutomaticPurify = false;') {
-    throw 'Schema 54 must retain schema-45 default-off automatic Purify and Recuperate behavior without changing their separate held options.'
+    $normalizedCastConfiguration -notmatch 'if \(Version < 45\) \{.*?EnableAutomaticPurify = false; EnableAutomaticRecuperate = false; \}.*?Version = 55;' -or
+    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 55;.*?EnableSmartRecuperateOnHeldKey = false; EnableAutomaticRecuperate = false;.*?ExperimentalPurifyOnNextKey = false;.*?PurifyOnHeldGameplayKey = false; EnableAutomaticPurify = false;') {
+    throw 'Schema 55 must retain schema-45 default-off automatic Purify and Recuperate behavior without changing their separate held options.'
 }
 
 Assert-Literals $castConfiguration @(
     'public bool AllowAutomaticRecoveryToCancelBasicShotCasts { get; set; }',
     'if (Version < 46)',
     'AllowAutomaticRecoveryToCancelBasicShotCasts = false;',
-    'Version = 54;'
+    'Version = 55;'
 ) 'Schema-46 separate default-off automatic recovery basic-shot cast-cancel permission'
 if ($castConfiguration -match '(?m)^\s*public bool AllowAutomaticRecoveryToCancelBasicShotCasts \{ get; set; \}\s*=\s*true;' -or
     [regex]::Matches($castConfiguration, '\bAllowAutomaticRecoveryToCancelBasicShotCasts\s*=\s*false\s*;').Count -ne 2 -or
-    $normalizedCastConfiguration -notmatch 'if \(Version < 46\) \{.*?AllowAutomaticRecoveryToCancelBasicShotCasts = false; \}.*?Version = 54;' -or
-    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 54;.*?AllowHeldHelpersToCancelOwnCast = false; AllowAutomaticRecoveryToCancelBasicShotCasts = false;') {
-    throw 'Schema 54 must keep automatic BRD/MCH basic-shot cancellation as a separate plain default-false permission for upgrades, fresh installs, and Reset Defaults.'
+    $normalizedCastConfiguration -notmatch 'if \(Version < 46\) \{.*?AllowAutomaticRecoveryToCancelBasicShotCasts = false; \}.*?Version = 55;' -or
+    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 55;.*?AllowHeldHelpersToCancelOwnCast = false; AllowAutomaticRecoveryToCancelBasicShotCasts = false;') {
+    throw 'Schema 55 must keep automatic BRD/MCH basic-shot cancellation as a separate plain default-false permission for upgrades, fresh installs, and Reset Defaults.'
 }
 
 $settingsActionsPath = Join-Path $settingsPartsRoot 'SettingsWindow.Actions.cs'
@@ -7752,12 +7770,12 @@ Assert-Literals $castConfiguration @(
     'GuardRepeatProtectionRules.DefaultEnabled;',
     'if (Version < 52)',
     'ProtectOwnGuardFromRepeatPress = GuardRepeatProtectionRules.DefaultEnabled;',
-    'Version = 54;'
+    'Version = 55;'
 ) 'Schema-52 default-on configurable exact Guard-repeat protection'
 if ([regex]::Matches($castConfiguration, '\bProtectOwnGuardFromRepeatPress\b').Count -ne 3 -or
-    $normalizedCastConfiguration -notmatch 'if \(Version < 52\) \{.*?ProtectOwnGuardFromRepeatPress = GuardRepeatProtectionRules\.DefaultEnabled; \}.*?Version = 54;' -or
-    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 54;.*?ProtectOwnGuardFromRepeatPress = GuardRepeatProtectionRules\.DefaultEnabled;') {
-    throw 'Schema 54 must keep the previously unconditional one-second exact Guard-repeat protection on for fresh, upgraded, and reset configurations.'
+    $normalizedCastConfiguration -notmatch 'if \(Version < 52\) \{.*?ProtectOwnGuardFromRepeatPress = GuardRepeatProtectionRules\.DefaultEnabled; \}.*?Version = 55;' -or
+    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 55;.*?ProtectOwnGuardFromRepeatPress = GuardRepeatProtectionRules\.DefaultEnabled;') {
+    throw 'Schema 55 must keep the previously unconditional one-second exact Guard-repeat protection on for fresh, upgraded, and reset configurations.'
 }
 Assert-Literals $settingsActions @(
     'Protect Guard from repeated held/Buffer inputs',
@@ -13470,18 +13488,18 @@ $whatsNewWindow = Read-RequiredSource $whatsNewWindowPath 'What''s New window'
 $releaseNotesContentRules = Read-RequiredSource $releaseNotesContentRulesPath 'Release-note content rules'
 $releaseNotesContentSelfTests = Read-RequiredSource $releaseNotesContentSelfTestsPath 'Release-note content self-tests'
 Assert-Literals $projectFile @(
-    '<Version>0.44.5.0</Version>',
-    '<AssemblyVersion>0.44.5.0</AssemblyVersion>',
-    '<FileVersion>0.44.5.0</FileVersion>'
-) 'v0.44.5.0 project version'
+    '<Version>0.44.5.1</Version>',
+    '<AssemblyVersion>0.44.5.1</AssemblyVersion>',
+    '<FileVersion>0.44.5.1</FileVersion>'
+) 'v0.44.5.1 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.44.5.0";',
-    'SAM: queued Ogi/Tendo no longer blocks its own cast. Nearby safe targets come first for cast starters.',
-    'SAM late-facing test is off by default and needs game automatic facing. It turns once toward the same cast target.',
-    'Ping Helpers now show timing and Chase failures separately, with added buffer and queue regression tests.',
-    'Longer enemy arrows and blue ally-to-enemy arrows show who your team is targeting.',
-    'Smart Action checks are separated from execution. Medicine-kit preview and detection details help identify missing beacons.'
-) 'v0.44.5.0 version-acknowledged player-facing What''s New content'
+    'private const string CurrentReleaseVersion = "0.44.5.1";',
+    'SAM facing now defaults to 0.60 seconds before cast end, instead of 0.15 seconds.',
+    'The old default upgrades automatically. Custom timing and your on/off choice stay saved.',
+    'Adjust facing from 0.05 to 1.00 seconds remaining. Larger values turn earlier.',
+    'Still one turn toward the same cast target; requires the game''s automatic facing setting.',
+    'Timing remains experimental. It cannot save a cast that already lost range, sight, or its target.'
+) 'v0.44.5.1 version-acknowledged player-facing What''s New content'
 Assert-Literals $releaseNotesContentRules @(
     'public const int MaximumBulletCount = 5;',
     'if (bullets is null) return [];',
@@ -13540,17 +13558,18 @@ if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.44.5.0"',
-    'SAM cast and queue fixes, nearer targets for Ogi/Tendo starters, and an optional one-time late-facing test (off by default; needs game automatic facing).',
-    'Clearer Ping Helper failure reasons and more buffer tests.',
-    'Longer enemy arrows plus blue ally-to-enemy target arrows.',
-    'Medicine-kit preview and clearer detection details; real kit detection is not yet confirmed fixed.',
+    '"AssemblyVersion": "0.44.5.1"',
+    'SAM facing now defaults to 0.60 seconds before cast end instead of 0.15.',
+    'The old default upgrades automatically; custom timing and on/off choice are preserved.',
+    'Adjustable from 0.05 to 1.00 seconds remaining.',
+    'Still one turn to the same target, with game automatic facing required.',
+    'Experimental timing, not a measured server cutoff; live Ogi/Tendo confirmation remains required.',
     '"IsHide": false',
     '"IsTestingExclusive": false',
-    '"DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.5.0/dist/SeitonSense-0.44.5.0.zip"',
-    '"DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.5.0/dist/SeitonSense-0.44.5.0.zip"',
-    '"DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.5.0/dist/SeitonSense-0.44.5.0.zip"'
-) 'v0.44.5.0 custom-repository metadata'
+    '"DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.5.1/dist/SeitonSense-0.44.5.1.zip"',
+    '"DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.5.1/dist/SeitonSense-0.44.5.1.zip"',
+    '"DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.5.1/dist/SeitonSense-0.44.5.1.zip"'
+) 'v0.44.5.1 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -13692,7 +13711,7 @@ Assert-Literals $normalizedPrivacy @(
     'A cancellation consumes that framework frame;',
     'Automatic observation does not retire a physical held-key generation.',
     'Acceptance starts an exact metadata-verified 1.0-second recast floor. A sampled unavailable edge is retained when visible, but after that floor current positive readiness may rearm without requiring the brief negative frame, preventing an indefinite latch.',
-    'Configuration schema 54 is current. It adds longer enemy arrows and blue ally-to-enemy target arrows using the existing local pressure observations. It retains the local CC prediction/history settings and tap-to-land behavior with one release-independent tap-to-land reservation (0-3000 ms, 2200 ms default),',
+    'Configuration schema 55 is current. It upgrades the old SAM facing default without enabling the option or adding any data collection. Schema 54 added longer enemy arrows and blue ally-to-enemy target arrows using the existing local pressure observations. It retains the local CC prediction/history settings and tap-to-land behavior with one release-independent tap-to-land reservation (0-3000 ms, 2200 ms default),',
     'adds default-on exact active-Sprint repeat protection, and adds a separate default-off 3000-5000 ms idle Smart Sprint option.',
     'the tap-to-land lane is limited to the same physically pressed direct action, the exact lease/generation-backed Smart Action visible-target fallback, or the target-independent exact Smart Action `S1`-`S5` winner in Crystalline Conflict.',
     'It waits only for the frozen hostile actor''s native range/line-of-sight result.',
@@ -14006,7 +14025,7 @@ Assert-Literals $normalizedReadme @(
     'Native input and Seiton''s separate Turbo path remain available.',
     'Compatibility is assessed in memory on plugin-change events and at a bounded five-second cadence, with one final live check when the buffer arms and when it is actually ready to replay; Seiton does not scan plugin files.',
     'Enabling the outside-combat test scope also starts a new lifecycle, so a key which was already held cannot be inherited.',
-    'Configuration schema 54 is current.',
+    'Configuration schema 55 is current.',
     'release-independent tap-to-land wait',
     'protects active PvP Sprint from a second Sprint press by default',
     'adds the separate optional idle Smart Sprint.',
@@ -14021,7 +14040,7 @@ Assert-Literals $normalizedReadme @(
     'BRD **Mannstopper** keeps Smart Action ranking but avoids Chiten, Guard, Purify protection, Meikyo, Paean, and other real CC immunity.',
     'PLD and DRK damage-only invulnerability remains a valid Mannstopper target',
     'The CC prediction panel now stays visible during preparation while the exact 5v5 roster is still loading.',
-    'For the current source, the exact 700-test Core registry, fifty-six plugin self-tests, and source checks pin configuration schema 54',
+    'For the current source, the exact 700-test Core registry, fifty-six plugin self-tests, and source checks pin configuration schema 55',
     'the independent default-off automatic basic-shot cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
@@ -14491,7 +14510,7 @@ Assert-Literals $normalizedPrivacy @(
     'the shared frame is consumed only after this check so its own held-key evidence remains readable.',
     'The episode is marked spent before the native call.',
     'cannot retry, rerank, or select a fallback.',
-    'Configuration schema 54 is current.'
+    'Configuration schema 55 is current.'
 ) 'Emergency Teleport transient-data contract'
 Assert-Literals $normalizedReadme @(
     'polls FFXIV''s currently transformed Serpent''s Tail / Serpentiner Geist carrier `39183` every active framework frame',
@@ -14620,7 +14639,7 @@ Assert-Literals $normalizedPrivacy @(
     'only the last command, origin/destination coordinates, bounded camera diagnostics, native acceptance outcome, and aggregate command counters may remain in plugin memory',
     'not persisted or uploaded',
     'Four-direction testing for all six jobs plus NIN slope/wall/invalid-endpoint cases in Wolves'' Den remains a live- validation boundary',
-    'Configuration schema 54 is current'
+    'Configuration schema 55 is current'
 ) 'Current explicit dash transient-data, immediate, own-Guard, no-target, and live-boundary privacy contract'
 Assert-Literals $normalizedChangelog @(
     '## 0.27.1.0',
@@ -14726,7 +14745,7 @@ Assert-Literals $normalizedPrivacy @(
     'current-patch stationary plus mobile BRD/MCH behavior still requires live validation',
     'only the current cast decision, the last requested helper/action/target/key/ intent and native request result, plus request/fault counts in memory',
     'none is persisted or uploaded',
-    'Configuration schema 54 is current',
+    'Configuration schema 55 is current',
     'Historical v0.30.0.0 baseline: schema 32 forced the NIN Guard-Shukuchi held-key option off for upgrading configurations and left it off for fresh and Reset Defaults configurations',
     'generic held-action cast-cancellation test',
     'schema-46 automatic basic-shot permission remain explicitly off for fresh, reset, and migrated configurations'
@@ -15097,7 +15116,7 @@ Assert-Literals $normalizedPrivacy @(
     'live client race remains possible',
     'Nothing is persisted or uploaded',
     'separate Auto Low-MP Focus Target opt-in',
-    'Configuration schema 54 is current',
+    'Configuration schema 55 is current',
     'Fresh and reset configurations keep NIN Guard-Shukuchi, Smart Recuperate, Emergency Teleport, Hiebsprung, Smart Action/other macro helpers, and all other action-helper masters off',
     'An older explicitly enabled fresh-edge NIN Seiton option still traverses schema 29, migrates to the retained compatibility-named opt-in',
     'clears the obsolete field. The retained opt-in now arms fully automatic Seiton;',
@@ -15177,7 +15196,7 @@ Assert-Literals $privacy @(
     'Pressure is used only for that frozen selection and is not a',
     'Pressure drift neither reranks, switches, nor',
     'No drift can cause another selection, alternate',
-    'Configuration schema 54 is current'
+    'Configuration schema 55 is current'
 ) 'Retained pressure escape, Smart Paean, Guardian, Scholar, and current schema local-data/live-boundary disclosure'
 Assert-Literals $normalizedPrivacy @(
     'The current action-request priority is **Purify > PLD Guardian > Smart Recuperate > automatic Guard > AST same-target heal chain > RDM fresh-Guard engage > SAM staged counter-CC / automatic Zantetsuken > automatic NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Emergency Teleport > pressure Sprint > idle Smart Sprint > event Kardia > event Monk**',
@@ -15248,7 +15267,7 @@ Assert-Literals $normalizedPrivacy @(
 $configuration = Read-RequiredSource $configurationPath 'Plugin configuration'
 $normalizedConfiguration = $configuration -replace '\s+', ' '
 Assert-Literals $configuration @(
-    'public int Version { get; set; } = 54',
+    'public int Version { get; set; } = 55',
     'public bool PurifyOnHeldGameplayKey { get; set; }',
     'if (Version < 6)',
     'PurifyOnHeldGameplayKey = false',
@@ -15441,7 +15460,7 @@ Assert-Literals $configuration @(
     'public bool EnableBardRepellingShotProximityHelper { get; set; }',
     'if (Version < 53)',
     'EnableBardRepellingShotProximityHelper = false;',
-    'Version = 54',
+    'Version = 55',
     'ApplyCombatFramesLayoutDefaults()',
     'ApplyCombatFramesCleanPreset()',
     'NormalizeCcBrakeSelections()',
@@ -15552,8 +15571,8 @@ if ($configuration -notmatch '(?m)^\s*public bool EnableNinjaGuardShukuchiOnHeld
     $configuration -match '(?m)^\s*public bool EnableNinjaGuardShukuchiOnHeldGameplayKey \{ get; set; \}\s*=\s*true;') {
     throw 'Schema 31 must keep the target-mutating NIN Guard-Shukuchi helper off for upgrades and ResetToDefaults, with a plain default-false property.'
 }
-if ([regex]::Matches($configuration, '\bVersion\s*=\s*54\s*;').Count -ne 2 -or
-    $normalizedConfiguration -notmatch 'if \(Version >= 54\).*?return;.*?if \(Version < 29\).*?EnableNinjaSeitonOnHeldGameplayKey = EnableNinjaSeitonOnFreshGameplayKey;.*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;.*?if \(Version < 31\).*?EnableNinjaGuardShukuchiOnHeldGameplayKey = false;.*?if \(Version < 32\).*?ShowCombatFrames = false;.*?if \(Version < 39\).*?EnablePvpLatencyResponseHelper = false;.*?if \(Version < 40\).*?EnableSmartActionBuffer = true;.*?if \(Version < 45\).*?EnableAutomaticPurify = false;.*?EnableAutomaticRecuperate = false;.*?if \(Version < 46\).*?AllowAutomaticRecoveryToCancelBasicShotCasts = false;.*?if \(Version < 48\).*?EnableInstantLeaveAfterCrystallineConflict = false;.*?if \(Version < 49\).*?EnableAdaptiveResponseEngine = true;.*?AllowCriticalRecoveryThroughNativeQueue = true;.*?EnableHoldToLandChaseBuffer = true;.*?if \(Version < 50\).*?TapToLandReservationMilliseconds = HeldChaseBufferWindowRules\.DefaultMilliseconds;.*?ProtectActiveSprintFromRepeatPress = SmartSprintRules\.RepeatProtectionDefaultEnabled;.*?EnableIdleSmartSprintOnHeldKey = SmartSprintRules\.IdleSprintDefaultEnabled;.*?SmartSprintInactivityMilliseconds = SmartSprintRules\.DefaultInactivityMilliseconds;.*?if \(Version < 51\).*?ShowCrystallineConflictPredictionPanel = true;.*?EnableLocalCrystallineConflictPlayerHistory = true;.*?EnableDynamicCrystallineConflictPrediction = true;.*?CrystallineConflictPredictionPanelLocked = false;.*?CrystallineConflictPredictionPanelShowBackground = true;.*?CrystallineConflictPredictionPanelScale = 1f;.*?CrystallineConflictPredictionPanelBackgroundOpacity = 0\.88f;.*?if \(Version < 52\).*?ProtectOwnGuardFromRepeatPress = GuardRepeatProtectionRules\.DefaultEnabled;.*?if \(Version < 53\).*?EnableBardRepellingShotProximityHelper = false;.*?Version = 54;' -or
+if ([regex]::Matches($configuration, '\bVersion\s*=\s*55\s*;').Count -ne 2 -or
+    $normalizedConfiguration -notmatch 'if \(Version >= 55\).*?return;.*?if \(Version < 29\).*?EnableNinjaSeitonOnHeldGameplayKey = EnableNinjaSeitonOnFreshGameplayKey;.*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;.*?if \(Version < 31\).*?EnableNinjaGuardShukuchiOnHeldGameplayKey = false;.*?if \(Version < 32\).*?ShowCombatFrames = false;.*?if \(Version < 39\).*?EnablePvpLatencyResponseHelper = false;.*?if \(Version < 40\).*?EnableSmartActionBuffer = true;.*?if \(Version < 45\).*?EnableAutomaticPurify = false;.*?EnableAutomaticRecuperate = false;.*?if \(Version < 46\).*?AllowAutomaticRecoveryToCancelBasicShotCasts = false;.*?if \(Version < 48\).*?EnableInstantLeaveAfterCrystallineConflict = false;.*?if \(Version < 49\).*?EnableAdaptiveResponseEngine = true;.*?AllowCriticalRecoveryThroughNativeQueue = true;.*?EnableHoldToLandChaseBuffer = true;.*?if \(Version < 50\).*?TapToLandReservationMilliseconds = HeldChaseBufferWindowRules\.DefaultMilliseconds;.*?ProtectActiveSprintFromRepeatPress = SmartSprintRules\.RepeatProtectionDefaultEnabled;.*?EnableIdleSmartSprintOnHeldKey = SmartSprintRules\.IdleSprintDefaultEnabled;.*?SmartSprintInactivityMilliseconds = SmartSprintRules\.DefaultInactivityMilliseconds;.*?if \(Version < 51\).*?ShowCrystallineConflictPredictionPanel = true;.*?EnableLocalCrystallineConflictPlayerHistory = true;.*?EnableDynamicCrystallineConflictPrediction = true;.*?CrystallineConflictPredictionPanelLocked = false;.*?CrystallineConflictPredictionPanelShowBackground = true;.*?CrystallineConflictPredictionPanelScale = 1f;.*?CrystallineConflictPredictionPanelBackgroundOpacity = 0\.88f;.*?if \(Version < 52\).*?ProtectOwnGuardFromRepeatPress = GuardRepeatProtectionRules\.DefaultEnabled;.*?if \(Version < 53\).*?EnableBardRepellingShotProximityHelper = false;.*?Version = 55;' -or
     $configuration -match '(?m)^\s*public bool (?:EnableRedMageGuardEngageOnHeldKey|EnableAstrologianHarmonicOrbisOnHeldKey|EnableViperSerpentTailOnHeldKey|EnableEmergencyTeleportOnHeldKey|EnableGunbreakerContinuationOnHeldKey|EnableDarkKnightShadowbringerOnHeldKey|EnableMonkHeldComboOnHeldKey|ReactiveCcPaladinIntervene|ReactiveCcRedMageResolution|ReactiveCcRedMageViceOfThorns|ReactiveCcBlackMageFrostStar|ReactiveCcSamuraiSotenMineuchi|EnableSamuraiZantetsukenOnHeldKey) \{ get; set; \}\s*=\s*true;' -or
     [regex]::Matches($configuration, '\bEnableAstrologianHarmonicOrbisOnHeldKey\s*=\s*false\s*;').Count -ne 2 -or
     [regex]::Matches($configuration, '\bEnableRedMageGuardEngageOnHeldKey\s*=\s*false\s*;').Count -ne 2 -or
@@ -15580,7 +15599,7 @@ if ([regex]::Matches($configuration, '\bVersion\s*=\s*54\s*;').Count -ne 2 -or
     [regex]::Matches($configuration, '\bEnableIdleSmartSprintOnHeldKey\s*=\s*SmartSprintRules\.IdleSprintDefaultEnabled\s*;').Count -ne 2 -or
     [regex]::Matches($configuration, '\bSmartSprintInactivityMilliseconds\s*=\s*SmartSprintRules\.DefaultInactivityMilliseconds\s*;').Count -ne 2 -or
     $normalizedConfiguration -notmatch 'HeldChaseBufferWindowRules\.Normalize\( TapToLandReservationMilliseconds\).*?SmartSprintRules\.NormalizeInactivityMilliseconds\( SmartSprintInactivityMilliseconds\)') {
-    throw 'Schema 54 must preserve every earlier opt-in/migration, keep BRD Mannstopper default off, retain default-on exact Guard-repeat protection and local prediction/history, keep adaptive response/critical recovery/tap-to-land enabled, preserve the latency opt-out, default exact Sprint repeat protection on, keep idle Smart Sprint off, and clamp all timing/UI controls.'
+    throw 'Schema 55 must preserve every earlier opt-in/migration, keep BRD Mannstopper default off, retain default-on exact Guard-repeat protection and local prediction/history, keep adaptive response/critical recovery/tap-to-land enabled, preserve the latency opt-out, default exact Sprint repeat protection on, keep idle Smart Sprint off, and clamp all timing/UI controls.'
 }
 Assert-Literals $configuration @(
     'public bool EnablePvpLatencyResponseHelper { get; set; }',
@@ -15911,4 +15930,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 54, local CC statistics schema 5, the exact 700-test Core registry, and 56 plugin self-tests. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, PLD Guardian, Recuperate, then Auto-Guard own priority in that order. Guardian requires exact Guard and Guardian metadata, ready Guardian, and either ready Guard or fresh self HP/MP strictly above configurable thresholds (defaults 80%/60%) through the final boundary; active or accepted-propagating own Guard always blocks it: <=20% is unconditional, <=40% needs fresh exact 2+ focus, and <=50% needs fresh exact 3+ focus. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-actor reservation from either a certified direct standard hotbar press, an exact lease/generation-backed /smartaction visible-<t> fallback, or a target-independent CC Smart Action S1-S5 winner; only the first two bind the visible hard target. Queue stays rejected. Release cannot cancel it; new action, context, Guard, CC, identity, protection, or exact-action/actor drift does, only a post-revalidated clean native range/LoS false may retry, accepted or ambiguous outcomes are terminal, and it never reranks or writes target/facing. The optional quiet-held-errors setting avoids global sound hooks and suppresses only a plugin-owned synthetic repeat whose exact hostile target returns native line-of-sight code 562; the first press, out-of-range, and every unknown error remain native. /seitonfar remains reachable-only. Enabled Wolves Den Smart Action resolves the exact stable visible hard target or reviewed dummy; a matching native duel identity may replace a stale Hostile flag, conflicting actor views still fail closed, and only the first non-exact carrier per tap may preserve the one-shot for the following exact <t>. Every current damaging non-ground-target shape shares the same closed admission and final-protection path. Exact /seitonsam Ogi/Tendo request-in-flight ownership suppresses movement through native acceptance and then hands off to the bounded accepted-cast lease; merely arming /seitonsam does not suppress movement, and ordinary /smartaction never gains this behavior. Exact repeat-Guard protection is identity- and territory-bound: a client-accepted request or exact live Guard blocks plugin-owned repeats during propagation, while a rejected or ambiguous provisional request remains immediately retryable; the first visible Guard frame then owns the full 1000-ms exact-repeat window. Current-name semantic protection metadata tolerates removed historical duplicate rows while still requiring Guard, Covered, Hallowed Ground, and Undead Redemption. Metadata-verified Shield Smite and Chain Stratagem may select Guard; other primary protections remain candidate-local blockers and only incidental/global Chiten vetoes AoE. Every exact Smart Action-owned harmful non-ground-target PvP cast uses reachable S1-S5 ranking only in CC; in enabled Wolves Den it preserves the exact visible hostile/dummy target through the same closed protection path. Exact Near Help-owned friendly PvP casts use one-shot current ally ranking after atomic exact-generation consumption, while Near Assist retains cast-time hidden-carrier suppression with visible-target pass-through. A Smart Action fallback transfers only a live exact owner into the same bounded reservation. Auto-Zantetsuken uses an identity/context-bound 500-ms no-target collection from the first exact own-source Kuzushi, ranks the fresh live cluster only after maturity, and rechecks collection, frozen identity, current Kuzushi, protection, Bind, readiness, range, and line of sight at the final boundary. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not reset it, Guard refreshes the idle baseline through its exact status/propagation episode, and a complete idle interval must pass after Guard ends. Player Stats separates local Opponents and Teammates views with neutral total-based labels, role-specific W/L and games, and an explanation that high-volume players may lead both totals. Both roles may retain bounded local Name + World; optional schema-5 Together counters record only proven allied history and never infer unknown older aggregates. Last-seen tracks either role, and schema-4 PvpStats backfill remains cutoff-bounded, contained-row-only, one-shot, and never double-adds participant W/L. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."
+Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 55, local CC statistics schema 5, the exact 700-test Core registry, and 56 plugin self-tests. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, PLD Guardian, Recuperate, then Auto-Guard own priority in that order. Guardian requires exact Guard and Guardian metadata, ready Guardian, and either ready Guard or fresh self HP/MP strictly above configurable thresholds (defaults 80%/60%) through the final boundary; active or accepted-propagating own Guard always blocks it: <=20% is unconditional, <=40% needs fresh exact 2+ focus, and <=50% needs fresh exact 3+ focus. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-actor reservation from either a certified direct standard hotbar press, an exact lease/generation-backed /smartaction visible-<t> fallback, or a target-independent CC Smart Action S1-S5 winner; only the first two bind the visible hard target. Queue stays rejected. Release cannot cancel it; new action, context, Guard, CC, identity, protection, or exact-action/actor drift does, only a post-revalidated clean native range/LoS false may retry, accepted or ambiguous outcomes are terminal, and it never reranks or writes target/facing. The optional quiet-held-errors setting avoids global sound hooks and suppresses only a plugin-owned synthetic repeat whose exact hostile target returns native line-of-sight code 562; the first press, out-of-range, and every unknown error remain native. /seitonfar remains reachable-only. Enabled Wolves Den Smart Action resolves the exact stable visible hard target or reviewed dummy; a matching native duel identity may replace a stale Hostile flag, conflicting actor views still fail closed, and only the first non-exact carrier per tap may preserve the one-shot for the following exact <t>. Every current damaging non-ground-target shape shares the same closed admission and final-protection path. Exact /seitonsam Ogi/Tendo request-in-flight ownership suppresses movement through native acceptance and then hands off to the bounded accepted-cast lease; merely arming /seitonsam does not suppress movement, and ordinary /smartaction never gains this behavior. Exact repeat-Guard protection is identity- and territory-bound: a client-accepted request or exact live Guard blocks plugin-owned repeats during propagation, while a rejected or ambiguous provisional request remains immediately retryable; the first visible Guard frame then owns the full 1000-ms exact-repeat window. Current-name semantic protection metadata tolerates removed historical duplicate rows while still requiring Guard, Covered, Hallowed Ground, and Undead Redemption. Metadata-verified Shield Smite and Chain Stratagem may select Guard; other primary protections remain candidate-local blockers and only incidental/global Chiten vetoes AoE. Every exact Smart Action-owned harmful non-ground-target PvP cast uses reachable S1-S5 ranking only in CC; in enabled Wolves Den it preserves the exact visible hostile/dummy target through the same closed protection path. Exact Near Help-owned friendly PvP casts use one-shot current ally ranking after atomic exact-generation consumption, while Near Assist retains cast-time hidden-carrier suppression with visible-target pass-through. A Smart Action fallback transfers only a live exact owner into the same bounded reservation. Auto-Zantetsuken uses an identity/context-bound 500-ms no-target collection from the first exact own-source Kuzushi, ranks the fresh live cluster only after maturity, and rechecks collection, frozen identity, current Kuzushi, protection, Bind, readiness, range, and line of sight at the final boundary. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not reset it, Guard refreshes the idle baseline through its exact status/propagation episode, and a complete idle interval must pass after Guard ends. Player Stats separates local Opponents and Teammates views with neutral total-based labels, role-specific W/L and games, and an explanation that high-volume players may lead both totals. Both roles may retain bounded local Name + World; optional schema-5 Together counters record only proven allied history and never infer unknown older aggregates. Last-seen tracks either role, and schema-4 PvpStats backfill remains cutoff-bounded, contained-row-only, one-shot, and never double-adds participant W/L. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."

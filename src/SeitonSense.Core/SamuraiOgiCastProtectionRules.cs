@@ -9,6 +9,16 @@ public static class SamuraiOgiCastProtectionRules
     public const long StartPropagationMilliseconds = 750;
     public const long MaximumLeaseMilliseconds = 4_000;
 
+    // Experimental lead relative to the observed cast bar, not a server
+    // snapshot constant. The earlier default precedes reported .25-.33s
+    // interruptions and the roughly .5s slidecast estimate; see timing review.
+    public const float MinimumFacingLeadSeconds = 0.05f;
+    public const float MaximumFacingLeadSeconds = 1.00f;
+    public const float DefaultFacingLeadSeconds = 0.60f;
+
+    public static float MigrateLegacyFacingLead(float seconds) =>
+        seconds == 0.15f ? DefaultFacingLeadSeconds : seconds;
+
     public static bool IsReviewedCastAction(uint resolvedActionId) =>
         resolvedActionId is SamuraiSmartActionCastRules.OgiNamikiriActionId or
             SamuraiSmartActionCastRules.TendoSetsugekkaActionId;

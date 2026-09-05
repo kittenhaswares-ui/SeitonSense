@@ -68,9 +68,12 @@ internal sealed partial class SettingsWindow
             if (configuration.EnableSamuraiLateCastFacing)
             {
                 changed |= Slider("SAM facing: seconds before cast ends",
-                    configuration.SamuraiLateCastFacingWindowSeconds, 0.05f, 0.30f,
+                    configuration.SamuraiLateCastFacingWindowSeconds,
+                    SeitonSense.Core.SamuraiOgiCastProtectionRules.MinimumFacingLeadSeconds,
+                    SeitonSense.Core.SamuraiOgiCastProtectionRules.MaximumFacingLeadSeconds,
                     value => configuration.SamuraiLateCastFacingWindowSeconds = value, "%.2f s");
                 ImGui.TextWrapped("Turns your character once toward the SAME cast target. Requires the game's automatic facing setting. No target switch or camera turn. This test cannot fix missing range or line of sight.");
+                ImGui.TextWrapped("Default: 0.60 seconds remaining. A larger value turns earlier. This gives the turn time to happen before the cast bar finishes; it is not a measured server cutoff.");
             }
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(

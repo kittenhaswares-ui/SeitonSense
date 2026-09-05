@@ -43,7 +43,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 54;
+    public int Version { get; set; } = 55;
     public string LastSeenReleaseNotesVersion { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
@@ -304,7 +304,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool EnableSmartTabTargeting { get; set; }
     public bool EnableSmartActionMacro { get; set; }
     public bool EnableSamuraiLateCastFacing { get; set; }
-    public float SamuraiLateCastFacingWindowSeconds { get; set; } = 0.15f;
+    public float SamuraiLateCastFacingWindowSeconds { get; set; } = SamuraiOgiCastProtectionRules.DefaultFacingLeadSeconds;
     public bool EnableNearAssistMacro { get; set; }
     public bool EnableBackwardPanicShukuchiCommand { get; set; } = false;
     public float NearAssistMaxAllyDistance { get; set; } = 25f;
@@ -350,7 +350,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 54)
+        if (Version >= 55)
         {
             if (repaired) Save();
             return;
@@ -918,7 +918,15 @@ public sealed class PluginConfiguration : IPluginConfiguration
                 CcAggressorArrowDurationSeconds);
         }
 
-        Version = 54;
+        if (Version < 55)
+        {
+            // Preserve the opt-in and customized timing. A manually selected
+            // .15 is indistinguishable from the previous exact default.
+            SamuraiLateCastFacingWindowSeconds = SamuraiOgiCastProtectionRules.MigrateLegacyFacingLead(
+                SamuraiLateCastFacingWindowSeconds);
+        }
+
+        Version = 55;
         ClampSettings();
         Save();
     }
@@ -927,7 +935,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 54;
+        Version = 55;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -1139,7 +1147,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         EnableSmartTabTargeting = false;
         EnableSmartActionMacro = false;
         EnableSamuraiLateCastFacing = false;
-        SamuraiLateCastFacingWindowSeconds = 0.15f;
+        SamuraiLateCastFacingWindowSeconds = SamuraiOgiCastProtectionRules.DefaultFacingLeadSeconds;
         EnableNearAssistMacro = false;
         EnableBackwardPanicShukuchiCommand = false;
         NearAssistMaxAllyDistance = 25f;
@@ -1276,7 +1284,10 @@ public sealed class PluginConfiguration : IPluginConfiguration
     private bool ClampSettings()
     {
         var changed = false;
-        changed |= Clamp(SamuraiLateCastFacingWindowSeconds, 0.05f, 0.30f, 0.15f,
+        changed |= Clamp(SamuraiLateCastFacingWindowSeconds,
+            SamuraiOgiCastProtectionRules.MinimumFacingLeadSeconds,
+            SamuraiOgiCastProtectionRules.MaximumFacingLeadSeconds,
+            SamuraiOgiCastProtectionRules.DefaultFacingLeadSeconds,
             value => SamuraiLateCastFacingWindowSeconds = value);
         var guardianHp = Math.Clamp(GuardianNoGuardMinimumHpPercent, 0, 100);
         var guardianMp = Math.Clamp(GuardianNoGuardMinimumMpPercent, 0, 100);

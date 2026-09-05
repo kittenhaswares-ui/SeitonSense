@@ -290,7 +290,9 @@ internal sealed class SamuraiCastProtectionCoordinator(
     internal SamuraiCastProtectionRequest? TryClaimLateFacing(
         TargetPressureActorIdentity currentTarget, float windowSeconds)
     {
-        if (!float.IsFinite(windowSeconds) || windowSeconds is < 0.05f or > 0.30f ||
+        if (!float.IsFinite(windowSeconds) ||
+            windowSeconds < SamuraiOgiCastProtectionRules.MinimumFacingLeadSeconds ||
+            windowSeconds > SamuraiOgiCastProtectionRules.MaximumFacingLeadSeconds ||
             !currentTarget.IsValid || !TryRead(out var snapshot, out var now)) return null;
         lock (gate)
         {
@@ -445,7 +447,9 @@ internal sealed class SamuraiCastProtectionCoordinator(
     private static bool IsNetworkTarget(ulong id) => id is not 0 and not 0xE0000000 and not ulong.MaxValue;
 
     private static bool IsInsideFacingWindow(SamuraiCastProtectionSnapshot snapshot, float windowSeconds) =>
-        float.IsFinite(windowSeconds) && windowSeconds is >= 0.05f and <= 0.30f &&
+        float.IsFinite(windowSeconds) &&
+        windowSeconds >= SamuraiOgiCastProtectionRules.MinimumFacingLeadSeconds &&
+        windowSeconds <= SamuraiOgiCastProtectionRules.MaximumFacingLeadSeconds &&
         float.IsFinite(snapshot.CurrentCastTime) && float.IsFinite(snapshot.TotalCastTime) &&
         snapshot.CurrentCastTime >= 0 && snapshot.TotalCastTime > 0 &&
         snapshot.CurrentCastTime < snapshot.TotalCastTime &&

@@ -357,7 +357,7 @@ internal static class SamuraiCastProtectionCoordinatorSelfTests
         True(test.Coordinator.TryClaimLateFacing(target with { EntityId = 23 }, 0.15f) is null &&
              test.Coordinator.TryClaimLateFacing(target with { GameObjectId = Target + 1 }, 0.15f) is null,
             "both frozen target IDs must match; no target switch or half-ID reuse");
-        foreach (var window in new[] { float.NaN, float.PositiveInfinity, 0f, 0.04f, 0.31f })
+        foreach (var window in new[] { float.NaN, float.PositiveInfinity, 0f, 0.04f, 1.01f })
             True(test.Coordinator.TryClaimLateFacing(target, window) is null, "invalid facing windows fail closed");
         var facing = test.Coordinator.TryClaimLateFacing(target, 0.15f);
         True(facing is { TargetEntityId: 22, TargetId: Target }, "one claim retains the same exact cast target");
@@ -401,6 +401,92 @@ internal static class SamuraiCastProtectionCoordinatorSelfTests
             True(invalid.Coordinator.TryClaimLateFacing(target, 0.15f) is null,
                 "invalid native timing, changed cast target or interruption prevents facing");
         }
+
+        EarlierFacingLeadPrecedesIllustrativeCastLossForBothStarters();
+    }
+
+    private static void EarlierFacingLeadPrecedesIllustrativeCastLossForBothStarters()
+    {
+        var target = new TargetPressureActorIdentity(Target, 22);
+        const float castSeconds = 1.3f;
+        var lead = SamuraiOgiCastProtectionRules.DefaultFacingLeadSeconds;
+        foreach (var (rawActionId, resolvedActionId) in new[]
+        {
+            (Ogi, Ogi),
+            (SamuraiSmartActionCastRules.TendoSetsugekkaCarrierActionId,
+                SamuraiSmartActionCastRules.TendoSetsugekkaActionId),
+        })
+        {
+            // These are injected timing regressions, not measurements of the
+            // server snapshot or proof that either action lands in live PvP.
+            foreach (var lossRemainingSeconds in new[] { 0.33f, 0.27f, 0.25f })
+            {
+                var test = new Harness();
+                var request = test.Coordinator.Begin(rawActionId, resolvedActionId, Target, 7, true,
+                    targetEntityId: target.EntityId);
+                True(request is not null, "both reviewed 1.3s cast starters acquire exact ownership");
+                test.Coordinator.Execute(request, () =>
+                {
+                    test.Snapshot = test.Snapshot with
+                    {
+                        IsCasting = true,
+                        CastActionId = resolvedActionId,
+                        AdjustedCastActionId = resolvedActionId,
+                        CastTargetGameObjectId = Target,
+                        CurrentCastTime = 0f,
+                        TotalCastTime = castSeconds,
+                    };
+                    return true;
+                });
+
+                test.Now += 680;
+                test.Snapshot = test.Snapshot with { CurrentCastTime = 0.68f };
+                True(test.Coordinator.GetLateFacingTarget(lead) is null &&
+                     test.Coordinator.TryClaimLateFacing(target, lead) is null,
+                    "0.62s remaining is before the default 0.60s lead and cannot face");
+                True(test.Coordinator.Status.LateFacingAttempts == 0,
+                    "frames before the configured lead do not spend the one-shot claim");
+
+                test.Now += 40;
+                test.Snapshot = test.Snapshot with { CurrentCastTime = 0.72f };
+                True(test.Coordinator.GetLateFacingTarget(lead) == target,
+                    "the first frame crossing the lead exposes only the same frozen target");
+                True(test.Coordinator.TryClaimLateFacing(target, lead) is not null,
+                    "the first eligible frame claims facing at 0.58s remaining");
+                True(castSeconds - test.Snapshot.CurrentCastTime > lossRemainingSeconds,
+                    "the earlier claim precedes each injected 0.33/0.27/0.25s cast-state loss");
+
+                test.Now = 1_000 + (long)((castSeconds - lossRemainingSeconds) * 1_000);
+                test.Snapshot = test.Snapshot with
+                {
+                    CurrentCastTime = castSeconds - lossRemainingSeconds,
+                };
+                True(test.Coordinator.GetLateFacingTarget(lead) is null &&
+                     test.Coordinator.TryClaimLateFacing(target, lead) is null,
+                    "later frames never repeat the already claimed facing attempt");
+                test.Snapshot = test.Snapshot with { IsCasting = false };
+                True(test.Coordinator.TryClaimLateFacing(target, lead) is null,
+                    "an early cast-state loss never authorizes a post-cast facing attempt");
+                False(test.Coordinator.HasOwnership, "native cast loss still releases ownership immediately");
+                True(test.Coordinator.Status.LateFacingAttempts == 1,
+                    "crossing the lead produces one attempt, not a retry or a claimed hit");
+            }
+        }
+
+        var upperBound = new Harness();
+        upperBound.Coordinator.Execute(upperBound.Begin(), () =>
+        {
+            upperBound.ObserveCast();
+            upperBound.Snapshot = upperBound.Snapshot with
+            {
+                CurrentCastTime = 0.4f,
+                TotalCastTime = castSeconds,
+            };
+            return true;
+        });
+        True(upperBound.Coordinator.TryClaimLateFacing(target,
+                SamuraiOgiCastProtectionRules.MaximumFacingLeadSeconds) is not null,
+            "the supported 1s upper lead bound remains a one-shot exact-cast option");
     }
 
     private static ClientActionAttemptFingerprint EmptyQueue => default(ClientActionAttemptFingerprint) with { Captured = true };

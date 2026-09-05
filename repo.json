@@ -5,8 +5,8 @@
     "Punchline": "PvP cues, Smart Tab, responsive helpers, and survival tools.",
     "Description": "A local PvP HUD with searchable CC player rankings and prediction, nameplate cues, Limit Break alerts, pressure and CC information, Ping Helpers, medicine-kit beacons, range rings, a Wolves' Den map panel, recovery and job helpers, Smart Tab, assist macros, MP sounds, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.44.5.0",
-    "Changelog": "SAM cast and queue fixes, nearer targets for Ogi/Tendo starters, and an optional one-time late-facing test (off by default; needs game automatic facing). Clearer Ping Helper failure reasons and more buffer tests. Longer enemy arrows plus blue ally-to-enemy target arrows. Smart Action protection separated from execution. Medicine-kit preview and clearer detection details; real kit detection is not yet confirmed fixed. Live movement and facing testing still required.",
+    "AssemblyVersion": "0.44.5.1",
+    "Changelog": "SAM facing now defaults to 0.60 seconds before cast end instead of 0.15. The old default upgrades automatically; custom timing and on/off choice are preserved. Adjustable from 0.05 to 1.00 seconds remaining. Still one turn to the same target, with game automatic facing required. Experimental timing, not a measured server cutoff; live Ogi/Tendo confirmation remains required.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -33,9 +33,9 @@
     ],
     "IsHide": false,
     "IsTestingExclusive": false,
-    "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.5.0/dist/SeitonSense-0.44.5.0.zip",
-    "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.5.0/dist/SeitonSense-0.44.5.0.zip",
-    "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.5.0/dist/SeitonSense-0.44.5.0.zip",
-    "LastUpdate": "1788629422"
+    "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.5.1/dist/SeitonSense-0.44.5.1.zip",
+    "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.5.1/dist/SeitonSense-0.44.5.1.zip",
+    "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.5.1/dist/SeitonSense-0.44.5.1.zip",
+    "LastUpdate": "1788636675"
   }
 ]

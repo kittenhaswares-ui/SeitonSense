@@ -1993,7 +1993,8 @@ hitbox radius plus the game's world-to-screen projection. It draws two fixed
 sampled rings and does not scan other actors, retain movement history, raycast
 terrain, change a target, or issue/suppress an action.
 
-Configuration schema 54 is current. It adds longer enemy arrows and blue
+Configuration schema 55 is current. It upgrades the old SAM facing default
+without enabling the option or adding any data collection. Schema 54 added longer enemy arrows and blue
 ally-to-enemy target arrows using the existing local pressure observations.
 It retains the local CC prediction/history settings and tap-to-land behavior with
 one release-independent tap-to-land reservation (0-3000 ms, 2200 ms default),

@@ -3,6 +3,22 @@
 Seiton Sense is a local PvP awareness HUD with pressure tracking, nameplate
 cues, warnings, job helpers, Smart Action, and target highlights.
 
+## SAM facing timing hotfix — 0.44.5.1
+
+The optional SAM facing test now turns at 0.60 seconds remaining instead of
+0.15. The previous window came after reported cast interruptions at 0.25-0.33
+seconds remaining. Both reviewed PvP starters have a listed 1.3-second cast;
+the helper uses the actual observed remaining time. This is an earlier test
+window, not an official or measured server snapshot boundary.
+
+Under Macro Helpers, expand Smart Action and enable
+"Experimental SAM: face the cast target once near completion". The timing can
+be set from 0.05 to 1.00 seconds; larger means earlier. The game's automatic
+facing setting must also be enabled. There is still only one turn toward the
+same cast target, no retargeting or camera movement. Existing exact 0.15-second
+defaults migrate; custom timing and on/off choice are retained.
+See [the timing evidence and limits](docs/sam-facing-timing-0.44.5.1.md).
+
 ## Smart Action core cleanup and Samurai cast reliability
 
 The first cleanup step separates enemy observation and protection checks from
@@ -2339,7 +2355,8 @@ with the RDM fresh-Guard engage. Reset Defaults clears previews and restores
 every action, target-
 write, and party-visible communication master to off.
 
-Configuration schema 54 is current. It adds longer enemy arrows and blue
+Configuration schema 55 is current. It upgrades the old SAM facing default
+without enabling the option. Schema 54 added longer enemy arrows and blue
 ally-to-enemy target arrows while retaining the local CC prediction/history
 panel settings and the release-independent tap-to-land chase that
 replaced the held-only chase with the
@@ -2793,7 +2810,7 @@ rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
 For the current source, the exact 700-test Core registry, fifty-six plugin self-tests,
-and source checks pin configuration schema 54, the shared monotonic response clock and framework
+and source checks pin configuration schema 55, the shared monotonic response clock and framework
 epoch, true not-ready-to-ready wakeups, strict unchanged-queue critical recovery,
 the immutable release-independent tap-to-land buffer, active-Sprint repeat
 protection, optional action-bar-idle Smart Sprint, the default-off exact public-CC instant-leave state
