@@ -434,7 +434,9 @@ internal readonly record struct CrystallineConflictStoredPlayerStatistics(
     ushort WorldId,
     long WinsAgainst,
     long LossesAgainst,
-    long LastSeenUnixSeconds);
+    long LastSeenUnixSeconds,
+    long WinsTogether = 0,
+    long LossesTogether = 0);
 
 internal sealed record CrystallineConflictPlayerStatisticsCatalogSnapshot(
     long Generation,
@@ -567,13 +569,16 @@ internal sealed class CrystallineConflictMapStatisticsStore
                     player.WinsAgainst >= 0 &&
                     player.LossesAgainst >= 0 &&
                     player.WinsAgainst <= long.MaxValue - player.LossesAgainst &&
-                    player.WinsAgainst + player.LossesAgainst > 0)
+                    (player.WinsAgainst + player.LossesAgainst > 0 ||
+                     player.WinsTogether > 0 || player.LossesTogether > 0))
                 .Select(static player => new CrystallineConflictStoredPlayerStatistics(
                     player.PlayerName,
                     player.WorldId,
                     player.WinsAgainst,
                     player.LossesAgainst,
-                    player.LastSeenUnixSeconds))
+                    player.LastSeenUnixSeconds,
+                    player.WinsTogether,
+                    player.LossesTogether))
                 .ToArray();
 
         cachedPlayerStatisticsContentId = localContentId;
@@ -807,8 +812,6 @@ internal sealed class CrystallineConflictMapStatisticsStore
             {
                 if (!updatesByKey.TryGetValue(existing.Key, out var update))
                     continue;
-                if (update.WinsAgainst == 0 && update.LossesAgainst == 0)
-                    continue;
                 if (update.Wins > existing.Value.Wins ||
                     update.Losses > existing.Value.Losses)
                 {
@@ -827,8 +830,14 @@ internal sealed class CrystallineConflictMapStatisticsStore
                         existing.Value.LossesAgainst,
                         update.LossesAgainst,
                         out var lossesAgainst) ||
+                    !TryAddCounters(existing.Value.WinsTogether, update.Wins - update.LossesAgainst,
+                        out var winsTogether) ||
+                    !TryAddCounters(existing.Value.LossesTogether, update.Losses - update.WinsAgainst,
+                        out var lossesTogether) ||
                     winsAgainst > existing.Value.Losses ||
-                    lossesAgainst > existing.Value.Wins)
+                    lossesAgainst > existing.Value.Wins ||
+                    winsTogether > existing.Value.Wins - lossesAgainst ||
+                    lossesTogether > existing.Value.Losses - winsAgainst)
                 {
                     result = new PvpStatsHistoryMergeResult(
                         false,
@@ -845,6 +854,8 @@ internal sealed class CrystallineConflictMapStatisticsStore
                 existing.Value.WorldId = update.WorldId;
                 existing.Value.WinsAgainst = winsAgainst;
                 existing.Value.LossesAgainst = lossesAgainst;
+                existing.Value.WinsTogether = winsTogether;
+                existing.Value.LossesTogether = lossesTogether;
                 existing.Value.LastSeenUnixSeconds = Math.Max(
                     existing.Value.LastSeenUnixSeconds,
                     update.LastSeenUnixSeconds);
@@ -874,7 +885,7 @@ internal sealed class CrystallineConflictMapStatisticsStore
                 updatedPlayers,
                 Math.Max(0, normalized.Count - updatedPlayers),
                 false,
-                $"Added searchable names and opponent W/L for {updatedPlayers:N0} existing PvpStats players. Original W/L was not counted again.");
+                $"Added searchable names and separate opponent/teammate W/L for {updatedPlayers:N0} existing PvpStats players. Original W/L was not counted again.");
             return true;
         }
 
@@ -909,6 +920,8 @@ internal sealed class CrystallineConflictMapStatisticsStore
                     existing.Value.Losses,
                     existing.Value.WinsAgainst,
                     existing.Value.LossesAgainst,
+                    existing.Value.WinsTogether,
+                    existing.Value.LossesTogether,
                     existingSnapshot.Matches,
                     existing.Value.LastSeenUnixSeconds,
                     HasImportedContribution: false));
@@ -918,8 +931,6 @@ internal sealed class CrystallineConflictMapStatisticsStore
         {
             if (combinedPlayers.TryGetValue(update.PlayerKey, out var existing))
             {
-                var hasOpponentHistory =
-                    update.WinsAgainst != 0 || update.LossesAgainst != 0;
                 if (!TryAddCounters(existing.Wins, update.Wins, out var wins) ||
                     !TryAddCounters(existing.Losses, update.Losses, out var losses) ||
                     !TryAddCounters(
@@ -930,10 +941,16 @@ internal sealed class CrystallineConflictMapStatisticsStore
                         existing.LossesAgainst,
                         update.LossesAgainst,
                         out var lossesAgainst) ||
+                    !TryAddCounters(existing.WinsTogether, update.Wins - update.LossesAgainst,
+                        out var winsTogether) ||
+                    !TryAddCounters(existing.LossesTogether, update.Losses - update.WinsAgainst,
+                        out var lossesTogether) ||
                     !TryAddCounters(existing.Matches, update.Matches, out var matches) ||
                     !CrystallineConflictMapStatisticsRules.TryCreateSnapshot(wins, losses, out _) ||
                     winsAgainst > losses ||
-                    lossesAgainst > wins)
+                    lossesAgainst > wins ||
+                    winsTogether > wins - lossesAgainst ||
+                    lossesTogether > losses - winsAgainst)
                 {
                     result = new PvpStatsHistoryMergeResult(
                         false,
@@ -948,41 +965,37 @@ internal sealed class CrystallineConflictMapStatisticsStore
 
                 combinedPlayers[update.PlayerKey] = existing with
                 {
-                    PlayerName = hasOpponentHistory
-                        ? update.PlayerName
-                        : existing.PlayerName,
-                    WorldId = hasOpponentHistory
-                        ? update.WorldId
-                        : existing.WorldId,
+                    PlayerName = update.PlayerName,
+                    WorldId = update.WorldId,
                     Wins = wins,
                     Losses = losses,
                     WinsAgainst = winsAgainst,
                     LossesAgainst = lossesAgainst,
+                    WinsTogether = winsTogether,
+                    LossesTogether = lossesTogether,
                     Matches = matches,
-                    LastSeenUnixSeconds = hasOpponentHistory
-                        ? Math.Max(
+                    LastSeenUnixSeconds = Math.Max(
                             existing.LastSeenUnixSeconds,
-                            update.LastSeenUnixSeconds)
-                        : existing.LastSeenUnixSeconds,
+                            update.LastSeenUnixSeconds),
                     HasImportedContribution = true,
                 };
             }
             else
             {
-                var hasOpponentHistory =
-                    update.WinsAgainst != 0 || update.LossesAgainst != 0;
                 combinedPlayers.Add(
                     update.PlayerKey,
                     new ImportMergePlayerRecord(
                         update.PlayerKey,
-                        hasOpponentHistory ? update.PlayerName : string.Empty,
-                        hasOpponentHistory ? update.WorldId : (ushort)0,
+                        update.PlayerName,
+                        update.WorldId,
                         update.Wins,
                         update.Losses,
                         update.WinsAgainst,
                         update.LossesAgainst,
+                        update.Wins - update.LossesAgainst,
+                        update.Losses - update.WinsAgainst,
                         update.Matches,
-                        hasOpponentHistory ? update.LastSeenUnixSeconds : 0,
+                        update.LastSeenUnixSeconds,
                         HasImportedContribution: true));
             }
         }
@@ -1005,6 +1018,8 @@ internal sealed class CrystallineConflictMapStatisticsStore
                 Losses = player.Losses,
                 WinsAgainst = player.WinsAgainst,
                 LossesAgainst = player.LossesAgainst,
+                WinsTogether = player.WinsTogether,
+                LossesTogether = player.LossesTogether,
                 LastSeenUnixSeconds = player.LastSeenUnixSeconds,
             },
             StringComparer.Ordinal);
@@ -1311,6 +1326,8 @@ internal sealed class CrystallineConflictMapStatisticsStore
                 Losses = player.Value.Losses,
                 WinsAgainst = player.Value.WinsAgainst,
                 LossesAgainst = player.Value.LossesAgainst,
+                WinsTogether = player.Value.WinsTogether,
+                LossesTogether = player.Value.LossesTogether,
                 LastSeenUnixSeconds = player.Value.LastSeenUnixSeconds,
             },
             StringComparer.Ordinal);
@@ -1350,24 +1367,19 @@ internal sealed class CrystallineConflictMapStatisticsStore
             }
 
             if (!TryIncrement(record, update.PlayerWon)) return false;
+            record.PlayerName = update.PlayerName;
+            record.WorldId = update.WorldId;
+            record.LastSeenUnixSeconds = Math.Max(record.LastSeenUnixSeconds, update.LastSeenUnixSeconds);
             if (update.IsEnemy)
             {
-                record.PlayerName = update.PlayerName;
-                record.WorldId = update.WorldId;
-                record.LastSeenUnixSeconds = Math.Max(
-                    record.LastSeenUnixSeconds,
-                    update.LastSeenUnixSeconds);
                 if (!TryIncrementAgainst(record, update.LocalWon))
                     return false;
             }
-            else if (record.HasSearchableIdentity)
+            else
             {
-                // "Last seen" means the latest encounter in either role once
-                // this player has legitimately become an opponent entry. An
-                // ally-only identity is still never persisted in clear text.
-                record.LastSeenUnixSeconds = Math.Max(
-                    record.LastSeenUnixSeconds,
-                    update.LastSeenUnixSeconds);
+                // Teammate counters are explicit new observations. Do not
+                // derive older role history from unpartitioned aggregate W/L.
+                if (!TryIncrementTogether(record, update.LocalWon)) return false;
             }
         }
 
@@ -1439,6 +1451,18 @@ internal sealed class CrystallineConflictMapStatisticsStore
         // necessarily this opponent's loss and vice versa.
         return record.WinsAgainst <= record.Losses &&
                record.LossesAgainst <= record.Wins;
+    }
+
+    private static bool TryIncrementTogether(ObservedPlayerWinLossRecord record, bool localWon)
+    {
+        if (record.WinsTogether < 0 || record.LossesTogether < 0 ||
+            record.WinsTogether > long.MaxValue - record.LossesTogether ||
+            record.WinsTogether + record.LossesTogether == long.MaxValue)
+            return false;
+        if (localWon) record.WinsTogether++;
+        else record.LossesTogether++;
+        return record.WinsTogether <= record.Wins - record.LossesAgainst &&
+               record.LossesTogether <= record.Losses - record.WinsAgainst;
     }
 
     internal bool TryReset()
@@ -1652,15 +1676,19 @@ internal sealed class CrystallineConflictMapStatisticsStore
                         player.Value.WorldId = 0;
                         player.Value.WinsAgainst = 0;
                         player.Value.LossesAgainst = 0;
+                        player.Value.WinsTogether = 0;
+                        player.Value.LossesTogether = 0;
                         player.Value.LastSeenUnixSeconds = 0;
                     }
                     else
                     {
-                        // Search and rankings are opponent-only. Keep ally-only
-                        // participant W/L behind its HMAC key for prediction,
-                        // but do not retain a clear name or Home World for it.
+                        // Older schema-5 files have no teammate role counters.
+                        // They default to zero; unpartitioned W/L stays intact
+                        // for prediction and is never invented as role history.
                         if (player.Value.WinsAgainst == 0 &&
-                            player.Value.LossesAgainst == 0)
+                            player.Value.LossesAgainst == 0 &&
+                            player.Value.WinsTogether == 0 &&
+                            player.Value.LossesTogether == 0)
                         {
                             player.Value.PlayerName = string.Empty;
                             player.Value.WorldId = 0;
@@ -1834,6 +1862,8 @@ internal sealed class CrystallineConflictMapStatisticsStore
                    record.WorldId == 0 &&
                    record.WinsAgainst == 0 &&
                    record.LossesAgainst == 0 &&
+                   record.WinsTogether == 0 &&
+                   record.LossesTogether == 0 &&
                    record.LastSeenUnixSeconds == 0;
         }
 
@@ -1852,7 +1882,10 @@ internal sealed class CrystallineConflictMapStatisticsStore
                record.LossesAgainst >= 0 &&
                record.WinsAgainst <= long.MaxValue - record.LossesAgainst &&
                record.WinsAgainst <= record.Losses &&
-               record.LossesAgainst <= record.Wins;
+               record.LossesAgainst <= record.Wins &&
+               record.WinsTogether >= 0 && record.LossesTogether >= 0 &&
+               record.WinsTogether <= record.Wins - record.LossesAgainst &&
+               record.LossesTogether <= record.Losses - record.WinsAgainst;
     }
 
     private static bool TryNormalizeObservedIdentity(
@@ -2010,6 +2043,8 @@ internal sealed class CrystallineConflictMapStatisticsStore
                         Losses = player.Value.Losses,
                         WinsAgainst = player.Value.WinsAgainst,
                         LossesAgainst = player.Value.LossesAgainst,
+                        WinsTogether = player.Value.WinsTogether,
+                        LossesTogether = player.Value.LossesTogether,
                         LastSeenUnixSeconds = player.Value.LastSeenUnixSeconds,
                     },
                     StringComparer.Ordinal),
@@ -2073,6 +2108,10 @@ internal sealed class CrystallineConflictMapStatisticsStore
         public long Losses { get; set; }
         public long WinsAgainst { get; set; }
         public long LossesAgainst { get; set; }
+        // Optional additive schema-5 fields. Missing means unknown older role
+        // history, not aggregate W/L that may safely be attributed to allies.
+        public long WinsTogether { get; set; }
+        public long LossesTogether { get; set; }
         public long LastSeenUnixSeconds { get; set; }
 
         [JsonIgnore]
@@ -2124,6 +2163,8 @@ internal sealed class CrystallineConflictMapStatisticsStore
         long Losses,
         long WinsAgainst,
         long LossesAgainst,
+        long WinsTogether,
+        long LossesTogether,
         long Matches,
         long LastSeenUnixSeconds,
         bool HasImportedContribution);

@@ -250,8 +250,15 @@ internal sealed partial class SettingsWindow
             "Show short incoming arrows with enemy job icons (CC only)",
             configuration.ShowCcAggressorArrows,
             value => configuration.ShowCcAggressorArrows = value);
-        if (configuration.ShowCcAggressorArrows)
+        ImGui.BeginDisabled(!configuration.Enabled);
+        if (ImGui.Button(aggressorArrows.PreviewEnabled ? "Stop incoming-arrow preview" : "Preview incoming arrows (also in Wolves' Den)"))
+            aggressorArrows.PreviewEnabled = !aggressorArrows.PreviewEnabled;
+        ImGui.EndDisabled();
+        if (configuration.ShowCcAggressorArrows || aggressorArrows.PreviewEnabled)
         {
+            changed |= Slider(
+                "Incoming-arrow overall size", configuration.CcAggressorArrowScale,
+                0.75f, 3f, value => configuration.CcAggressorArrowScale = value, "%.2f x");
             changed |= Slider(
                 "Incoming-arrow duration", configuration.CcAggressorArrowDurationSeconds,
                 0.35f, 1.5f, value => configuration.CcAggressorArrowDurationSeconds = value, "%.2f s");
@@ -265,6 +272,7 @@ internal sealed partial class SettingsWindow
                 "Incoming-arrow job icon size", configuration.CcAggressorArrowJobIconSize,
                 20f, 44f, value => configuration.CcAggressorArrowJobIconSize = value, "%.0f px");
         }
+        if (aggressorArrows.PreviewEnabled) aggressorArrows.DrawSettingsPreview();
         ImGui.TextDisabled(
             "A short arrow points from a new attacker toward you, with their job icon beside it. Uses the same " +
             "pressure evidence as this counter; steady focus and repeated hits do not repeat it. Offscreen arrows " +
@@ -297,12 +305,19 @@ internal sealed partial class SettingsWindow
             configuration.PressureShowEnemySlots,
             value => configuration.PressureShowEnemySlots = value);
         changed |= Checkbox(
-            "Experimental: show opponent LB bars above the pressure counter",
+            "Experimental: show opponent LB bars (CC only)",
             configuration.ShowOpponentLimitBreakBars,
             value => configuration.ShowOpponentLimitBreakBars = value);
         ImGui.TextDisabled(
             "Off by default and CC only. This still needs live confirmation for the current game patch. If Seiton " +
             "cannot read every enemy LB bar safely, it hides all of them instead of guessing.");
+        if (ImGui.Button(pressureCounter.LimitBreakPreviewEnabled ? "Stop LB bar preview" : "Preview LB bars (sample data)"))
+        {
+            pressureCounter.LimitBreakPreviewEnabled = !pressureCounter.LimitBreakPreviewEnabled;
+            pressureCounter.PreviewEnabled = false;
+        }
+        ImGui.TextDisabled("Preview uses fixed example values. Live LB bars also work with the pressure counter hidden.");
+        if (configuration.ShowOpponentLimitBreakBars) ImGui.TextWrapped(pressureCounter.LimitBreakGaugeStatus);
         ImGui.Separator();
         ImGui.TextUnformatted("Counter appearance");
         changed |= Slider(
@@ -361,7 +376,10 @@ internal sealed partial class SettingsWindow
         ImGui.TextDisabled(
             "Current targeting/casts and recent attacks use different styles. Neither changes your target.");
         if (ImGui.Button(pressureCounter.PreviewEnabled ? "Stop counter preview" : "Preview counter"))
+        {
             pressureCounter.PreviewEnabled = !pressureCounter.PreviewEnabled;
+            pressureCounter.LimitBreakPreviewEnabled = false;
+        }
         ImGui.SameLine();
         if (ImGui.Button("Reset counter position")) pressureCounter.ResetWindowPosition();
         return changed;

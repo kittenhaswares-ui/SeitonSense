@@ -170,7 +170,7 @@ static void NativeMatchupCountersUseEnemyEncounters()
         True(store.TryRecord(Sample(50_000), false, true), "first native player history record");
         var firstJson = File.ReadAllText(Path.Combine(directory, "cc-map-stats.json"));
         True(firstJson.Contains("Enemy One", StringComparison.Ordinal), "enemy identity persisted for search");
-        False(firstJson.Contains("Ally One", StringComparison.Ordinal), "ally-only identity remains HMAC-only");
+        True(firstJson.Contains("Ally One", StringComparison.Ordinal), "explicitly requested teammate identity is saved locally");
 
         var changedSides = Participants();
         changedSides[0] = changedSides[0] with { Team = 1 };
@@ -182,18 +182,22 @@ static void NativeMatchupCountersUseEnemyEncounters()
         True(secondJson.Contains("Ally One", StringComparison.Ordinal), "identity becomes searchable after enemy encounter");
 
         var snapshot = store.GetPlayerStatisticsSnapshot(1003);
-        Equal(6, snapshot.Players.Length, "only identities encountered as enemies are listed");
+        Equal(9, snapshot.Players.Length, "all nine nonlocal identities are listed with separate role counters");
 
         var enemyOne = snapshot.Players.Single(
             static player => player.PlayerName == "Enemy One");
         Equal(1L, enemyOne.WinsAgainst, "local win against Enemy One");
         Equal(0L, enemyOne.LossesAgainst, "later allied loss does not count against Enemy One");
+        Equal(0L, enemyOne.WinsTogether, "opposing win never counts as a win together");
+        Equal(1L, enemyOne.LossesTogether, "later allied loss is counted only together");
         Equal(60_000L, enemyOne.LastSeenUnixSeconds, "last seen refreshes on a later allied encounter");
 
         var allyOne = snapshot.Players.Single(
             static player => player.PlayerName == "Ally One");
         Equal(0L, allyOne.WinsAgainst, "earlier allied win does not count against Ally One");
         Equal(1L, allyOne.LossesAgainst, "local loss after Ally One becomes an enemy");
+        Equal(1L, allyOne.WinsTogether, "earlier allied win stays in together history");
+        Equal(0L, allyOne.LossesTogether, "later opposing loss never becomes loss together");
 
         True(
             store.TryGetObservedPlayerRecord(
@@ -264,6 +268,20 @@ static void PlayerSnapshotsRespectIdentityEpoch()
                 store.GetPlayerStatisticsSnapshot(1003).Players.Length,
                 "schema-4 one-way keys do not invent searchable player identity");
         });
+
+    WithPreparedStore(CreateOldSchemaFiveRoleHistoryDocument, (store, _) =>
+    {
+        True(store.StorageAvailable, "old schema-5 without optional teammate fields remains readable");
+        var old = store.GetPlayerStatisticsSnapshot(1003).Players.Single();
+        Equal(4L, old.WinsAgainst, "old opponent wins preserved");
+        Equal(3L, old.LossesAgainst, "old opponent losses preserved");
+        Equal(0L, old.WinsTogether, "unknown old aggregate wins are not invented as teammate wins");
+        Equal(0L, old.LossesTogether, "unknown old aggregate losses are not invented as teammate losses");
+        True(store.TryGetObservedPlayerRecord(1003, "Remote Alpha", 21, false, true, out var aggregate),
+            "old prediction aggregate still available");
+        Equal(20L, aggregate.Wins, "old aggregate wins preserved");
+        Equal(10L, aggregate.Losses, "old aggregate losses preserved");
+    });
 }
 
 static void SearchableHistoryReloadsWithPersistedSalt()
@@ -271,12 +289,15 @@ static void SearchableHistoryReloadsWithPersistedSalt()
     WithStore((store, directory) =>
     {
         True(store.TryRecord(Sample(50_000), false, true), "persist searchable history");
-        Equal(5, store.GetPlayerStatisticsSnapshot(1003).Players.Length, "initial enemy snapshot");
+        Equal(9, store.GetPlayerStatisticsSnapshot(1003).Players.Length, "initial opponent and teammate snapshot");
 
         var reloaded = new CrystallineConflictMapStatisticsStore(directory, null!);
         True(reloaded.StorageAvailable, "schema-5 store reloads with its saved salt");
         var snapshot = reloaded.GetPlayerStatisticsSnapshot(1003);
-        Equal(5, snapshot.Players.Length, "searchable rows survive restart");
+        Equal(9, snapshot.Players.Length, "both roles' searchable rows survive restart");
+        var allyOne = snapshot.Players.Single(static player => player.PlayerName == "Ally One");
+        Equal(1L, allyOne.WinsTogether, "ally-only wins survive persisted salt validation");
+        Equal(0L, allyOne.WinsAgainst, "ally-only row never gains opponent wins on reload");
         var enemyOne = snapshot.Players.Single(
             static player => player.PlayerName == "Enemy One");
         Equal(1L, enemyOne.WinsAgainst, "reloaded local wins against");
@@ -289,6 +310,10 @@ static void SearchableHistoryReloadsWithPersistedSalt()
             static player => player.PlayerName == "Enemy One");
         Equal(1L, updated.WinsAgainst, "post-restart win preserved");
         Equal(1L, updated.LossesAgainst, "post-restart loss recorded");
+        var updatedAlly = reloaded.GetPlayerStatisticsSnapshot(1003).Players.Single(
+            static player => player.PlayerName == "Ally One");
+        Equal(1L, updatedAlly.WinsTogether, "post-restart teammate win preserved");
+        Equal(1L, updatedAlly.LossesTogether, "post-restart teammate loss recorded separately");
     });
 }
 
@@ -337,12 +362,33 @@ static void ImportIsOneShotAndSearchable()
         Equal(21, snapshot.Players[0].WorldId, "imported searchable player world");
         Equal(1L, snapshot.Players[0].WinsAgainst, "imported local wins against player");
         Equal(1L, snapshot.Players[0].LossesAgainst, "imported local losses against player");
+        Equal(1L, snapshot.Players[0].WinsTogether, "imported player wins minus local losses against gives together wins");
+        Equal(0L, snapshot.Players[0].LossesTogether, "imported player losses minus local wins against gives together losses");
 
         var json = File.ReadAllText(Path.Combine(directory, "cc-map-stats.json"));
         True(json.Contains("Remote Alpha", StringComparison.OrdinalIgnoreCase), "searchable remote name persisted locally");
         False(json.Contains("Local Tester", StringComparison.OrdinalIgnoreCase), "raw local name absent");
         using var document = JsonDocument.Parse(json);
         Equal(5, document.RootElement.GetProperty("Schema").GetInt32(), "store schema");
+    });
+
+    WithStore((store, directory) =>
+    {
+        True(store.TryGetPvpStatsImportPlan(1003, out var plan), "ally-only import plan");
+        var import = ImportResult() with
+        {
+            Players = [new PvpStatsObservedPlayerAggregate("Ally Only", 21, 2, 1, 0, 0, 3, 40_000)],
+        };
+        True(store.TryMergePvpStatsHistory(1003, plan.StoreGeneration,
+            plan.ImportBeforeUnixSecondsExclusive, import, out _), "ally-only fresh import is retained");
+        var reloaded = new CrystallineConflictMapStatisticsStore(directory, null!);
+        True(reloaded.StorageAvailable, "ally-only imported name survives exact HMAC validation on reload");
+        var ally = reloaded.GetPlayerStatisticsSnapshot(1003).Players.Single();
+        Equal("Ally Only", ally.PlayerName, "ally-only imported identity is searchable locally");
+        Equal(2L, ally.WinsTogether, "ally-only imported wins are together wins");
+        Equal(1L, ally.LossesTogether, "ally-only imported losses are together losses");
+        Equal(0L, ally.WinsAgainst, "ally-only import never invents opponent wins");
+        Equal(0L, ally.LossesAgainst, "ally-only import never invents opponent losses");
     });
 }
 
@@ -385,6 +431,7 @@ static void PvpStatsBackfillIsIdempotent()
             Equal(1, firstSnapshot.Players.Length, "backfilled searchable snapshot");
             Equal(1L, firstSnapshot.Players[0].WinsAgainst, "backfilled local wins against");
             Equal(1L, firstSnapshot.Players[0].LossesAgainst, "backfilled local losses against");
+            Equal(1L, firstSnapshot.Players[0].WinsTogether, "safe import backfill adds exact teammate split");
             False(
                 firstSnapshot.Players.Any(static player => player.PlayerName == "Skipped History"),
                 "a later native-only row does not gain unproven old import details");
@@ -426,6 +473,7 @@ static void PvpStatsBackfillIsIdempotent()
             var secondSnapshot = store.GetPlayerStatisticsSnapshot(1003);
             Equal(1L, secondSnapshot.Players[0].WinsAgainst, "repeated backfill keeps local wins against");
             Equal(1L, secondSnapshot.Players[0].LossesAgainst, "repeated backfill keeps local losses against");
+            Equal(1L, secondSnapshot.Players[0].WinsTogether, "repeated import never duplicates teammate split");
         });
 }
 
@@ -848,6 +896,37 @@ static string CreateSchemaTwoDocument(
             }
           },
           "RecentResults": []
+        }
+      }
+    }
+    """;
+    var path = Path.Combine(directory, "cc-map-stats.json");
+    File.WriteAllText(path, json);
+    return path;
+}
+
+static string CreateOldSchemaFiveRoleHistoryDocument(string directory)
+{
+    var salt = Enumerable.Range(33, 32).Select(static value => (byte)value).ToArray();
+    var characterKey = HashCharacter(salt, 1003);
+    var playerKey = HashIdentity(salt, "21|REMOTE ALPHA");
+    var json = $$"""
+    {
+      "Schema": 5,
+      "Salt": "{{Convert.ToBase64String(salt)}}",
+      "Characters": {
+        "{{characterKey}}": {
+          "Overall": { "Wins": 20, "Losses": 10 },
+          "Maps": {},
+          "ObservedPlayers": {
+            "{{playerKey}}": {
+              "PlayerName": "Remote Alpha", "WorldId": 21,
+              "Wins": 20, "Losses": 10, "WinsAgainst": 4, "LossesAgainst": 3,
+              "LastSeenUnixSeconds": 49000
+            }
+          },
+          "RecentResults": [],
+          "PlayerHistoryStartedAtUnixSeconds": 48000
         }
       }
     }

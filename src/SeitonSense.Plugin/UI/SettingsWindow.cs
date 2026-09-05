@@ -17,11 +17,13 @@ internal sealed partial class SettingsWindow : Window
     private readonly TargetPressureTracker pressureTracker;
     private readonly IsolationAwarenessService isolationAwareness;
     private readonly PressureCounterWindow pressureCounter;
+    private readonly AggressorArrowRenderer aggressorArrows;
     private readonly CrystallineConflictInstantLeaveService crystallineConflictInstantLeave;
     private readonly CrystallineConflictPvpStatsHistoryImportService pvpStatsHistoryImport;
     private readonly IPlayerState playerState;
     private readonly IDataManager dataManager;
     private readonly CrystallineConflictMapStatisticsService mapStatistics;
+    private readonly OfficialCrystallineConflictRankService officialRanks;
     private readonly Action resetBufferLearningWindowPosition;
     private readonly Action resetWolvesDenRotationWindowPosition;
     private readonly Action resetCrystallineConflictPredictionWindowPosition;
@@ -40,6 +42,7 @@ internal sealed partial class SettingsWindow : Window
         TargetPressureTracker pressureTracker,
         IsolationAwarenessService isolationAwareness,
         PressureCounterWindow pressureCounter,
+        AggressorArrowRenderer aggressorArrows,
         CrystallineConflictInstantLeaveService crystallineConflictInstantLeave,
         CrystallineConflictPvpStatsHistoryImportService pvpStatsHistoryImport,
         IPlayerState playerState,
@@ -48,7 +51,8 @@ internal sealed partial class SettingsWindow : Window
         Action? resetBufferLearningWindowPosition = null,
         Action? resetWolvesDenRotationWindowPosition = null,
         Func<bool>? resetCrystallineConflictMapStatistics = null,
-        Action? resetCrystallineConflictPredictionWindowPosition = null)
+        Action? resetCrystallineConflictPredictionWindowPosition = null,
+        OfficialCrystallineConflictRankService? officialRanks = null)
         : base("Seiton Sense###SeitonSenseSettings")
     {
         this.configuration = configuration;
@@ -58,11 +62,13 @@ internal sealed partial class SettingsWindow : Window
         this.pressureTracker = pressureTracker;
         this.isolationAwareness = isolationAwareness;
         this.pressureCounter = pressureCounter;
+        this.aggressorArrows = aggressorArrows;
         this.crystallineConflictInstantLeave = crystallineConflictInstantLeave;
         this.pvpStatsHistoryImport = pvpStatsHistoryImport;
         this.playerState = playerState;
         this.dataManager = dataManager;
         this.mapStatistics = mapStatistics;
+        this.officialRanks = officialRanks ?? throw new ArgumentNullException(nameof(officialRanks));
         this.resetBufferLearningWindowPosition =
             resetBufferLearningWindowPosition ?? (() => { });
         this.resetWolvesDenRotationWindowPosition =
@@ -93,7 +99,8 @@ internal sealed partial class SettingsWindow : Window
                 overlay.ResourceAuraPreviewEnabled = false;
                 overlay.IsolationWarningPreviewEnabled = false;
                 overlay.HighPressureWarningPreviewEnabled = false;
-                pressureCounter.PreviewEnabled = false;
+                pressureCounter.StopPreviews();
+                aggressorArrows.PreviewEnabled = false;
             });
 
         ImGui.Separator();
@@ -134,7 +141,8 @@ internal sealed partial class SettingsWindow : Window
         overlay.ResourceAuraPreviewEnabled = false;
         overlay.IsolationWarningPreviewEnabled = false;
         overlay.HighPressureWarningPreviewEnabled = false;
-        pressureCounter.PreviewEnabled = false;
+        pressureCounter.StopPreviews();
+        aggressorArrows.PreviewEnabled = false;
     }
 
     private void DrawSidebar()

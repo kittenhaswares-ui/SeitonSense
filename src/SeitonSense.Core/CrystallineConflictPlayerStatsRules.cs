@@ -5,13 +5,19 @@ public readonly record struct CrystallineConflictPlayerStatsEntry(
     string WorldName,
     long WinsAgainst,
     long LossesAgainst,
-    long LastSeenUnixSeconds);
+    long LastSeenUnixSeconds,
+    long WinsTogether = 0,
+    long LossesTogether = 0);
 
 public enum CrystallineConflictPlayerStatsRankingMode
 {
     LossesAgainst,
     WinsAgainst,
+    WinsTogether,
+    LossesTogether,
 }
+
+public enum CrystallineConflictPlayerStatsRole { Opponents, Teammates }
 
 [Flags]
 public enum CrystallineConflictPlayerStatsBadge
@@ -19,6 +25,8 @@ public enum CrystallineConflictPlayerStatsBadge
     None = 0,
     ArchNemesis = 1 << 0,
     CannonFodder = 1 << 1,
+    MostLosses = ArchNemesis,
+    MostWins = CannonFodder,
 }
 
 public readonly record struct CrystallineConflictPlayerStatsRankRow(
@@ -30,16 +38,32 @@ public readonly record struct CrystallineConflictPlayerStatsRankRow(
     long MatchesAgainst,
     double WinRate,
     long LastSeenUnixSeconds,
-    CrystallineConflictPlayerStatsBadge Badges);
+    CrystallineConflictPlayerStatsBadge Badges,
+    CrystallineConflictPlayerStatsRole Role = CrystallineConflictPlayerStatsRole.Opponents)
+{
+    // Legacy field names remain source-compatible; these values always belong
+    // to Role, never to a mixture of allied and opposing encounters.
+    public long Wins => WinsAgainst;
+    public long Losses => LossesAgainst;
+    public long Games => MatchesAgainst;
+}
 
 /// <summary>
-/// Pure presentation rules for a local, player-relative CC opponent history.
+/// Pure presentation rules for separate, local-player-relative CC role histories.
 /// Badges and ranks are calculated from the complete valid catalog before an
 /// optional search is applied, so searching cannot promote an arbitrary row.
 /// </summary>
 public static class CrystallineConflictPlayerStatsRules
 {
     public const long BadgeMinimumEnemyMeetings = 3;
+
+    public static bool IsTeammateMode(CrystallineConflictPlayerStatsRankingMode mode) =>
+        mode is CrystallineConflictPlayerStatsRankingMode.WinsTogether or
+            CrystallineConflictPlayerStatsRankingMode.LossesTogether;
+
+    private static bool IsLossMode(CrystallineConflictPlayerStatsRankingMode mode) =>
+        mode is CrystallineConflictPlayerStatsRankingMode.LossesAgainst or
+            CrystallineConflictPlayerStatsRankingMode.LossesTogether;
 
     public static CrystallineConflictPlayerStatsRankRow[] BuildRanking(
         IReadOnlyList<CrystallineConflictPlayerStatsEntry>? entries,
@@ -51,7 +75,7 @@ public static class CrystallineConflictPlayerStatsRules
         var candidates = new List<Candidate>(entries.Count);
         for (var index = 0; index < entries.Count; index++)
         {
-            if (TryCreateCandidate(entries[index], index, out var candidate))
+            if (TryCreateCandidate(entries[index], index, mode, out var candidate))
                 candidates.Add(candidate);
         }
 
@@ -59,10 +83,12 @@ public static class CrystallineConflictPlayerStatsRules
 
         var archNemesis = FindBadgeWinner(
             candidates,
-            CrystallineConflictPlayerStatsRankingMode.LossesAgainst);
+            IsTeammateMode(mode) ? CrystallineConflictPlayerStatsRankingMode.LossesTogether :
+                CrystallineConflictPlayerStatsRankingMode.LossesAgainst);
         var cannonFodder = FindBadgeWinner(
             candidates,
-            CrystallineConflictPlayerStatsRankingMode.WinsAgainst);
+            IsTeammateMode(mode) ? CrystallineConflictPlayerStatsRankingMode.WinsTogether :
+                CrystallineConflictPlayerStatsRankingMode.WinsAgainst);
 
         candidates.Sort((left, right) => Compare(left, right, mode));
         var normalizedSearch = search?.Trim();
@@ -94,7 +120,9 @@ public static class CrystallineConflictPlayerStatsRules
                 candidate.MatchesAgainst,
                 candidate.WinRate,
                 candidate.LastSeenUnixSeconds,
-                badges));
+                badges,
+                IsTeammateMode(mode) ? CrystallineConflictPlayerStatsRole.Teammates :
+                    CrystallineConflictPlayerStatsRole.Opponents));
         }
 
         return rows.ToArray();
@@ -109,10 +137,10 @@ public static class CrystallineConflictPlayerStatsRules
         {
             if (candidate.MatchesAgainst < BadgeMinimumEnemyMeetings)
                 continue;
-            if (mode == CrystallineConflictPlayerStatsRankingMode.LossesAgainst &&
+            if (IsLossMode(mode) &&
                 candidate.LossesAgainst == 0)
                 continue;
-            if (mode == CrystallineConflictPlayerStatsRankingMode.WinsAgainst &&
+            if (!IsLossMode(mode) &&
                 candidate.WinsAgainst == 0)
                 continue;
 
@@ -126,32 +154,35 @@ public static class CrystallineConflictPlayerStatsRules
     private static bool TryCreateCandidate(
         CrystallineConflictPlayerStatsEntry entry,
         int sourceIndex,
+        CrystallineConflictPlayerStatsRankingMode mode,
         out Candidate candidate)
     {
         candidate = default;
         var playerName = entry.PlayerName?.Trim();
         var worldName = entry.WorldName?.Trim();
+        var wins = IsTeammateMode(mode) ? entry.WinsTogether : entry.WinsAgainst;
+        var losses = IsTeammateMode(mode) ? entry.LossesTogether : entry.LossesAgainst;
         if (string.IsNullOrWhiteSpace(playerName) ||
             string.IsNullOrWhiteSpace(worldName) ||
-            entry.WinsAgainst < 0 ||
-            entry.LossesAgainst < 0 ||
-            entry.WinsAgainst > long.MaxValue - entry.LossesAgainst ||
+            wins < 0 ||
+            losses < 0 ||
+            wins > long.MaxValue - losses ||
             entry.LastSeenUnixSeconds < 0)
         {
             return false;
         }
 
-        var matches = entry.WinsAgainst + entry.LossesAgainst;
+        var matches = wins + losses;
         if (matches == 0) return false;
 
         candidate = new Candidate(
             sourceIndex,
             playerName,
             worldName,
-            entry.WinsAgainst,
-            entry.LossesAgainst,
+            wins,
+            losses,
             matches,
-            entry.WinsAgainst / (double)matches,
+            wins / (double)matches,
             entry.LastSeenUnixSeconds,
             $"{playerName} @ {worldName}");
         return true;
@@ -162,12 +193,12 @@ public static class CrystallineConflictPlayerStatsRules
         Candidate right,
         CrystallineConflictPlayerStatsRankingMode mode)
     {
-        var primary = mode == CrystallineConflictPlayerStatsRankingMode.LossesAgainst
+        var primary = IsLossMode(mode)
             ? right.LossesAgainst.CompareTo(left.LossesAgainst)
             : right.WinsAgainst.CompareTo(left.WinsAgainst);
         if (primary != 0) return primary;
 
-        var rate = mode == CrystallineConflictPlayerStatsRankingMode.LossesAgainst
+        var rate = IsLossMode(mode)
             ? left.WinRate.CompareTo(right.WinRate)
             : right.WinRate.CompareTo(left.WinRate);
         if (rate != 0) return rate;

@@ -21,6 +21,14 @@ public static class AggressorArrowRules
     public const long MaximumSnapshotAgeMilliseconds = 500;
     public const long MaximumPulseRetentionMilliseconds = 2_000;
     public const float MinimumProjectedLengthPixels = 8;
+    public const float DefaultOverallScale = 1.35f;
+    public const float MinimumOverallScale = 0.75f;
+    public const float MaximumOverallScale = 3f;
+
+    public static float ResolveVisualScale(float uiScale, float overallScale) =>
+        Math.Clamp(float.IsFinite(uiScale) ? uiScale : 1f, 0.75f, 2f) *
+        Math.Clamp(float.IsFinite(overallScale) ? overallScale : DefaultOverallScale,
+            MinimumOverallScale, MaximumOverallScale);
 
     public static float PulseAlpha(long start, long now, float duration, bool reducedMotion)
     {

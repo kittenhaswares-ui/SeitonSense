@@ -38,7 +38,6 @@ internal sealed class CrystallineConflictMedicineKitRenderer
 {
     private const int ScanIntervalMilliseconds = 100;
     private const float BeaconWorldHeightYalms = 32f;
-    private const float BeaconMinimumScreenHeight = 180f;
     private const float EdgePadding = 42f;
     private static readonly Vector4 BeaconColor = new(0.18f, 1f, 0.34f, 1f);
 
@@ -133,7 +132,15 @@ internal sealed class CrystallineConflictMedicineKitRenderer
         }
 
         if (!configuration.ShowCrystallineConflictMedicineKitBeacons) return;
-        foreach (var anchor in anchors) DrawBeacon(draw, viewport, anchor);
+        draw.PushClipRect(Vector2.Zero, viewport, true);
+        try
+        {
+            foreach (var anchor in anchors) DrawBeacon(draw, viewport, anchor);
+        }
+        finally
+        {
+            draw.PopClipRect();
+        }
     }
 
     private bool IsExactContext =>
@@ -306,45 +313,54 @@ internal sealed class CrystallineConflictMedicineKitRenderer
             : float.NaN;
         var scale = SafeScale(configuration.CrystallineConflictMedicineKitOverlayScale);
         var color = BeaconColor;
-        if (!inViewport)
+        var skyWorld = anchor.Position + new Vector3(0f, BeaconWorldHeightYalms, 0f);
+        var skyProjected = gameGui.WorldToScreen(skyWorld, out var skyPoint, out _);
+        if (!CrystallineConflictMedicineKitRules.TryGetBeaconScreenSegment(
+                basePoint, projected, skyPoint, skyProjected, viewport, scale,
+                out var visibleBase, out var visibleTop))
         {
+            if (inViewport) return;
+            var padding = Math.Min(EdgePadding, Math.Min(viewport.X, viewport.Y) * 0.25f);
             var edge = Vector2.Clamp(
                 basePoint,
-                new Vector2(EdgePadding),
-                viewport - new Vector2(EdgePadding));
+                new Vector2(padding),
+                viewport - new Vector2(padding));
             draw.AddCircleFilled(edge, 13f * scale, Pack(color, 0.22f), 24);
             draw.AddCircle(edge, 9f * scale, Pack(color, 1f), 24, 2.5f * scale);
-            DrawBeaconLabel(draw, edge + new Vector2(0f, 13f * scale), distance, scale);
+            DrawBeaconLabel(draw, edge + new Vector2(0f, 13f * scale), distance, scale, viewport);
             return;
         }
 
-        var skyWorld = anchor.Position + new Vector3(0f, BeaconWorldHeightYalms, 0f);
-        var skyProjected = gameGui.WorldToScreen(skyWorld, out var skyPoint, out _);
-        if (!skyProjected || !IsFinite(skyPoint) || skyPoint.Y >= basePoint.Y - 20f)
-            skyPoint = new Vector2(basePoint.X, Math.Max(4f, basePoint.Y - BeaconMinimumScreenHeight));
-
-        var pulse = 0.82f +
+        var pulse = pluginInterface.UiBuilder.ShouldUseReducedMotion ? 1f : 0.82f +
             (0.18f * MathF.Sin((Environment.TickCount64 % 1_200L) / 1_200f * MathF.PI * 2f));
-        draw.AddLine(basePoint, skyPoint, Pack(color, 0.12f * pulse), 18f * scale);
-        draw.AddLine(basePoint, skyPoint, Pack(color, 0.3f * pulse), 8f * scale);
-        draw.AddLine(basePoint, skyPoint, Pack(color, 0.92f * pulse), 2.5f * scale);
-        draw.AddLine(basePoint, skyPoint, Pack(new Vector4(0.9f, 1f, 0.92f, 1f), 0.8f), 0.8f * scale);
-        draw.AddCircleFilled(basePoint, 18f * scale, Pack(color, 0.16f * pulse), 32);
-        draw.AddCircle(basePoint, 11f * scale, Pack(color, 0.95f), 32, 2.5f * scale);
-        DrawBeaconLabel(draw, skyPoint + new Vector2(0f, 5f), distance, scale);
+        draw.AddLine(visibleBase, visibleTop, Pack(color, 0.12f * pulse), 18f * scale);
+        draw.AddLine(visibleBase, visibleTop, Pack(color, 0.3f * pulse), 8f * scale);
+        draw.AddLine(visibleBase, visibleTop, Pack(color, 0.92f * pulse), 2.5f * scale);
+        draw.AddLine(visibleBase, visibleTop, Pack(new Vector4(0.9f, 1f, 0.92f, 1f), 0.8f), 0.8f * scale);
+        if (inViewport)
+        {
+            draw.AddCircleFilled(basePoint, 18f * scale, Pack(color, 0.16f * pulse), 32);
+            draw.AddCircle(basePoint, 11f * scale, Pack(color, 0.95f), 32, 2.5f * scale);
+        }
+        DrawBeaconLabel(draw, visibleTop + new Vector2(0f, 5f), distance, scale, viewport);
     }
 
     private static void DrawBeaconLabel(
         ImDrawListPtr draw,
         Vector2 anchor,
         float distance,
-        float scale)
+        float scale,
+        Vector2 viewport)
     {
         var text = float.IsFinite(distance)
             ? $"MEDICINE KIT  {distance:0}y"
             : "MEDICINE KIT";
         var size = ImGui.CalcTextSize(text) * scale;
-        var position = anchor - new Vector2(size.X * 0.5f, 0f);
+        var inset = new Vector2(6f);
+        var position = Vector2.Clamp(anchor - new Vector2(size.X * 0.5f, 0f),
+            inset, Vector2.Max(inset, viewport - size - inset));
+        draw.AddRectFilled(position - new Vector2(4f, 2f), position + size + new Vector2(4f, 2f),
+            Pack(new Vector4(0.01f, 0.05f, 0.02f, 1f), 0.82f), 3f);
         draw.AddText(
             ImGui.GetFont(),
             ImGui.GetFontSize() * scale,

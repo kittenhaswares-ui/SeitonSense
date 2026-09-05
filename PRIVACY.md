@@ -1,8 +1,27 @@
 # Privacy
 
+## Official tier cache
+
+The optional official-tier display makes read-only HTTPS requests to
+`na.finalfantasyxiv.com/lodestone/ranking/crystallineconflict/` for your Home
+World's region. It fetches no character profiles, sends no names or match data,
+and downloads no images. Like any website visit, the official server sees the
+connection's IP address. There is no Seiton backend involved.
+
+At most one refresh is attempted per 24 hours, outside combat and duties; a
+gameplay interruption cancels and defers the refresh. Failed downloads keep the
+previous cache. Requests are sequential, spaced, time-limited, and size-limited.
+The region's public character names, worlds, Lodestone IDs and published tiers
+are stored in `official-cc-ranks-REGION.json` in Seiton's configuration folder.
+These are public leaderboard entries, not your party roster or gameplay history.
+Disable the display under Player Stats to stop future refreshes. Cached entries
+older than seven days are not shown as a tier; unlisted players remain Unknown.
+
+## Local gameplay history
+
 Seiton Sense has no account, independent server, telemetry, or external gameplay
 upload. When local CC player history is enabled, the dedicated Player Stats
-feature intentionally stores bounded opponent names, Home Worlds, enemy-only W/L,
+feature intentionally stores bounded player names, Home Worlds, separate opponent/teammate W/L,
 and last-seen time in Seiton's local statistics file so `Name @ World` search
 works. It never uploads that data and never stores raw Content IDs, full rosters,
 or per-match scoreboards. Optional gameplay helpers can submit ordinary action, target-sign, or
@@ -95,7 +114,7 @@ following data already available in the local FFXIV client:
   context and territory, a nonzero local Content ID, ten unique nonzero Content
   IDs, known jobs, and exactly five members on each valid team must all agree.
   Player-history capture may also validate the bounded player name and Home
-  World already present in each row; ally-only identities remain HMAC-only and
+  World already present in each row; both opponent and teammate names may be saved locally and
   there is no name fallback for proving the local player or match boundary;
 - when either public-CC medicine-kit cue is enabled, exact public PvP context
   and territory plus the native content time remaining; the beacon path also
@@ -1859,8 +1878,13 @@ unavailable hook all record nothing.
 Confirmed totals are saved locally in `cc-map-stats.json`. The file contains a
 random salt, install-specific HMAC-SHA256 character and player keys, overall and
 per-map W/L, per-player aggregate W/L used by prediction, and the searchable
-Player Stats fields: bounded opponent name, Home World ID, enemy-only wins/losses
-from the local player's point of view, and last-seen time. It also contains one
+Player Stats fields: bounded player name, Home World ID, separate opponent and
+teammate wins/losses from the local player's point of view, and last-seen time
+in either role. `WinsAgainst`/`LossesAgainst` count only opposing encounters;
+`WinsTogether`/`LossesTogether` count only allied encounters. The teammate fields
+are optional additions to schema 5, not a rewrite of existing aggregate W/L.
+Older teammate history may be incomplete: missing role counters stay unknown
+and are not inferred from older aggregate totals. It also contains one
 first-player-history timestamp and at most 32 recent HMAC-SHA256 match
 fingerprints per character for duplicate suppression. A completed optional
 import stores its completion time, safe cutoff, aggregate match/player counts,
@@ -1876,10 +1900,11 @@ observed damage and healing, death edges, and final result rows exist only in
 memory for that match. Unknown historical players contribute a neutral 50%.
 Live damage and healing are explicitly incomplete observations until the exact
 local result packet replaces them at match end. The local history update may
-retain an opponent's bounded `Name @ World` and aggregate counters; ally-only
-identities keep only their HMAC-keyed aggregate used by prediction. It never
+retain a player's bounded `Name @ World` and separate opponent/teammate counters.
+Prediction continues using the separately retained player's own aggregate W/L.
+These display-name and role-history records stay local. It never
 stores the full team arrangement or the live/per-match scoreboard. Nothing is
-sent over the network by Seiton Sense.
+sent over the network by this local-history feature.
 
 The optional **Import old PvpStats player history** button is a bounded local
 action for the currently logged-in character. It is allowed only outside
@@ -1891,18 +1916,23 @@ database. The reader accepts only completed, non-deleted, non-quarantined
 Casual or Ranked 5v5 matches with one exact local alias and a known winner. A
 persisted first-history boundary plus a five-minute safety margin prevents old
 and newly recorded rows from overlapping. Raw PvpStats documents exist only in
-memory during the read. The merge stores bounded normalized opponent names and
-Home Worlds for search, the HMAC player keys, aggregate W/L used by prediction, enemy-only
-head-to-head W/L, and last-seen time. Cancelling, resetting local W/L, changing
+memory during the read. The merge stores bounded normalized player names and
+Home Worlds for search, the HMAC player keys, aggregate W/L used by prediction,
+separate opponent/teammate W/L, and last-seen time. For a fresh validated import,
+teammate wins equal the player's aggregate wins minus your losses against them;
+teammate losses equal their aggregate losses minus your wins against them.
+This calculation is never applied to an old unpartitioned stored aggregate.
+Cancelling, resetting local W/L, changing
 character, entering a duty, or any store change before completion prevents the
 pending result from being saved.
 
 Schema-4 files intentionally contain only one-way HMAC player keys and cannot
 display their older player names by themselves. If that history originally came
 from PvpStats, the same import button may scan the original pre-history interval
-once more to attach searchable names and enemy-only counters. The already
+once more to attach searchable names and exact role counters. The already
 imported aggregate W/L is not added again, and a saved details marker makes the
-backfill one-time. Without the original database, a legacy hash-only player
+backfill one-time. Already completed imports are not silently replayed to fill
+new teammate fields. Without the original database, a legacy hash-only player
 becomes searchable only after a later exact match observes the same identity.
 
 When a legacy schema-2 statistics file is loaded, its map W/L and own overall

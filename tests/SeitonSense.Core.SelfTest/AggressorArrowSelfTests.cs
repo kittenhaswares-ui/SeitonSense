@@ -6,6 +6,18 @@ internal static class AggressorArrowSelfTests
     private static readonly TargetPressureActorIdentity Local = new(100, 10);
     private static readonly TargetPressureActorIdentity Enemy = new(200, 20);
 
+    internal static void OverallVisualScaleIsVisibleBoundedAndFinite()
+    {
+        Check(AggressorArrowRules.DefaultOverallScale == 1.35f, "new overall default is visibly larger");
+        Check(AggressorArrowRules.ResolveVisualScale(1f, 1.35f) == 1.35f, "normal UI uses the chosen overall scale");
+        Check(AggressorArrowRules.ResolveVisualScale(2f, 3f) == 6f, "UI and overall scale compose");
+        Check(AggressorArrowRules.ResolveVisualScale(100f, 100f) == 6f, "oversized values clamp to finite maximum");
+        Check(AggressorArrowRules.ResolveVisualScale(-1f, -1f) == 0.5625f, "negative values clamp to lower bounds");
+        Check(AggressorArrowRules.ResolveVisualScale(float.NaN, float.NaN) == 1.35f, "NaN values use safe defaults");
+        Check(AggressorArrowRules.ResolveVisualScale(float.PositiveInfinity, float.NegativeInfinity) == 1.35f,
+            "infinite scales cannot create invalid draw geometry");
+    }
+
     internal static void BaselinesAndDirectTransitionsAreOneShot()
     {
         var tracker = new AggressorArrowTracker();

@@ -7,6 +7,7 @@ internal static class GuardianCommunicationSelfTests
     {
         // German intentionally places its target first, as documented at
         // https://de.finalfantasyxiv.com/lodestone/playguide/db/text_command/bf935708127/
+        // Its complete multiword name must remain a single quoted argument.
         for (var slot = 1; slot <= 8; slot++)
         {
             var german = ReviewedPvpCommandDispatcher.ResolveExactHardcodedCommand(
@@ -17,7 +18,7 @@ internal static class GuardianCommunicationSelfTests
                 new ReviewedPvpCommand(ReviewedPvpCommandKind.GuardianCoveringTarget, slot, ClientLanguage.French));
             var japanese = ReviewedPvpCommandDispatcher.ResolveExactHardcodedCommand(
                 new ReviewedPvpCommand(ReviewedPvpCommandKind.GuardianCoveringTarget, slot, ClientLanguage.Japanese));
-            Require(german == $"/schnellchat <{slot}> Ziel decken", "German command keeps native localized syntax.");
+            Require(german == $"/schnellchat <{slot}> \"Ziel decken\"", "German command keeps target first and groups the full localized name.");
             Require(english == $"/quickchat \"Covering Target\" <{slot}>", "English command keeps its own syntax.");
             Require(french == $"/quickchat \"Soutien : cible\" <{slot}>", "French command uses the same frozen party slot.");
             Require(japanese == $"/quickchat \"援護：ターゲット\" <{slot}>", "Japanese command uses the same frozen party slot.");

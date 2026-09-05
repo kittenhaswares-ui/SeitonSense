@@ -77,14 +77,36 @@ internal sealed class PressureCounterWindow : Window, IDisposable
     }
 
     internal bool PreviewEnabled { get; set; }
+    internal bool LimitBreakPreviewEnabled { get; set; }
     internal string LimitBreakGaugeDiagnostics => limitBreakGauges.Diagnostics.ToChatLine();
+    internal string LimitBreakGaugeStatus
+    {
+        get
+        {
+            var current = limitBreakGauges.Snapshot;
+            if (current.Active && OpponentLimitBreakGaugeRules.IsFresh(current.PublishedAtMilliseconds, Environment.TickCount64) &&
+                OpponentLimitBreakGaugeRules.IsCompleteExactEnemySet(current.Enemies))
+                return "Live LB bars: all five enemy gauges are currently verified.";
+            return current.Diagnostics.Failure switch
+            {
+                OpponentLimitBreakGaugeFailure.Disabled => "Live LB bars are off.",
+                OpponentLimitBreakGaugeFailure.Context => "Live LB bars need an active CC match with five resolved enemies.",
+                OpponentLimitBreakGaugeFailure.Addon => "Live LB bars need the native party and enemy lists to be visible.",
+                OpponentLimitBreakGaugeFailure.Calibration => "Live LB bars are waiting for calibration against your own LB gauge.",
+                OpponentLimitBreakGaugeFailure.Identity => "Live LB bars are waiting for exact player-to-row matching.",
+                OpponentLimitBreakGaugeFailure.Controller => "Live LB bars are waiting for the native LB controller.",
+                _ => "Live LB bars are hidden because current native HUD data could not be verified.",
+            };
+        }
+    }
 
-    public override bool DrawConditions() =>
-        !gameGui.GameUiHidden &&
-        (PreviewEnabled ||
-         (configuration.Enabled &&
-          configuration.ShowPressureCounter &&
-          tracker.Snapshot.PressureActive));
+    public override bool DrawConditions()
+    {
+        if (gameGui.GameUiHidden) return false;
+        return PreviewEnabled || LimitBreakPreviewEnabled ||
+            (configuration.Enabled && configuration.ShowPressureCounter && tracker.Snapshot.PressureActive) ||
+            ResolveGaugeDisplayMode(limitBreakGauges.Snapshot, Environment.TickCount64) == OpponentLimitBreakGaugeDisplayMode.Live;
+    }
 
     public override void PreDraw()
     {
@@ -108,20 +130,18 @@ internal sealed class PressureCounterWindow : Window, IDisposable
         var pressureSnapshot = tracker.Snapshot;
         var now = Environment.TickCount64;
         var gaugeSnapshot = limitBreakGauges.Snapshot;
-        var gauges = PreviewEnabled
-            ? PreviewLimitBreakGauges
-            : gaugeSnapshot.Active &&
-              OpponentLimitBreakGaugeRules.IsFresh(
-                  gaugeSnapshot.PublishedAtMilliseconds,
-                  Environment.TickCount64) &&
-              OpponentLimitBreakGaugeRules.IsCompleteExactEnemySet(gaugeSnapshot.Enemies)
-                ? gaugeSnapshot.Enemies
-                : [];
-        if (configuration.ShowOpponentLimitBreakBars && gauges.Count == 5)
+        var gaugeMode = ResolveGaugeDisplayMode(gaugeSnapshot, now);
+        if (PreviewEnabled || gaugeMode == OpponentLimitBreakGaugeDisplayMode.Preview)
+            ImGui.TextColored(new Vector4(1f, 0.76f, 0.28f, 1f), "PREVIEW - sample data, not live");
+        if (gaugeMode != OpponentLimitBreakGaugeDisplayMode.Hidden)
         {
-            DrawOpponentLimitBreakBars(gauges, Environment.TickCount64);
+            DrawOpponentLimitBreakBars(gaugeMode == OpponentLimitBreakGaugeDisplayMode.Preview
+                ? PreviewLimitBreakGauges : gaugeSnapshot.Enemies, now);
             ImGui.Spacing();
         }
+
+        if (!PreviewEnabled && (LimitBreakPreviewEnabled || !configuration.Enabled ||
+            !configuration.ShowPressureCounter || !pressureSnapshot.PressureActive)) return;
 
         var opponents = PreviewEnabled
             ? PreviewOpponents
@@ -232,6 +252,19 @@ internal sealed class PressureCounterWindow : Window, IDisposable
     }
 
     internal void ResetWindowPosition() => resetPosition = true;
+
+    internal void StopPreviews()
+    {
+        PreviewEnabled = false;
+        LimitBreakPreviewEnabled = false;
+    }
+
+    private OpponentLimitBreakGaugeDisplayMode ResolveGaugeDisplayMode(
+        OpponentLimitBreakGaugeSnapshot current, long now) =>
+        OpponentLimitBreakGaugeRules.ResolveDisplayMode(
+            configuration.Enabled, configuration.ShowOpponentLimitBreakBars,
+            PreviewEnabled, LimitBreakPreviewEnabled, current.Active,
+            current.PublishedAtMilliseconds, now, current.Enemies);
 
     public void Dispose()
     {

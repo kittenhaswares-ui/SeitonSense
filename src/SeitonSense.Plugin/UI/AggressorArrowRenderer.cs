@@ -23,9 +23,28 @@ internal sealed class AggressorArrowRenderer(
     IGameGui gameGui,
     ITextureProvider textureProvider)
 {
+    private bool previewEnabled;
+    private long previewStartedAt;
+
+    internal bool PreviewEnabled
+    {
+        get => previewEnabled;
+        set
+        {
+            if (previewEnabled == value) return;
+            previewEnabled = value;
+            previewStartedAt = value ? Environment.TickCount64 : 0;
+        }
+    }
+
     internal void Draw()
     {
-        if (!configuration.Enabled || !configuration.ShowCcAggressorArrows ||
+        if (!configuration.Enabled)
+        {
+            PreviewEnabled = false;
+            return;
+        }
+        if (!configuration.ShowCcAggressorArrows ||
             !pluginInterface.UiBuilder.ShouldModifyUi || gameGui.GameUiHidden ||
             !clientState.IsLoggedIn || !clientState.IsPvPExcludingDen)
             return;
@@ -55,15 +74,7 @@ internal sealed class AggressorArrowRenderer(
                 out var to, out var localInViewport) || !localInViewport)
             return;
 
-        var duration = SafeFloat(configuration.CcAggressorArrowDurationSeconds,
-            AggressorArrowRules.DefaultDurationSeconds, 0.35f, 1.5f);
-        var opacity = SafeFloat(configuration.CcAggressorArrowOpacity, 0.78f, 0.15f, 1f);
-        var scale = SafeFloat(ImGuiHelpers.GlobalScale, 1f, 0.75f, 2f);
-        var width = SafeFloat(configuration.CcAggressorArrowThickness, 2.4f, 1f, 5f) * scale;
-        var iconSize = SafeFloat(configuration.CcAggressorArrowJobIconSize, 28f, 20f, 44f) * scale;
-        var iconRadius = iconSize * 0.5f + 2f * scale;
-        if (viewport.X <= 2f * iconRadius + 2f || viewport.Y <= 2f * iconRadius + 2f) return;
-        var reducedMotion = pluginInterface.UiBuilder.ShouldUseReducedMotion;
+        var appearance = GetAppearance();
         var draw = ImGui.GetBackgroundDrawList();
         draw.PushClipRect(Vector2.Zero, viewport, true);
         try
@@ -71,38 +82,18 @@ internal sealed class AggressorArrowRenderer(
             foreach (var pulse in current.AggressorArrows)
             {
                 var alpha = AggressorArrowRules.PulseAlpha(
-                    pulse.StartedAtMilliseconds, now, duration, reducedMotion) * opacity;
+                    pulse.StartedAtMilliseconds, now, appearance.Duration, appearance.ReducedMotion) * appearance.Opacity;
                 if (alpha <= 0f) continue;
                 var opponent = current.Find(pulse.Actor.GameObjectId, pulse.Actor.EntityId);
                 if (opponent is null || !opponent.IsAliveAndTargetable || !opponent.IsIncoming ||
                     !IsFinite(opponent.WorldPosition) || opponent.JobId == 0 ||
-                    !textureProvider.TryGetFromGameIcon(new GameIconLookup(62000u + opponent.JobId), out var shared) ||
-                    !shared.TryGetWrap(out var icon, out _) ||
                     !gameGui.WorldToScreen(opponent.WorldPosition + new Vector3(0f, 1.05f, 0f),
                         out var from, out var enemyInViewport) || !enemyInViewport ||
                     !AggressorArrowRules.IsValidProjectedSegment(from, to, Vector2.Zero, viewport))
                     continue;
 
-                var progress = Math.Clamp((now - pulse.StartedAtMilliseconds) / (duration * 1000f), 0f, 1f);
-                var delta = to - from;
-                var distance = delta.Length();
-                var direction = delta / distance;
-                var start = from + direction * Math.Min(15f * scale, distance * 0.1f);
-                var end = to - direction * Math.Min(22f * scale, distance * 0.16f);
-                var control = (start + end) * 0.5f - new Vector2(0f, Math.Min(62f * scale, distance * 0.18f));
-                var headT = reducedMotion ? 0.98f : 0.48f + 0.5f * MathF.Sqrt(progress);
-                DrawCurve(draw, start, control, end, headT, width, alpha);
-
-                // The source job is always attached to its own arrow, even if
-                // the separate pressure counter is hidden or moved elsewhere.
-                var half = new Vector2(iconSize * 0.5f);
-                var iconCenter = Curve(start, control, end, 0.16f) + new Vector2(0f, -iconRadius - 2f * scale);
-                var iconMargin = new Vector2(iconRadius + 1f);
-                iconCenter = Vector2.Clamp(iconCenter, iconMargin, viewport - iconMargin);
-                draw.AddCircleFilled(iconCenter, iconRadius, Pack(0.08f, 0.04f, 0.04f, alpha * 0.9f), 24);
-                draw.AddImage(icon.Handle, iconCenter - half, iconCenter + half,
-                    Vector2.Zero, Vector2.One, Pack(1f, 1f, 1f, alpha));
-                draw.AddCircle(iconCenter, iconRadius, Pack(1f, 0.5f, 0.14f, alpha), 24, 1.5f * scale);
+                var progress = Math.Clamp((now - pulse.StartedAtMilliseconds) / (appearance.Duration * 1000f), 0f, 1f);
+                DrawArrow(draw, from, to, Vector2.Zero, viewport, opponent.JobId, progress, alpha, appearance);
             }
         }
         finally
@@ -111,8 +102,103 @@ internal sealed class AggressorArrowRenderer(
         }
     }
 
+    /// <summary>Explicit sample canvas; it never creates live pressure actors or pulses.</summary>
+    internal void DrawSettingsPreview()
+    {
+        if (!PreviewEnabled || !configuration.Enabled)
+        {
+            PreviewEnabled = false;
+            return;
+        }
+
+        ImGui.TextColored(new Vector4(1f, 0.76f, 0.28f, 1f), "PREVIEW - MCH / SCH sample arrows, not live");
+        ImGui.TextDisabled("Repeats automatically while these settings are open. Size changes apply immediately.");
+        var appearance = GetAppearance();
+        var minimum = ImGui.GetCursorScreenPos();
+        var size = new Vector2(Math.Max(180f, ImGui.GetContentRegionAvail().X), 240f * appearance.UiScale);
+        var maximum = minimum + size;
+        var draw = ImGui.GetWindowDrawList();
+        draw.AddRectFilled(minimum, maximum, Pack(0.035f, 0.035f, 0.055f, 0.95f), 6f);
+        draw.PushClipRect(minimum, maximum, true);
+        try
+        {
+            var now = Environment.TickCount64;
+            if (now < previewStartedAt) previewStartedAt = now;
+            var cycle = (long)(appearance.Duration * 1000f) + 450L;
+            var elapsed = now - previewStartedAt;
+            var target = minimum + new Vector2(size.X * 0.5f, size.Y * 0.83f);
+            draw.AddCircle(target, 10f * appearance.UiScale, Pack(0.7f, 0.75f, 0.82f, 0.8f), 20, 1.5f);
+            draw.AddText(target + new Vector2(14f, -7f), Pack(0.75f, 0.8f, 0.88f, 1f), "YOU (sample)");
+            for (var index = 0; index < 2; index++)
+            {
+                var age = (elapsed + cycle - (index * 200L % cycle)) % cycle;
+                var alpha = AggressorArrowRules.PulseAlpha(now - age, now, appearance.Duration,
+                    appearance.ReducedMotion) * appearance.Opacity;
+                var source = minimum + new Vector2(size.X * (index == 0 ? 0.16f : 0.84f), size.Y * 0.38f);
+                var progress = Math.Clamp(age / (appearance.Duration * 1000f), 0f, 1f);
+                DrawArrow(draw, source, target, minimum, maximum, index == 0 ? 31u : 28u,
+                    progress, alpha, appearance);
+            }
+        }
+        finally
+        {
+            draw.PopClipRect();
+        }
+        ImGui.Dummy(size);
+    }
+
+    private void DrawArrow(ImDrawListPtr draw, Vector2 from, Vector2 to,
+        Vector2 clipMinimum, Vector2 clipMaximum, uint jobId, float progress, float alpha,
+        in ArrowAppearance appearance)
+    {
+        var scale = appearance.VisualScale;
+        var iconRadius = appearance.IconSize * 0.5f + 2f * scale;
+        var clipSize = clipMaximum - clipMinimum;
+        if (alpha <= 0f || clipSize.X <= 2f * iconRadius + 2f || clipSize.Y <= 2f * iconRadius + 2f ||
+            !AggressorArrowRules.IsValidProjectedSegment(from, to, clipMinimum, clipMaximum) ||
+            !textureProvider.TryGetFromGameIcon(new GameIconLookup(62000u + jobId), out var shared) ||
+            !shared.TryGetWrap(out var icon, out _)) return;
+
+        var delta = to - from;
+        var distance = delta.Length();
+        var direction = delta / distance;
+        var start = from + direction * Math.Min(15f * scale, distance * 0.1f);
+        var end = to - direction * Math.Min(22f * scale, distance * 0.16f);
+        var curveHeight = Math.Min(distance * 0.45f,
+            Math.Min(62f * appearance.UiScale, distance * 0.18f) * appearance.OverallScale);
+        var control = (start + end) * 0.5f - new Vector2(0f, curveHeight);
+        var headT = appearance.ReducedMotion ? 0.98f : 0.48f + 0.5f * MathF.Sqrt(progress);
+        DrawCurve(draw, start, control, end, headT, appearance.Width, alpha, scale);
+
+        var half = new Vector2(appearance.IconSize * 0.5f);
+        var iconCenter = Curve(start, control, end, 0.16f) + new Vector2(0f, -iconRadius - 2f * scale);
+        var iconMargin = new Vector2(iconRadius + 1f);
+        iconCenter = Vector2.Clamp(iconCenter, clipMinimum + iconMargin, clipMaximum - iconMargin);
+        draw.AddCircleFilled(iconCenter, iconRadius, Pack(0.08f, 0.04f, 0.04f, alpha * 0.9f), 24);
+        draw.AddImage(icon.Handle, iconCenter - half, iconCenter + half,
+            Vector2.Zero, Vector2.One, Pack(1f, 1f, 1f, alpha));
+        draw.AddCircle(iconCenter, iconRadius, Pack(1f, 0.5f, 0.14f, alpha), 24, 1.5f * scale);
+    }
+
+    private ArrowAppearance GetAppearance()
+    {
+        var uiScale = SafeFloat(ImGuiHelpers.GlobalScale, 1f, 0.75f, 2f);
+        var overall = SafeFloat(configuration.CcAggressorArrowScale, AggressorArrowRules.DefaultOverallScale,
+            AggressorArrowRules.MinimumOverallScale, AggressorArrowRules.MaximumOverallScale);
+        var scale = AggressorArrowRules.ResolveVisualScale(uiScale, overall);
+        return new ArrowAppearance(
+            SafeFloat(configuration.CcAggressorArrowDurationSeconds, AggressorArrowRules.DefaultDurationSeconds, 0.35f, 1.5f),
+            SafeFloat(configuration.CcAggressorArrowOpacity, 0.78f, 0.15f, 1f), uiScale, overall, scale,
+            SafeFloat(configuration.CcAggressorArrowThickness, 2.4f, 1f, 5f) * scale,
+            SafeFloat(configuration.CcAggressorArrowJobIconSize, 28f, 20f, 44f) * scale,
+            pluginInterface.UiBuilder.ShouldUseReducedMotion);
+    }
+
+    private readonly record struct ArrowAppearance(float Duration, float Opacity, float UiScale,
+        float OverallScale, float VisualScale, float Width, float IconSize, bool ReducedMotion);
+
     private static void DrawCurve(ImDrawListPtr draw, Vector2 start, Vector2 control,
-        Vector2 end, float headT, float width, float alpha)
+        Vector2 end, float headT, float width, float alpha, float scale)
     {
         const int segments = 18;
         var previous = start;
@@ -128,7 +214,7 @@ internal sealed class AggressorArrowRenderer(
 
         var tangent = Vector2.Normalize(2f * (1f - headT) * (control - start) + 2f * headT * (end - control));
         var normal = new Vector2(-tangent.Y, tangent.X);
-        var wing = Math.Max(7f, width * 3.2f);
+        var wing = Math.Max(7f * scale, width * 3.2f);
         var back = previous - tangent * wing;
         draw.AddLine(previous, back + normal * wing * 0.62f, Pack(1f, 0.62f, 0.18f, alpha), width * 1.25f);
         draw.AddLine(previous, back - normal * wing * 0.62f, Pack(1f, 0.62f, 0.18f, alpha), width * 1.25f);

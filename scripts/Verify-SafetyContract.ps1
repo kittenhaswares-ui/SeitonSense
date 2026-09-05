@@ -36,6 +36,8 @@ $crystallineConflictPvpStatsHistoryReaderPath = Join-Path $pluginServicesRoot 'C
 $crystallineConflictPvpStatsHistoryImportServicePath = Join-Path $pluginServicesRoot 'CrystallineConflictPvpStatsHistoryImportService.cs'
 $crystallineConflictPredictionServicePath = Join-Path $pluginServicesRoot 'CrystallineConflictPredictionService.cs'
 $crystallineConflictPredictionWindowPath = Join-Path $pluginUiRoot 'CrystallineConflictPredictionWindow.cs'
+$officialRankServicePath = Join-Path $pluginServicesRoot 'OfficialCrystallineConflictRankService.cs'
+$officialRankRulesPath = Join-Path $coreRoot 'OfficialCrystallineConflictRankRules.cs'
 $pluginPersistenceSelfTestPath = Join-Path $resolvedRoot 'tests\SeitonSense.Plugin.SelfTest\Program.cs'
 $buildReleaseScriptPath = Join-Path $resolvedRoot 'scripts\Build-Release.ps1'
 $backwardPanicShukuchiRulesPath = Join-Path $coreRoot 'BackwardPanicShukuchiRules.cs'
@@ -89,6 +91,14 @@ $forbiddenChecks = [ordered]@{
 
 foreach ($check in $forbiddenChecks.GetEnumerator()) {
     $matches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern $check.Value)
+    if ($check.Key -eq 'network client APIs') {
+        # One fixed-host public read-only standings client, pinned separately below.
+        # The pure parser imports only WebUtility for HTML decoding, never a client.
+        $matches = @($matches | Where-Object {
+            $_.Path -ne $officialRankServicePath -and
+            -not ($_.Path -eq $officialRankRulesPath -and $_.Line -eq 'using System.Net;')
+        })
+    }
     if ($check.Key -eq 'signature scans or unmanaged hook libraries') {
         # Plugin.cs may only receive the scanner, and Smart Tab owns the one
         # reviewed, version-pinned native helper scan checked in detail below.
@@ -130,13 +140,50 @@ foreach ($check in $forbiddenChecks.GetEnumerator()) {
                      $_.Line -match '^\s*using \(var stream = new FileStream\(\s*$' -or
                      $_.Line -match '^\s*using \(var writer = new StreamWriter\(stream, new UTF8Encoding\(false, true\)\)\)\s*$')) -or
                 ($_.Path -eq $crystallineConflictPvpStatsHistoryReaderPath -and
-                    $_.Line -match '^\s*using var stream = new FileStream\(\s*$'))
+                    $_.Line -match '^\s*using var stream = new FileStream\(\s*$') -or
+                ($_.Path -eq $officialRankServicePath -and
+                    ($_.Line -match '^\s*Directory\.CreateDirectory\(cacheDirectory\);$' -or
+                     $_.Line -match '^\s*using \(var stream = new FileStream\(temporary, FileMode.Create, FileAccess.Write, FileShare.None\)\)$')))
         })
     }
     if ($matches.Count -gt 0) {
         $locations = $matches | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
         throw "Safety contract failed ($($check.Key)): $($locations -join ', ')"
     }
+}
+
+$officialRankService = Get-Content -LiteralPath $officialRankServicePath -Raw
+foreach ($required in @(
+    'AllowAutoRedirect = false',
+    'UseCookies = false',
+    'TimeSpan.FromHours(24)',
+    '!condition[ConditionFlag.BoundByDuty]',
+    '!condition[ConditionFlag.InCombat]',
+    'if (refreshing && !canFetch) cancellation?.Cancel();',
+    'Task.Run(() => RefreshAsync(refreshRegion, previous, token))',
+    'https://na.finalfantasyxiv.com/lodestone/ranking/crystallineconflict/?dcgroup={dc}&rank_type={tier}&page={page}',
+    'new HttpRequestMessage(HttpMethod.Get, url)',
+    'if (page > 1) request.Headers.Add("X-Requested-With", "XMLHttpRequest");',
+    'timeout.CancelAfter(TimeSpan.FromSeconds(15))',
+    'page <= 6',
+    'tier <= 8',
+    'MaximumPageBytes = 262_144',
+    'MaximumCacheBytes = 524_288',
+    'catch (OperationCanceledException) when (token.IsCancellationRequested)',
+    'official-cc-ranks-{dc}.json',
+    'File.Move(temporary, path, true)',
+    'worlds.TryGetValue(homeWorldId, out var world)',
+    'entry.HomeWorld, world, StringComparison.OrdinalIgnoreCase',
+    'entry.Name, name.Trim(), StringComparison.OrdinalIgnoreCase'
+)) {
+    if (-not $officialRankService.Contains($required)) {
+        throw "Official rank daily-cache contract missing: $required"
+    }
+}
+if ($officialRankService -match '\b(?:HttpMethod\.(?:Post|Put|Patch|Delete)|PostAsync|PutAsync|PatchAsync|DeleteAsync|FormUrlEncodedContent|StringContent|ByteArrayContent|UseAction|ActionManager|ITargetManager|TargetManager|Hook<|ISigScanner|IChatGui|SendInput|ContentId)\b' -or
+    ([regex]::Matches($officialRankService, 'https?://')).Count -ne 1 -or
+    ([regex]::Matches($officialRankService, 'http\.SendAsync')).Count -ne 1) {
+    throw 'Official ranks must remain one fixed official-host GET-only display cache without gameplay dispatch or uploads.'
 }
 
 $slotResolverPath = Join-Path $pluginServicesRoot 'EnemySlotResolver.cs'
@@ -341,6 +388,7 @@ $expectedSettingsRelativePaths = @(
     'Settings/SettingsWindow.Hud.cs',
     'Settings/SettingsWindow.Jobs.cs',
     'Settings/SettingsWindow.Macros.cs',
+    'Settings/SettingsWindow.OfficialRanks.cs',
     'Settings/SettingsWindow.Ping.cs',
     'Settings/SettingsWindow.Start.cs',
     'Settings/SettingsWindow.Stats.cs',
@@ -951,11 +999,11 @@ Assert-Literals $smartActionBufferCompatibilitySelfTests @(
     'reActionOwnsExactAction: false)',
     'reActionOwnsExactAction: true)'
 ) 'Generic-buffer compatibility self-tests'
-if ($staticIntegratedTestCount -ne 633 -or
+if ($staticIntegratedTestCount -ne 645 -or
     $logicalRepeatTestCount -ne 31 -or
     $physicalLatchTestCount -ne 6 -or
     $repeatPolicyTestCount -ne 4 -or
-    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 674 -or
+    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 686 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches($smartActionBufferSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferCompatibilitySelfTests\.\w+').Count -ne 6 -or
@@ -965,7 +1013,7 @@ if ($staticIntegratedTestCount -ne 633 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatPolicySelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartSprintSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches((Read-RequiredSource $smartSprintSelfTestsPath 'Smart Sprint self-tests'), '\bpublic static void\s+\w+\s*\(').Count -ne 7) {
-    throw 'Schema 53 must retain seven smart-buffer tests, six compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, seven Smart Sprint tests, four Player Stats tests, and the exact 674-test combined Core registry.'
+    throw 'Schema 53 must retain seven smart-buffer tests, six compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, seven Smart Sprint tests, four Player Stats tests, and the exact 686-test combined Core registry.'
 }
 
 # Pin the two schema-42 visual overlays and the fail-closed local map-result
@@ -1016,13 +1064,16 @@ if ($normalizedCrystallineConflictPredictionService -notmatch 'internal static C
     throw 'CC prediction must remain visibly active but incomplete while the exact preparation roster resolves, without claiming combat or fabricated players; both unreadable and incomplete rosters publish preparation, and a complete roster freezes once through the scenario-tested transition.'
 }
 Assert-Literals $crystallineConflictPredictionWindow @(
-    'ImGui.BeginTable("##SeitonSensePredictionPlayers", 5, flags',
+    'var columns = showRanks ? 6 : 5;',
+    'ImGui.BeginTable("##SeitonSensePredictionPlayers", columns, flags',
+    'ImGui.TableSetupColumn("OFFICIAL TIER"',
+    'officialRanks.Find(player.Name, player.HomeWorldId)',
     'ImGui.TableSetupColumn("NAME"',
     'ImGui.TableSetupColumn("D"',
     'ImGui.TableSetupColumn("DMG"',
     'ImGui.TableSetupColumn("HEAL"',
     'ImGui.TableSetupColumn("CRYSTAL"'
-) 'Prediction HUD retains only identity and current-match scoreboard columns'
+) 'Prediction HUD retains identity, optional published official tier, and current-match scoreboard columns'
 if ($crystallineConflictPredictionWindow -match '\bplayer\.(?:Wins|Losses)\b|\bsnapshot\.(?:KnownAllyRecords|KnownEnemyRecords)\b|TableSetupColumn\("(?:W/L|RECORD|KNOWN)"') {
     throw 'Historical player W/L and known-record counts must stay out of the movable prediction HUD; they belong only to Player Stats while prediction may continue using them internally.'
 }
@@ -1035,13 +1086,22 @@ Assert-Literals $pluginPersistenceSelfTests @(
     '("PvpStats import is one-shot and persists searchable matchup identity", ImportIsOneShotAndSearchable),',
     '("schema-4 PvpStats details backfill is idempotent without double-counting W/L", PvpStatsBackfillIsIdempotent),',
     'static void PredictionPreparationSnapshotStaysVisible()',
-    'False(firstJson.Contains("Ally One", StringComparison.Ordinal), "ally-only identity remains HMAC-only");',
+    'True(firstJson.Contains("Ally One", StringComparison.Ordinal), "explicitly requested teammate identity is saved locally");',
     'True(secondJson.Contains("Ally One", StringComparison.Ordinal), "identity becomes searchable after enemy encounter");',
-    'Equal(6, snapshot.Players.Length, "only identities encountered as enemies are listed");',
+    'Equal(9, snapshot.Players.Length, "all nine nonlocal identities are listed with separate role counters");',
+    'Equal(1L, enemyOne.LossesTogether, "later allied loss is counted only together");',
+    'Equal(1L, allyOne.WinsTogether, "earlier allied win stays in together history");',
     'Equal(60_000L, enemyOne.LastSeenUnixSeconds, "last seen refreshes on a later allied encounter");',
     'store.GetPlayerStatisticsSnapshot(1003).Players.Length,',
     '"schema-4 one-way keys do not invent searchable player identity"',
-    'Equal(5, snapshot.Players.Length, "searchable rows survive restart");',
+    'Equal(9, snapshot.Players.Length, "both roles'' searchable rows survive restart");',
+    'Equal(0L, old.WinsTogether, "unknown old aggregate wins are not invented as teammate wins");',
+    'Equal(0L, old.LossesTogether, "unknown old aggregate losses are not invented as teammate losses");',
+    'Equal(20L, aggregate.Wins, "old aggregate wins preserved");',
+    'Equal(10L, aggregate.Losses, "old aggregate losses preserved");',
+    'Equal(2L, ally.WinsTogether, "ally-only imported wins are together wins");',
+    'Equal(1L, ally.LossesTogether, "ally-only imported losses are together losses");',
+    'Equal(1L, secondSnapshot.Players[0].WinsTogether, "repeated import never duplicates teammate split");',
     'Equal(50_001L, firstPlan.ImportBeforeUnixSecondsExclusive, "legacy unbounded cutoff is capped after the original import time");',
     'Equal(2L, afterFirst.Wins, "participant wins are not added twice");',
     'firstSnapshot.Players.Any(static player => player.PlayerName == "Skipped History")',
@@ -1068,10 +1128,17 @@ Assert-Literals $crystallineConflictPlayerStatsRules @(
     'string WorldName,',
     'long WinsAgainst,',
     'long LossesAgainst,',
-    'long LastSeenUnixSeconds);',
+    'long LastSeenUnixSeconds,',
+    'long WinsTogether = 0,',
+    'long LossesTogether = 0);',
     'public enum CrystallineConflictPlayerStatsRankingMode',
     'LossesAgainst,',
     'WinsAgainst,',
+    'WinsTogether,',
+    'LossesTogether,',
+    'public enum CrystallineConflictPlayerStatsRole { Opponents, Teammates }',
+    'var wins = IsTeammateMode(mode) ? entry.WinsTogether : entry.WinsAgainst;',
+    'var losses = IsTeammateMode(mode) ? entry.LossesTogether : entry.LossesAgainst;',
     'public const long BadgeMinimumEnemyMeetings = 3;',
     'public static CrystallineConflictPlayerStatsRankRow[] BuildRanking(',
     'normalizedSearch!,',
@@ -1079,13 +1146,21 @@ Assert-Literals $crystallineConflictPlayerStatsRules @(
     'candidate.SearchText.Contains(',
     'CrystallineConflictPlayerStatsBadge.ArchNemesis',
     'CrystallineConflictPlayerStatsBadge.CannonFodder'
-) 'Pure searchable local-perspective Player Stats ranking and badge rules'
+) 'Pure searchable local-perspective Player Stats ranking with separate opponent and teammate counters'
+Assert-Literals $crystallineConflictPlayerStatsSelfTests @(
+    '"opponent wins never enter teammate wins"',
+    '"opponent losses never enter teammate losses"',
+    '"teammate wins never enter opponent wins"',
+    '"teammate losses never enter opponent losses"',
+    '"invalid teammate counters fail closed"',
+    '"a high-volume player can honestly lead both absolute win and loss totals"'
+) 'Player Stats role isolation and honest absolute-total leaders'
 if ($crystallineConflictPlayerStatsRules -match '\b(?:Dalamud|ImGui|File|Directory|HttpClient|WebRequest|Socket|ContentId|ActionManager|UseAction|TargetManager)\b' -or
     [regex]::Matches($crystallineConflictPlayerStatsSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 4 -or
     [regex]::Matches($integratedCoreTestProgram, '\bCrystallineConflictPlayerStatsSelfTests\.\w+').Count -ne 4 -or
     $normalizedCrystallineConflictPlayerStatsRules -notmatch 'if \(candidate\.MatchesAgainst < BadgeMinimumEnemyMeetings\) continue;' -or
     $normalizedCrystallineConflictPlayerStatsRules -notmatch 'var normalizedSearch = search\?\.Trim\(\);.*?candidate\.SearchText\.Contains\( normalizedSearch!, StringComparison\.OrdinalIgnoreCase\)') {
-    throw 'Player Stats must remain a four-test pure Core catalog: bounded Name @ World search, enemy-only W/L ranking, deterministic ties, and global badges requiring at least three meetings.'
+    throw 'Player Stats must remain a four-test pure Core catalog: bounded Name @ World search, separate role-specific W/L ranking, deterministic ties, and global leaders requiring at least three games in that role.'
 }
 
 Assert-Literals $crystallineConflictMedicineKitRules @(
@@ -1141,10 +1216,10 @@ Assert-Literals $crystallineConflictMedicineKitSelfTests @(
     'TryGetFirstSpawnCountdown(302f, out _)',
     'IsMedicineKitName("Unused Medicine Kit Marker")'
 ) 'Medicine-kit countdown boundaries plus registered runtime-name unit coverage'
-if ([regex]::Matches($crystallineConflictMedicineKitSelfTests, '(?m)^\s*public static void \w+\(\)').Count -ne 2 -or
-    [regex]::Matches($integratedCoreTestProgram, '\bCrystallineConflictMedicineKitSelfTests\.\w+').Count -ne 2 -or
+if ([regex]::Matches($crystallineConflictMedicineKitSelfTests, '(?m)^\s*public static void \w+\(\)').Count -ne 4 -or
+    [regex]::Matches($integratedCoreTestProgram, '\bCrystallineConflictMedicineKitSelfTests\.\w+').Count -ne 4 -or
     $crystallineConflictMedicineKitSelfTests -match '\b(?:UseAction|UseActionLocation|ActionManager|Dalamud|FFXIVClientStructs|IObjectTable|IClientState|EventFramework|GameObject|TargetManager|SetTarget|Environment\.TickCount64|DateTime|Stopwatch|Task|Thread|File|Directory|HttpClient|WebRequest|Socket)\b|\bSystem\.(?:Timers?|Threading\.Timer)\b') {
-    throw 'Both pure medicine-kit rule tests and their registry entries must remain present exactly once; they do not establish the live runtime object fingerprint or claimable lifecycle.'
+    throw 'All four pure medicine-kit rule and projection tests must remain registered exactly once; they do not establish the live runtime object fingerprint or claimable lifecycle.'
 }
 Assert-Literals $pvpRangeHelperRules @(
     'public const float MeleeRangeYalms = 5f;',
@@ -1419,11 +1494,15 @@ Assert-Literals $crystallineConflictMapStatisticsService @(
     'record.PlayerName = update.PlayerName;',
     'record.WorldId = update.WorldId;',
     'if (!TryIncrementAgainst(record, update.LocalWon))',
-    'var hasOpponentHistory =',
-    'update.WinsAgainst != 0 || update.LossesAgainst != 0;',
-    'hasOpponentHistory ? update.PlayerName : string.Empty,',
-    'hasOpponentHistory ? update.WorldId : (ushort)0,',
-    'if (update.WinsAgainst == 0 && update.LossesAgainst == 0)',
+    'public long WinsTogether { get; set; }',
+    'public long LossesTogether { get; set; }',
+    'if (!TryIncrementTogether(record, update.LocalWon)) return false;',
+    'update.Wins - update.LossesAgainst',
+    'update.Losses - update.WinsAgainst',
+    'existing.Value.WinsTogether = winsTogether;',
+    'existing.Value.LossesTogether = lossesTogether;',
+    'record.WinsTogether <= record.Wins - record.LossesAgainst &&',
+    'record.LossesTogether <= record.Losses - record.WinsAgainst;',
     'if (update.Wins > existing.Value.Wins ||',
     'update.Losses > existing.Value.Losses)',
     'private bool TryValidate(MapStatisticsDocument candidate, out byte[] candidateSalt)',
@@ -1471,8 +1550,8 @@ if ([regex]::Matches($crystallineConflictMapStatisticsService, 'HookFromSignatur
 if ($crystallineConflictMapStatisticsService -match '\b(HttpClient|WebRequest|Socket|Dns|TcpClient|UdpClient)\b' -or
     $normalizedCrystallineConflictMapStatisticsService -notmatch 'ComputeObservedPlayerKey\(string normalizedIdentity\) => ComputeHash\(Encoding\.UTF8\.GetBytes\(normalizedIdentity\)\);' -or
     $normalizedCrystallineConflictMapStatisticsService -notmatch 'if \(worldId == 0 \|\| string\.IsNullOrWhiteSpace\(candidateName\) \|\| candidateName\.Length is < 3 or > 42.*?Encoding\.UTF8\.GetByteCount\(candidateName\) > CrystallineConflictMapResultPlayer\.PlayerNameBufferLength - 1\)' -or
-    $normalizedCrystallineConflictMapStatisticsService -notmatch 'if \(sourceSchema < 5\).*?player\.Value\.PlayerName = string\.Empty; player\.Value\.WorldId = 0; player\.Value\.WinsAgainst = 0; player\.Value\.LossesAgainst = 0; player\.Value\.LastSeenUnixSeconds = 0;' -or
-    $normalizedCrystallineConflictMapStatisticsService -notmatch 'else \{.*?if \(player\.Value\.WinsAgainst == 0 && player\.Value\.LossesAgainst == 0\) \{ player\.Value\.PlayerName = string\.Empty; player\.Value\.WorldId = 0; player\.Value\.LastSeenUnixSeconds = 0; \}.*?TryValidateObservedPlayerDetails\( player\.Key, player\.Value, candidateSalt\)' -or
+    $normalizedCrystallineConflictMapStatisticsService -notmatch 'if \(sourceSchema < 5\).*?player\.Value\.PlayerName = string\.Empty; player\.Value\.WorldId = 0; player\.Value\.WinsAgainst = 0; player\.Value\.LossesAgainst = 0; player\.Value\.WinsTogether = 0; player\.Value\.LossesTogether = 0; player\.Value\.LastSeenUnixSeconds = 0;' -or
+    $normalizedCrystallineConflictMapStatisticsService -notmatch 'if \(player\.Value\.WinsAgainst == 0 && player\.Value\.LossesAgainst == 0 && player\.Value\.WinsTogether == 0 && player\.Value\.LossesTogether == 0\) \{ player\.Value\.PlayerName = string\.Empty; player\.Value\.WorldId = 0; player\.Value\.LastSeenUnixSeconds = 0; \}.*?TryValidateObservedPlayerDetails\( player\.Key, player\.Value, candidateSalt\)' -or
     $normalizedCrystallineConflictMapStatisticsService -match 'ObservedPlayers\.Add\([^,]+,\s*(?:participant|identity|playerName|decodedName)') {
     throw 'Local CC history must have no network path, must bound Name + World while retaining install-specific HMAC lookup keys, and must never invent searchable identity when migrating schema 4.'
 }
@@ -1488,9 +1567,11 @@ if (-not $persistentCcSchema.Success -or
     $pvpStatsBackfillBlock.Groups['Body'].Value -match '\.(?:Wins|Losses)\s*=' -or
     $pvpStatsBackfillBlock.Groups['Body'].Value -notmatch 'if \(update\.Wins > existing\.Value\.Wins \|\| update\.Losses > existing\.Value\.Losses\) \{.*?continue; \}' -or
     $normalizedCrystallineConflictMapStatisticsService -notmatch 'var importedAtExclusive = character\.PvpStatsImportedAtUnixSeconds == long\.MaxValue \? long\.MaxValue : character\.PvpStatsImportedAtUnixSeconds \+ 1; return Math\.Min\( character\.PvpStatsImportBeforeUnixSecondsExclusive, importedAtExclusive\);' -or
-    $normalizedCrystallineConflictMapStatisticsService -notmatch 'if \(update\.IsEnemy\) \{ record\.PlayerName = update\.PlayerName; record\.WorldId = update\.WorldId; record\.LastSeenUnixSeconds = Math\.Max\( record\.LastSeenUnixSeconds, update\.LastSeenUnixSeconds\); if \(!TryIncrementAgainst\(record, update\.LocalWon\)\) return false; \} else if \(record\.HasSearchableIdentity\) \{.*?record\.LastSeenUnixSeconds = Math\.Max\( record\.LastSeenUnixSeconds, update\.LastSeenUnixSeconds\); \}' -or
-    $normalizedCrystallineConflictMapStatisticsService -notmatch 'var hasOpponentHistory = update\.WinsAgainst != 0 \|\| update\.LossesAgainst != 0;.*?hasOpponentHistory \? update\.PlayerName : string\.Empty, hasOpponentHistory \? update\.WorldId : \(ushort\)0,.*?hasOpponentHistory \? update\.LastSeenUnixSeconds : 0') {
-    throw 'Schema-5 persistence must keep ally-only participant W/L behind HMAC keys and store clear bounded Name + World plus local-perspective WinsAgainst/LossesAgainst only after an enemy encounter; once searchable, Last Seen tracks either role. It must never persist raw Content IDs, full rosters, or per-match scoreboards. Schema-4 PvpStats detail backfill must stop at importedAt+1, skip uncontained later-native rows, and must not add participant W/L again.'
+    $normalizedCrystallineConflictMapStatisticsService -notmatch 'if \(!TryIncrement\(record, update\.PlayerWon\)\) return false; record\.PlayerName = update\.PlayerName; record\.WorldId = update\.WorldId; record\.LastSeenUnixSeconds = Math\.Max\(record\.LastSeenUnixSeconds, update\.LastSeenUnixSeconds\); if \(update\.IsEnemy\) \{ if \(!TryIncrementAgainst\(record, update\.LocalWon\)\) return false; \} else \{.*?if \(!TryIncrementTogether\(record, update\.LocalWon\)\) return false; \}' -or
+    $normalizedCrystallineConflictMapStatisticsService -notmatch 'new ImportMergePlayerRecord\( update\.PlayerKey, update\.PlayerName, update\.WorldId, update\.Wins, update\.Losses, update\.WinsAgainst, update\.LossesAgainst, update\.Wins - update\.LossesAgainst, update\.Losses - update\.WinsAgainst, update\.Matches, update\.LastSeenUnixSeconds,' -or
+    $normalizedCrystallineConflictMapStatisticsService -notmatch 'record\.WinsTogether >= 0 && record\.LossesTogether >= 0 && record\.WinsTogether <= record\.Wins - record\.LossesAgainst && record\.LossesTogether <= record\.Losses - record\.WinsAgainst;' -or
+    $normalizedCrystallineConflictMapStatisticsService -match 'record\.(?:WinsTogether|LossesTogether)\s*=\s*record\.(?:Wins|Losses)\s*-') {
+    throw 'Schema-5 persistence must retain bounded local names for both roles and separate local-perspective Against/Together counters. Native enemy and allied updates must be exclusive; only a fresh validated import may derive Together from its exact aggregate/Against split. Missing old fields must never be inferred from stored aggregate W/L. Last Seen tracks either role. Raw Content IDs, rosters and scoreboards remain forbidden; contained one-shot backfill preserves original aggregate W/L and its importedAt+1 cutoff.'
 }
 Assert-Literals $crystallineConflictPvpStatsHistoryReader @(
     'long WinsAgainst,',
@@ -3760,7 +3841,7 @@ foreach ($slot in 1..5) {
 }
 foreach ($slot in 1..8) {
     $expectedReviewedCommands += ('/quickchat "Covering Target" <{0}>' -f $slot)
-    $expectedReviewedCommands += ('/schnellchat <{0}> Ziel decken' -f $slot)
+    $expectedReviewedCommands += ('/schnellchat <{0}> "Ziel decken"' -f $slot)
     $expectedReviewedCommands += ('/quickchat "Soutien : cible" <{0}>' -f $slot)
     $expectedReviewedCommands += ('/quickchat "{0}" <{1}>' -f $japaneseCoveringTarget, $slot)
     $expectedReviewedCommands += "/mk bind2 <$slot>"
@@ -5060,7 +5141,11 @@ $externalAudioMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Patt
             ($_.Line -match '^\s*File\.ReadAllText\(filePath\),\s*$' -or
              $_.Line -match '^\s*using \(var stream = new FileStream\(\s*$')) -and
         -not ($_.Path -eq $crystallineConflictPvpStatsHistoryReaderPath -and
-            $_.Line -match '^\s*using var stream = new FileStream\(\s*$')
+            $_.Line -match '^\s*using var stream = new FileStream\(\s*$') -and
+        -not ($_.Path -eq $officialRankServicePath -and
+            ($_.Line -match '^\s*using var stream = File.OpenRead\(path\);$' -or
+             $_.Line -match '^\s*using \(var stream = new FileStream\(temporary, FileMode.Create, FileAccess.Write, FileShare.None\)\)$' -or
+             $_.Line -eq '        var url = $"https://na.finalfantasyxiv.com/lodestone/ranking/crystallineconflict/?dcgroup={dc}&rank_type={tier}&page={page}";'))
     })
 if ($externalAudioMatches.Count -gt 0) {
     $locations = $externalAudioMatches | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
@@ -5525,7 +5610,7 @@ if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
     [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 11 -or
     [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 11 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 633) {
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 645) {
     throw 'All four shared protection-end tests, all eleven SAM reactive tests, four Player Stats tests, and the exact 633-test static Core registry before the appended repeat-policy suites must remain pinned.'
 }
 Assert-Literals $samuraiReactiveRuntimeRules @(
@@ -9235,12 +9320,15 @@ Assert-Literals $aggressorArrowRenderer @(
     'current.TerritoryId != clientState.TerritoryType',
     'AggressorArrowRules.MaximumSnapshotAgeMilliseconds',
     'current.LocalPlayer != new TargetPressureActorIdentity(local.GameObjectId, local.EntityId)',
-    '62000u + opponent.JobId',
+    '62000u + jobId',
+    'DrawArrow(draw, from, to, Vector2.Zero, viewport, opponent.JobId',
+    'internal void DrawSettingsPreview()',
+    'configuration.CcAggressorArrowScale',
     'AggressorArrowRules.IsValidProjectedSegment',
     'ImGui.GetBackgroundDrawList()'
 ) 'CC arrow job icon, fresh same-context identity, and non-interactive draw path'
-if ([regex]::Matches($integratedCoreTestProgram, '\bAggressorArrowSelfTests\.\w+').Count -ne 5) {
-    throw 'All five CC arrow scenario groups must remain registered.'
+if ([regex]::Matches($integratedCoreTestProgram, '\bAggressorArrowSelfTests\.\w+').Count -ne 6) {
+    throw 'All six CC arrow scenario and overall-scale groups must remain registered.'
 }
 if ($normalizedTargetPressureTracker -notmatch 'var pressureFeaturesEnabled = configuration\.ShowPressureCounter \|\| \(supportedContext == SupportedPvPContext\.CrystallineConflict && configuration\.ShowCcAggressorArrows\) \|\| configuration\.ShowIncomingPressureOnNameplates \|\| configuration\.ShowTeamPressureOnNameplates \|\| configuration\.EnableSmartTabTargeting \|\| configuration\.EnableSmartActionMacro \|\| configuration\.EnableNearAssistMacro \|\| configuration\.NearAssistPreferTeamPressure') {
     throw 'Smart Tab, Smart Action, and Near Assist must each keep team-pressure production active independently of visible pressure surfaces and one another.'
@@ -12133,7 +12221,7 @@ if ($settingsWindow -match 'ImGui\.BeginTabItem|DrawJobsTab') {
 Assert-Literals $settingsStats @(
     'private const int PlayerStatisticsPageSize = 100;',
     'private bool DrawPlayerStatsPage()',
-    'LOCAL ONLY: opponent names, worlds, and match totals stay in Seiton''s local statistics file and are never uploaded.',
+    'LOCAL ONLY: player names, worlds, and these match totals stay in Seiton''s local statistics file; this history is not uploaded.',
     'configuration.EnableLocalCrystallineConflictMapStatisticsCapture',
     'configuration.EnableLocalCrystallineConflictPlayerHistory',
     'DrawPvpStatsImportControls();',
@@ -12142,18 +12230,33 @@ Assert-Literals $settingsStats @(
     'ImGui.InputText("Search player or world", ref playerStatisticsSearch, 96)',
     'CrystallineConflictPlayerStatsRankingMode.LossesAgainst',
     'CrystallineConflictPlayerStatsRankingMode.WinsAgainst',
+    'CrystallineConflictPlayerStatsRankingMode.WinsTogether',
+    'CrystallineConflictPlayerStatsRankingMode.LossesTogether',
+    'DrawPlayerStatisticsModeButton("Opponents"',
+    'DrawPlayerStatisticsModeButton("Teammates"',
+    '"Most losses against"',
+    '"Most wins against"',
+    '"Most wins together"',
+    '"Most losses together"',
+    'Ranked by totals, not skill: a frequently encountered player can lead both wins and losses.',
+    'Older teammate history may be incomplete: unknown old role totals are not guessed.',
     'mapStatistics.GetPlayerStatisticsSnapshot(contentId);',
     'CrystallineConflictPlayerStatsRules.BuildRanking(',
     'DrawPlayerStatisticsTable();',
     'ImGui.TableSetupColumn("RANK"',
     'ImGui.TableSetupColumn("PLAYER"',
-    'ImGui.TableSetupColumn("YOUR W-L"',
+    '"W-L TOGETHER" : "W-L AGAINST"',
     'ImGui.TableSetupColumn("WIN %"',
-    'ImGui.TableSetupColumn("MEETINGS"',
-    'ImGui.TableSetupColumn("LAST SEEN"',
+    'ImGui.TableSetupColumn("ROLE GAMES"',
+    'ImGui.TableSetupColumn("LAST SEEN (ANY)"',
     'CrystallineConflictPlayerStatsBadge.ArchNemesis',
     'CrystallineConflictPlayerStatsBadge.CannonFodder'
-) 'Dedicated searchable Player Stats controls, ranking modes, badges, and bounded table'
+) 'Dedicated searchable Player Stats controls, honest role labels and totals, older-history limits, and bounded table'
+if ($settingsStats -match '"(?:ERZNEMESIS|KANONENFUTTER)"' -or
+    $normalizedSettingsStats -notmatch 'player\.WinsAgainst, player\.LossesAgainst, player\.LastSeenUnixSeconds, player\.WinsTogether, player\.LossesTogether\)' -or
+    $normalizedSettingsStats -notmatch 'var leaders = CrystallineConflictPlayerStatsRules\.BuildRanking\(playerStatisticsEntries, teammates \? CrystallineConflictPlayerStatsRankingMode\.WinsTogether : CrystallineConflictPlayerStatsRankingMode\.WinsAgainst\)') {
+    throw 'Player Stats must use neutral English role labels, pass both separate role counters to Core, and compute leaders from the full selected-role catalog rather than promoting search results.'
+}
 $retiredHudStatisticsOwnership = @(
     'DrawPvpStatsImportControls',
     'DrawClearPlayerStatisticsControl',
@@ -12170,7 +12273,7 @@ foreach ($retiredControl in $retiredHudStatisticsOwnership) {
     }
 }
 if ($normalizedSettingsStats -notmatch 'DrawPvpStatsImportControls\(\); DrawClearPlayerStatisticsControl\(\);.*?DrawCrystallineConflictPredictionControls\(\);.*?DrawPlayerStatisticsRanking\(\);') {
-    throw 'Player Stats must exclusively own recording/import/reset, prediction controls, then searchable opponent ranking in that order.'
+    throw 'Player Stats must exclusively own recording/import/reset, prediction controls, then searchable role-specific ranking in that order.'
 }
 
 
@@ -13098,18 +13201,18 @@ $whatsNewWindow = Read-RequiredSource $whatsNewWindowPath 'What''s New window'
 $releaseNotesContentRules = Read-RequiredSource $releaseNotesContentRulesPath 'Release-note content rules'
 $releaseNotesContentSelfTests = Read-RequiredSource $releaseNotesContentSelfTestsPath 'Release-note content self-tests'
 Assert-Literals $projectFile @(
-    '<Version>0.44.2.0</Version>',
-    '<AssemblyVersion>0.44.2.0</AssemblyVersion>',
-    '<FileVersion>0.44.2.0</FileVersion>'
-) 'v0.44.2.0 project version'
+    '<Version>0.44.3.0</Version>',
+    '<AssemblyVersion>0.44.3.0</AssemblyVersion>',
+    '<FileVersion>0.44.3.0</FileVersion>'
+) 'v0.44.3.0 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.44.2.0";',
-    'CC: a short arrow shows who newly targets or attacks you, with their job icon.',
-    'The matching job icon also lights up in your existing Pressure display.',
-    'Adjust or disable arrows under HUD & Nameplates, next to Pressure settings.',
-    'PLD Guardian sends Covering Target through the normal chat path, keeping the protected ally selected for the message.',
-    'These are visual/chat changes only. Guard, recovery, targeting and helper priorities stay unchanged.'
-) 'v0.44.2.0 version-acknowledged player-facing What''s New content'
+    'private const string CurrentReleaseVersion = "0.44.3.0";',
+    'Bigger incoming arrows: preview MCH/SCH arrows and resize them under HUD & Nameplates, even in Wolves'' Den.',
+    'Prediction can show published official tiers. Saved daily outside matches; unlisted players stay Unknown.',
+    'Player Stats now separates Opponents and Teammates, with clear English win/loss lists.',
+    'LB bars have their own labeled preview and no longer depend on showing the Pressure counter.',
+    'Healing-pot beam clipping and German Guardian chat syntax corrected. Live detection and chat delivery still need confirmation.'
+) 'v0.44.3.0 version-acknowledged player-facing What''s New content'
 Assert-Literals $releaseNotesContentRules @(
     'public const int MaximumBulletCount = 5;',
     'if (bullets is null) return [];',
@@ -13168,17 +13271,17 @@ if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.44.2.0"',
-    'CC: short incoming arrows with enemy job icons show new attention or attacks and highlight the matching Pressure icon.',
-    'Adjustable under HUD & Nameplates.',
-    'PLD Guardian now sends Covering Target through the normal chat path for the protected ally.',
-    'Combat helpers and Guard behavior are unchanged.',
+    '"AssemblyVersion": "0.44.3.0"',
+    'Bigger incoming arrows with a Den-friendly preview.',
+    'Optional official tiers from daily saved Lodestone standings; unlisted players stay Unknown.',
+    'Separate English Opponents/Teammates win-loss lists.',
+    'German Guardian chat syntax corrected; live detection and chat delivery still need confirmation.',
     '"IsHide": false',
     '"IsTestingExclusive": false',
-    '"DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.2.0/dist/SeitonSense-0.44.2.0.zip"',
-    '"DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.2.0/dist/SeitonSense-0.44.2.0.zip"',
-    '"DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.2.0/dist/SeitonSense-0.44.2.0.zip"'
-) 'v0.44.2.0 custom-repository metadata'
+    '"DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.3.0/dist/SeitonSense-0.44.3.0.zip"',
+    '"DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.3.0/dist/SeitonSense-0.44.3.0.zip"',
+    '"DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.3.0/dist/SeitonSense-0.44.3.0.zip"'
+) 'v0.44.3.0 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -13253,10 +13356,17 @@ if ($normalizedReadme -match 'Optional SCH Smart Spread|Scholar Smart Spread rem
     throw 'Current README must not advertise or describe the removed Scholar Smart Spread runtime.'
 }
 Assert-Literals $normalizedPrivacy @(
-    'When local CC player history is enabled, the dedicated Player Stats feature intentionally stores bounded opponent names, Home Worlds, enemy-only W/L, and last-seen time in Seiton''s local statistics file so `Name @ World` search works.',
+    'When local CC player history is enabled, the dedicated Player Stats feature intentionally stores bounded player names, Home Worlds, separate opponent/teammate W/L, and last-seen time in Seiton''s local statistics file so `Name @ World` search works.',
     'It never uploads that data and never stores raw Content IDs, full rosters, or per-match scoreboards.',
-    'Player-history capture may also validate the bounded player name and Home World already present in each row; ally-only identities remain HMAC-only',
-    'The local history update may retain an opponent''s bounded `Name @ World` and aggregate counters; ally-only identities keep only their HMAC-keyed aggregate used by prediction.',
+    'Player-history capture may also validate the bounded player name and Home World already present in each row; both opponent and teammate names may be saved locally',
+    'The local history update may retain a player''s bounded `Name @ World` and separate opponent/teammate counters.',
+    'Prediction continues using the separately retained player''s own aggregate W/L.',
+    '`WinsAgainst`/`LossesAgainst` count only opposing encounters; `WinsTogether`/`LossesTogether` count only allied encounters.',
+    'The teammate fields are optional additions to schema 5, not a rewrite of existing aggregate W/L.',
+    'Older teammate history may be incomplete: missing role counters stay unknown and are not inferred from older aggregate totals.',
+    'teammate wins equal the player''s aggregate wins minus your losses against them; teammate losses equal their aggregate losses minus your wins against them.',
+    'This calculation is never applied to an old unpartitioned stored aggregate.',
+    'Already completed imports are not silently replayed to fill new teammate fields.',
     'Schema-4 files intentionally contain only one-way HMAC player keys and cannot display their older player names by themselves.',
     'The already imported aggregate W/L is not added again, and a saved details marker makes the backfill one-time.',
     '## DPS Smart Tab',
@@ -13279,7 +13389,7 @@ Assert-Literals $normalizedPrivacy @(
     'There is no character-name fallback.',
     'Confirmed totals are saved locally in `cc-map-stats.json`.',
     'The file contains a random salt, install-specific HMAC-SHA256 character and player keys, overall and per-map W/L, per-player aggregate W/L used by prediction, and the searchable Player Stats fields:',
-    'bounded opponent name, Home World ID, enemy-only wins/losses from the local player''s point of view, and last-seen time.',
+    'bounded player name, Home World ID, separate opponent and teammate wins/losses from the local player''s point of view, and last-seen time in either role.',
     'Raw Content IDs, complete team rosters, ratings, timelines, and per-match scoreboard values are not persisted.',
     'The names and Home Worlds are intentionally readable local data, not anonymous data.',
     'None of this file is uploaded by Seiton Sense.',
@@ -13419,14 +13529,16 @@ Assert-Literals $normalizedReadme @(
     '`/farhelp` now always chooses the farthest reachable friendly party member;',
     'healer, role, job, and nearby-enemy observations never change that choice.',
     'Version 0.44.0.4 adds a dedicated **Player Stats** page.',
-    'Search the opponents saved for your current character by `Name @ World`',
-    '**ERZNEMESIS** for the players you lost to most and **KANONENFUTTER** for the players you beat most.',
-    'The table shows your enemy-only W/L, win rate, meetings, and last-seen date;',
+    'Search the players saved for your current character by `Name @ World`.',
+    'The current **Opponents** view offers **Most losses against** and **Most wins against**; **Teammates** offers **Most wins together** and **Most losses together**.',
+    'Each view shows your role-specific W/L, win rate, games, and last-seen date in either role.',
+    'These are absolute totals, not skill ratings: one frequently encountered player can lead both wins and losses.',
     'Historical W/L, import, recording, reset, and prediction settings moved out of **HUD & Nameplates**.',
     'The movable match panel now keeps only its prediction and live match deaths, damage, healing, and crystal time.',
-    'Searchable opponent names, Home Worlds, enemy-only totals, and last-seen time stay in the local `cc-map-stats.json` file.',
+    'Searchable player names, Home Worlds, separate opponent/teammate totals, and last-seen time stay in the local `cc-map-stats.json` file.',
     'Seiton never uploads them and does not save raw Content IDs, full rosters, or per-match scoreboards.',
-    'once more to add searchable names and opponent W/L without counting the old W/L again.',
+    'once more to add searchable names and exact role totals without counting the old W/L again.',
+    'Older teammate history may be incomplete: unknown old aggregate W/L is not assigned to a role.',
     'Version 0.43.0.9 fixed `/nearhelp` casted heals falling back to self before ally selection.',
     'Friendly PvP casts now use the same reachable-ally HP and pressure selection as instant Near Help actions.',
     'The ally is chosen once before the native cast request; the visible target is unchanged, and the cast is never reranked after it starts.',
@@ -13552,9 +13664,9 @@ Assert-Literals $normalizedReadme @(
     'At rollover the compact card slides to the new map; the expanded seven-card deck reorders over 0.65 seconds.',
     'Only future public CC post-match results with one exact unique local Content ID, ten unique participants, valid teams, duration, result, and known territory are counted;',
     'The local file uses salted HMAC keys and stores per-map totals plus bounded hashed deduplication records.',
-    'When player history is enabled, it also stores bounded local opponent names, Home Worlds, enemy-only W/L, and last-seen time for the Player Stats page.',
+    'When player history is enabled, it also stores bounded local player names, Home Worlds, separate opponent/teammate W/L, and last-seen time for the Player Stats page.',
     'Raw Content IDs, full rosters, and per-match scoreboards are never stored.',
-    'The panel downloads no artwork and uses no network endpoint.',
+    'The optional official-tier column reads only the daily public Lodestone standings; no artwork is downloaded and no player history is uploaded.',
     '**PvP range helper:** two flat world-space rings follow the local player in PvP and Wolves'' Den.',
     'All 21 PvP-enabled jobs are covered',
     'it does not claim line of sight, cooldown readiness, terrain reach, or target-hitbox overlap',
@@ -13640,7 +13752,7 @@ Assert-Literals $normalizedReadme @(
     'BRD **Mannstopper** keeps Smart Action ranking but avoids Chiten, Guard, Purify protection, Meikyo, Paean, and other real CC immunity.',
     'PLD and DRK damage-only invulnerability remains a valid Mannstopper target',
     'The CC prediction panel now stays visible during preparation while the exact 5v5 roster is still loading.',
-    'For the current source, the exact 674-test Core registry, forty-six plugin self-tests, and source checks pin configuration schema 53',
+    'For the current source, the exact 686-test Core registry, forty-six plugin self-tests, and source checks pin configuration schema 53',
     'the independent default-off automatic basic-shot cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
@@ -15530,4 +15642,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 53, local CC statistics schema 5, the exact 674-test Core registry, and 46 plugin self-tests. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, PLD Guardian, Recuperate, then Auto-Guard own priority in that order. Guardian requires exact Guard and Guardian metadata, ready Guardian, and either ready Guard or fresh self HP/MP strictly above configurable thresholds (defaults 80%/60%) through the final boundary; active or accepted-propagating own Guard always blocks it: <=20% is unconditional, <=40% needs fresh exact 2+ focus, and <=50% needs fresh exact 3+ focus. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-actor reservation from either a certified direct standard hotbar press, an exact lease/generation-backed /smartaction visible-<t> fallback, or a target-independent CC Smart Action S1-S5 winner; only the first two bind the visible hard target. Queue stays rejected. Release cannot cancel it; new action, context, Guard, CC, identity, protection, or exact-action/actor drift does, only a post-revalidated clean native range/LoS false may retry, accepted or ambiguous outcomes are terminal, and it never reranks or writes target/facing. The optional quiet-held-errors setting avoids global sound hooks and suppresses only a plugin-owned synthetic repeat whose exact hostile target returns native line-of-sight code 562; the first press, out-of-range, and every unknown error remain native. /seitonfar remains reachable-only. Enabled Wolves Den Smart Action resolves the exact stable visible hard target or reviewed dummy; a matching native duel identity may replace a stale Hostile flag, conflicting actor views still fail closed, and only the first non-exact carrier per tap may preserve the one-shot for the following exact <t>. Every current damaging non-ground-target shape shares the same closed admission and final-protection path. Exact /seitonsam Ogi/Tendo request-in-flight ownership suppresses movement through native acceptance and then hands off to the bounded accepted-cast lease; merely arming /seitonsam does not suppress movement, and ordinary /smartaction never gains this behavior. Exact repeat-Guard protection is identity- and territory-bound: a client-accepted request or exact live Guard blocks plugin-owned repeats during propagation, while a rejected or ambiguous provisional request remains immediately retryable; the first visible Guard frame then owns the full 1000-ms exact-repeat window. Current-name semantic protection metadata tolerates removed historical duplicate rows while still requiring Guard, Covered, Hallowed Ground, and Undead Redemption. Metadata-verified Shield Smite and Chain Stratagem may select Guard; other primary protections remain candidate-local blockers and only incidental/global Chiten vetoes AoE. Every exact Smart Action-owned harmful non-ground-target PvP cast uses reachable S1-S5 ranking only in CC; in enabled Wolves Den it preserves the exact visible hostile/dummy target through the same closed protection path. Exact Near Help-owned friendly PvP casts use one-shot current ally ranking after atomic exact-generation consumption, while Near Assist retains cast-time hidden-carrier suppression with visible-target pass-through. A Smart Action fallback transfers only a live exact owner into the same bounded reservation. Auto-Zantetsuken uses an identity/context-bound 500-ms no-target collection from the first exact own-source Kuzushi, ranks the fresh live cluster only after maturity, and rechecks collection, frozen identity, current Kuzushi, protection, Bind, readiness, range, and line of sight at the final boundary. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not reset it, Guard refreshes the idle baseline through its exact status/propagation episode, and a complete idle interval must pass after Guard ends. Player Stats is a dedicated local-only searchable opponent view: ally-only identities stay HMAC-only, clear opponent Name + World appears only after enemy history, last-seen tracks later encounters in either role, and schema-4 PvpStats backfill is cutoff-bounded, contained-row-only, one-shot, and never double-adds participant W/L. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."
+Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 53, local CC statistics schema 5, the exact 686-test Core registry, and 46 plugin self-tests. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, PLD Guardian, Recuperate, then Auto-Guard own priority in that order. Guardian requires exact Guard and Guardian metadata, ready Guardian, and either ready Guard or fresh self HP/MP strictly above configurable thresholds (defaults 80%/60%) through the final boundary; active or accepted-propagating own Guard always blocks it: <=20% is unconditional, <=40% needs fresh exact 2+ focus, and <=50% needs fresh exact 3+ focus. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-actor reservation from either a certified direct standard hotbar press, an exact lease/generation-backed /smartaction visible-<t> fallback, or a target-independent CC Smart Action S1-S5 winner; only the first two bind the visible hard target. Queue stays rejected. Release cannot cancel it; new action, context, Guard, CC, identity, protection, or exact-action/actor drift does, only a post-revalidated clean native range/LoS false may retry, accepted or ambiguous outcomes are terminal, and it never reranks or writes target/facing. The optional quiet-held-errors setting avoids global sound hooks and suppresses only a plugin-owned synthetic repeat whose exact hostile target returns native line-of-sight code 562; the first press, out-of-range, and every unknown error remain native. /seitonfar remains reachable-only. Enabled Wolves Den Smart Action resolves the exact stable visible hard target or reviewed dummy; a matching native duel identity may replace a stale Hostile flag, conflicting actor views still fail closed, and only the first non-exact carrier per tap may preserve the one-shot for the following exact <t>. Every current damaging non-ground-target shape shares the same closed admission and final-protection path. Exact /seitonsam Ogi/Tendo request-in-flight ownership suppresses movement through native acceptance and then hands off to the bounded accepted-cast lease; merely arming /seitonsam does not suppress movement, and ordinary /smartaction never gains this behavior. Exact repeat-Guard protection is identity- and territory-bound: a client-accepted request or exact live Guard blocks plugin-owned repeats during propagation, while a rejected or ambiguous provisional request remains immediately retryable; the first visible Guard frame then owns the full 1000-ms exact-repeat window. Current-name semantic protection metadata tolerates removed historical duplicate rows while still requiring Guard, Covered, Hallowed Ground, and Undead Redemption. Metadata-verified Shield Smite and Chain Stratagem may select Guard; other primary protections remain candidate-local blockers and only incidental/global Chiten vetoes AoE. Every exact Smart Action-owned harmful non-ground-target PvP cast uses reachable S1-S5 ranking only in CC; in enabled Wolves Den it preserves the exact visible hostile/dummy target through the same closed protection path. Exact Near Help-owned friendly PvP casts use one-shot current ally ranking after atomic exact-generation consumption, while Near Assist retains cast-time hidden-carrier suppression with visible-target pass-through. A Smart Action fallback transfers only a live exact owner into the same bounded reservation. Auto-Zantetsuken uses an identity/context-bound 500-ms no-target collection from the first exact own-source Kuzushi, ranks the fresh live cluster only after maturity, and rechecks collection, frozen identity, current Kuzushi, protection, Bind, readiness, range, and line of sight at the final boundary. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not reset it, Guard refreshes the idle baseline through its exact status/propagation episode, and a complete idle interval must pass after Guard ends. Player Stats separates local Opponents and Teammates views with neutral total-based labels, role-specific W/L and games, and an explanation that high-volume players may lead both totals. Both roles may retain bounded local Name + World; optional schema-5 Together counters record only proven allied history and never infer unknown older aggregates. Last-seen tracks either role, and schema-4 PvpStats backfill remains cutoff-bounded, contained-row-only, one-shot, and never double-adds participant W/L. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."

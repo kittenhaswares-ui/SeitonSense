@@ -19,6 +19,7 @@ internal sealed partial class SettingsWindow
     private long playerStatisticsCatalogGeneration = long.MinValue;
     private ulong playerStatisticsContentId;
     private int playerStatisticsPage;
+    private int playerStatisticsRoleCount;
     private CrystallineConflictPlayerStatsEntry[] playerStatisticsEntries = [];
     private CrystallineConflictPlayerStatsRankRow[] playerStatisticsRows = [];
     private CrystallineConflictPlayerStatsRankRow? playerStatisticsArchNemesis;
@@ -29,11 +30,11 @@ internal sealed partial class SettingsWindow
         var changed = false;
         ImGui.Spacing();
         ImGui.TextWrapped(
-            "Browse the opponents recorded for the character currently logged in. Your W-L is always from your " +
-            "point of view: a win means you beat that player, and a loss means they beat you.");
+            "Browse separate opponent and teammate histories for the character currently logged in. " +
+            "Your W-L always describes your match result, not an individual duel or a player's overall skill.");
         ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.45f, 0.82f, 0.94f, 1f));
         ImGui.TextWrapped(
-            "LOCAL ONLY: opponent names, worlds, and match totals stay in Seiton's local statistics file and are never uploaded.");
+            "LOCAL ONLY: player names, worlds, and these match totals stay in Seiton's local statistics file; this history is not uploaded.");
         ImGui.PopStyleColor();
 
         if (ImGui.CollapsingHeader("Recording and saved history", ImGuiTreeNodeFlags.DefaultOpen))
@@ -59,7 +60,7 @@ internal sealed partial class SettingsWindow
             changed |= DrawCrystallineConflictPredictionControls();
 
         ImGui.Separator();
-        if (ImGui.CollapsingHeader("Opponent ranking", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("Player history by role", ImGuiTreeNodeFlags.DefaultOpen))
             DrawPlayerStatisticsRanking();
 
         return changed;
@@ -180,6 +181,7 @@ internal sealed partial class SettingsWindow
             "A playful estimate from matches saved on this PC. Unknown players count as 50%; nothing is uploaded.");
         ImGui.TextDisabled(
             "The movable match panel keeps only the current match's deaths, damage, healing, and crystal time.");
+        changed |= DrawOfficialRankControls();
         return changed;
     }
 
@@ -193,6 +195,29 @@ internal sealed partial class SettingsWindow
         }
 
         RefreshPlayerStatisticsCache();
+        var teammates = CrystallineConflictPlayerStatsRules.IsTeammateMode(playerStatisticsRankingMode);
+        var roleWidth = (Math.Max(260f, ImGui.GetContentRegionAvail().X) - ImGui.GetStyle().ItemSpacing.X) * .5f;
+        if (DrawPlayerStatisticsModeButton("Opponents", !teammates, roleWidth))
+        {
+            playerStatisticsRankingMode = CrystallineConflictPlayerStatsRankingMode.LossesAgainst;
+            playerStatisticsPage = 0;
+            RefreshPlayerStatisticsRanking();
+        }
+        ImGui.SameLine();
+        if (DrawPlayerStatisticsModeButton("Teammates", teammates, roleWidth))
+        {
+            playerStatisticsRankingMode = CrystallineConflictPlayerStatsRankingMode.WinsTogether;
+            playerStatisticsPage = 0;
+            RefreshPlayerStatisticsRanking();
+        }
+        teammates = CrystallineConflictPlayerStatsRules.IsTeammateMode(playerStatisticsRankingMode);
+        ImGui.TextWrapped(teammates
+            ? "Teammates: only matches on your team. W = you won together; L = you lost together."
+            : "Opponents: only matches on the other team. W = your team won against them; L = your team lost against them.");
+        ImGui.TextWrapped("Ranked by totals, not skill: a frequently encountered player can lead both wins and losses. Check W-L, win rate, and games together.");
+        if (teammates)
+            ImGui.TextWrapped("Older teammate history may be incomplete: unknown old role totals are not guessed. New matches and eligible new PvpStats imports record teammate results separately.");
+        ImGui.Spacing();
         DrawPlayerStatisticsLeaders();
 
         ImGui.Spacing();
@@ -216,21 +241,25 @@ internal sealed partial class SettingsWindow
         var gap = ImGui.GetStyle().ItemSpacing.X;
         var modeWidth = (availableWidth - gap) * 0.5f;
         if (DrawPlayerStatisticsModeButton(
-                "ERZNEMESIS",
-                playerStatisticsRankingMode == CrystallineConflictPlayerStatsRankingMode.LossesAgainst,
+                teammates ? "Most wins together" : "Most losses against",
+                playerStatisticsRankingMode == (teammates ? CrystallineConflictPlayerStatsRankingMode.WinsTogether :
+                    CrystallineConflictPlayerStatsRankingMode.LossesAgainst),
                 modeWidth))
         {
-            playerStatisticsRankingMode = CrystallineConflictPlayerStatsRankingMode.LossesAgainst;
+            playerStatisticsRankingMode = teammates ? CrystallineConflictPlayerStatsRankingMode.WinsTogether :
+                CrystallineConflictPlayerStatsRankingMode.LossesAgainst;
             playerStatisticsPage = 0;
             RefreshPlayerStatisticsRanking();
         }
         ImGui.SameLine();
         if (DrawPlayerStatisticsModeButton(
-                "KANONENFUTTER",
-                playerStatisticsRankingMode == CrystallineConflictPlayerStatsRankingMode.WinsAgainst,
+                teammates ? "Most losses together" : "Most wins against",
+                playerStatisticsRankingMode == (teammates ? CrystallineConflictPlayerStatsRankingMode.LossesTogether :
+                    CrystallineConflictPlayerStatsRankingMode.WinsAgainst),
                 modeWidth))
         {
-            playerStatisticsRankingMode = CrystallineConflictPlayerStatsRankingMode.WinsAgainst;
+            playerStatisticsRankingMode = teammates ? CrystallineConflictPlayerStatsRankingMode.LossesTogether :
+                CrystallineConflictPlayerStatsRankingMode.WinsAgainst;
             playerStatisticsPage = 0;
             RefreshPlayerStatisticsRanking();
         }
@@ -258,22 +287,14 @@ internal sealed partial class SettingsWindow
                     worldName,
                     player.WinsAgainst,
                     player.LossesAgainst,
-                    player.LastSeenUnixSeconds));
+                    player.LastSeenUnixSeconds,
+                    player.WinsTogether,
+                    player.LossesTogether));
             }
 
             playerStatisticsContentId = contentId;
             playerStatisticsCatalogGeneration = catalog.Generation;
             playerStatisticsEntries = entries.ToArray();
-            playerStatisticsArchNemesis = FindLeader(
-                CrystallineConflictPlayerStatsRules.BuildRanking(
-                    playerStatisticsEntries,
-                    CrystallineConflictPlayerStatsRankingMode.LossesAgainst),
-                CrystallineConflictPlayerStatsBadge.ArchNemesis);
-            playerStatisticsCannonFodder = FindLeader(
-                CrystallineConflictPlayerStatsRules.BuildRanking(
-                    playerStatisticsEntries,
-                    CrystallineConflictPlayerStatsRankingMode.WinsAgainst),
-                CrystallineConflictPlayerStatsBadge.CannonFodder);
             playerStatisticsPage = 0;
             playerStatisticsRankedSearch = "\0";
         }
@@ -296,6 +317,13 @@ internal sealed partial class SettingsWindow
             playerStatisticsEntries,
             playerStatisticsRankingMode,
             playerStatisticsSearch);
+        var teammates = CrystallineConflictPlayerStatsRules.IsTeammateMode(playerStatisticsRankingMode);
+        var leaders = CrystallineConflictPlayerStatsRules.BuildRanking(playerStatisticsEntries,
+            teammates ? CrystallineConflictPlayerStatsRankingMode.WinsTogether :
+                CrystallineConflictPlayerStatsRankingMode.WinsAgainst);
+        playerStatisticsRoleCount = leaders.Length;
+        playerStatisticsArchNemesis = FindLeader(leaders, CrystallineConflictPlayerStatsBadge.MostLosses);
+        playerStatisticsCannonFodder = FindLeader(leaders, CrystallineConflictPlayerStatsBadge.MostWins);
         playerStatisticsRankedMode = playerStatisticsRankingMode;
         playerStatisticsRankedSearch = playerStatisticsSearch;
         var pageCount = GetPlayerStatisticsPageCount();
@@ -310,31 +338,30 @@ internal sealed partial class SettingsWindow
         playerStatisticsRows = [];
         playerStatisticsArchNemesis = null;
         playerStatisticsCannonFodder = null;
+        playerStatisticsRoleCount = 0;
         playerStatisticsPage = 0;
         playerStatisticsRankedSearch = "\0";
     }
 
     private void DrawPlayerStatisticsLeaders()
     {
+        var teammates = CrystallineConflictPlayerStatsRules.IsTeammateMode(playerStatisticsRankingMode);
         DrawPlayerStatisticsLeader(
-            "ERZNEMESIS",
+            teammates ? "Most losses together" : "Most losses against",
             playerStatisticsArchNemesis,
             new Vector4(1f, 0.44f, 0.38f, 1f),
-            useLosses: true,
-            playerStatisticsEntries.Length > 0);
+            playerStatisticsRoleCount > 0);
         DrawPlayerStatisticsLeader(
-            "KANONENFUTTER",
+            teammates ? "Most wins together" : "Most wins against",
             playerStatisticsCannonFodder,
             new Vector4(0.38f, 0.9f, 0.58f, 1f),
-            useLosses: false,
-            playerStatisticsEntries.Length > 0);
+            playerStatisticsRoleCount > 0);
     }
 
     private static void DrawPlayerStatisticsLeader(
         string label,
         CrystallineConflictPlayerStatsRankRow? leader,
         Vector4 color,
-        bool useLosses,
         bool hasRecordedOpponents)
     {
         ImGui.TextColored(color, label);
@@ -343,16 +370,13 @@ internal sealed partial class SettingsWindow
         {
             ImGui.TextDisabled(
                 hasRecordedOpponents
-                    ? $"Needs at least {CrystallineConflictPlayerStatsRules.BadgeMinimumEnemyMeetings} meetings"
-                    : "No opponent matches recorded yet");
+                    ? $"Needs at least {CrystallineConflictPlayerStatsRules.BadgeMinimumEnemyMeetings} games in this role and one matching result"
+                    : "No matches recorded in this role yet");
             return;
         }
 
-        var result = useLosses
-            ? $"lost to them {row.LossesAgainst:N0}x"
-            : $"beat them {row.WinsAgainst:N0}x";
         ImGui.TextWrapped(
-            $"{row.PlayerName} @ {row.WorldName}  ·  {result}  ·  {FormatPlayerStatisticsWinRate(row.WinRate)}");
+            $"{row.PlayerName} @ {row.WorldName}  ·  {row.Wins:N0}W {row.Losses:N0}L / {row.Games:N0} games  ·  {FormatPlayerStatisticsWinRate(row.WinRate)}");
     }
 
     private static bool DrawPlayerStatisticsModeButton(string label, bool selected, float width)
@@ -408,10 +432,11 @@ internal sealed partial class SettingsWindow
         ImGui.TableSetupScrollFreeze(0, 1);
         ImGui.TableSetupColumn("RANK", ImGuiTableColumnFlags.WidthFixed, 54f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("PLAYER", ImGuiTableColumnFlags.WidthStretch, 1f);
-        ImGui.TableSetupColumn("YOUR W-L", ImGuiTableColumnFlags.WidthFixed, 90f * ImGuiHelpers.GlobalScale);
+        ImGui.TableSetupColumn(CrystallineConflictPlayerStatsRules.IsTeammateMode(playerStatisticsRankingMode)
+            ? "W-L TOGETHER" : "W-L AGAINST", ImGuiTableColumnFlags.WidthFixed, 110f * ImGuiHelpers.GlobalScale);
         ImGui.TableSetupColumn("WIN %", ImGuiTableColumnFlags.WidthFixed, 64f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("MEETINGS", ImGuiTableColumnFlags.WidthFixed, 72f * ImGuiHelpers.GlobalScale);
-        ImGui.TableSetupColumn("LAST SEEN", ImGuiTableColumnFlags.WidthFixed, 92f * ImGuiHelpers.GlobalScale);
+        ImGui.TableSetupColumn("ROLE GAMES", ImGuiTableColumnFlags.WidthFixed, 82f * ImGuiHelpers.GlobalScale);
+        ImGui.TableSetupColumn("LAST SEEN (ANY)", ImGuiTableColumnFlags.WidthFixed, 115f * ImGuiHelpers.GlobalScale);
         ImGui.TableHeadersRow();
 
         var start = playerStatisticsPage * PlayerStatisticsPageSize;
@@ -427,13 +452,13 @@ internal sealed partial class SettingsWindow
             DrawPlayerStatisticsName(row);
 
             ImGui.TableSetColumnIndex(2);
-            ImGui.TextUnformatted($"{row.WinsAgainst:N0}W {row.LossesAgainst:N0}L");
+            ImGui.TextUnformatted($"{row.Wins:N0}W {row.Losses:N0}L");
 
             ImGui.TableSetColumnIndex(3);
             ImGui.TextUnformatted(FormatPlayerStatisticsWinRate(row.WinRate));
 
             ImGui.TableSetColumnIndex(4);
-            ImGui.TextUnformatted(row.MatchesAgainst.ToString("N0"));
+            ImGui.TextUnformatted(row.Games.ToString("N0"));
 
             ImGui.TableSetColumnIndex(5);
             ImGui.TextUnformatted(FormatPlayerStatisticsLastSeen(row.LastSeenUnixSeconds));
@@ -446,7 +471,7 @@ internal sealed partial class SettingsWindow
             ImGui.TableSetColumnIndex(1);
             ImGui.TextDisabled(
                 string.IsNullOrWhiteSpace(playerStatisticsSearch)
-                    ? "No opponent matches recorded yet."
+                    ? "No matches recorded in this role yet."
                     : "No player matches this search.");
         }
 

@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.44.3.0
+
+- Bigger incoming arrows, with an overall size slider and a repeating MCH/SCH
+  preview in HUD & Nameplates. The preview also works in Wolves' Den.
+- Optional official tiers in the Prediction panel: a daily local cache of the
+  public Lodestone standings, refreshed only outside combat and duties. Only
+  top-300 overall/top-10-per-tier players are published; others stay Unknown.
+  This does not change the win prediction or upload match/player data.
+- Player Stats separates Opponents and Teammates. English labels say exactly
+  what is counted: wins/losses against or together. Older unproven teammate
+  history is not guessed, and frequent players can legitimately lead both totals.
+- Dedicated, labeled LB preview. Live LB gauges no longer require the Pressure
+  counter to be visible; settings explain missing native readings/calibration.
+- Healing-pot beams are clipped at screen edges instead of disappearing, with
+  a minimum visible height and readable labels. Actual kit detection still needs
+  live CC confirmation; no guessed locations or fake available kits are shown.
+- German Guardian Quick Chat now groups the full name as one argument:
+  `/schnellchat <slot> "Ziel decken"`. Target-first order, exact protected party
+  member, and one invocation remain unchanged. Live chat delivery is not yet
+  confirmed; Guardian combat behavior is unchanged.
+
 ## 0.44.2.0
 
 - CC: short, vanilla-style incoming arrows show enemies newly focusing or

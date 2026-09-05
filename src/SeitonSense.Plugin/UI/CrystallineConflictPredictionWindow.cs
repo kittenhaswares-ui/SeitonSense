@@ -31,6 +31,7 @@ internal sealed class CrystallineConflictPredictionWindow : Window
     private readonly CrystallineConflictPredictionService predictionService;
     private readonly IGameGui gameGui;
     private readonly ITextureProvider textureProvider;
+    private readonly OfficialCrystallineConflictRankService officialRanks;
     private bool resetPosition;
     private bool showAllies = true;
 
@@ -38,13 +39,15 @@ internal sealed class CrystallineConflictPredictionWindow : Window
         PluginConfiguration configuration,
         CrystallineConflictPredictionService predictionService,
         IGameGui gameGui,
-        ITextureProvider textureProvider)
+        ITextureProvider textureProvider,
+        OfficialCrystallineConflictRankService officialRanks)
         : base("CC Prediction###SeitonSenseCrystallineConflictPrediction")
     {
         this.configuration = configuration;
         this.predictionService = predictionService;
         this.gameGui = gameGui;
         this.textureProvider = textureProvider;
+        this.officialRanks = officialRanks;
 
         IsOpen = true;
         RespectCloseHotkey = false;
@@ -90,7 +93,7 @@ internal sealed class CrystallineConflictPredictionWindow : Window
         var snapshot = predictionService.Snapshot;
         var panelScale = Math.Clamp(configuration.CrystallineConflictPredictionPanelScale, 0.75f, 1.75f);
         var uiScale = Math.Max(0.5f, ImGuiHelpers.GlobalScale) * panelScale;
-        var width = 720f * uiScale;
+        var width = (configuration.ShowOfficialCrystallineConflictRanks ? 820f : 720f) * uiScale;
 
         ImGui.SetWindowFontScale(panelScale * 1.03f);
         DrawHeader();
@@ -113,6 +116,7 @@ internal sealed class CrystallineConflictPredictionWindow : Window
             ImGui.TextUnformatted("For fun only. This is not a rating or a guaranteed outcome.");
             ImGui.TextUnformatted("It uses only CC matches observed and saved on this PC.");
             ImGui.TextUnformatted("Unknown players count as 50%. Nothing is uploaded.");
+            ImGui.TextUnformatted("Official tiers are a separate daily public snapshot, not part of this estimate.");
             ImGui.TextUnformatted("Each W/L belongs to that player: their wins and losses in matches you both played.");
             ImGui.TextUnformatted("It follows their own result whether they were your ally or enemy in that older match.");
             ImGui.TextUnformatted("Live damage and healing can be incomplete until the final scoreboard arrives.");
@@ -209,10 +213,13 @@ internal sealed class CrystallineConflictPredictionWindow : Window
             ImGuiTableFlags.RowBg |
             ImGuiTableFlags.SizingFixedFit |
             ImGuiTableFlags.NoSavedSettings;
-        if (!ImGui.BeginTable("##SeitonSensePredictionPlayers", 5, flags, new Vector2(width, 0f)))
+        var showRanks = configuration.ShowOfficialCrystallineConflictRanks;
+        var columns = showRanks ? 6 : 5;
+        if (!ImGui.BeginTable("##SeitonSensePredictionPlayers", columns, flags, new Vector2(width, 0f)))
             return;
 
         ImGui.TableSetupColumn("NAME", ImGuiTableColumnFlags.WidthStretch, 1f);
+        if (showRanks) ImGui.TableSetupColumn("OFFICIAL TIER", ImGuiTableColumnFlags.WidthFixed, 112f * uiScale);
         ImGui.TableSetupColumn("D", ImGuiTableColumnFlags.WidthFixed, 42f * uiScale);
         ImGui.TableSetupColumn("DMG", ImGuiTableColumnFlags.WidthFixed, 78f * uiScale);
         ImGui.TableSetupColumn("HEAL", ImGuiTableColumnFlags.WidthFixed, 78f * uiScale);
@@ -227,23 +234,29 @@ internal sealed class CrystallineConflictPredictionWindow : Window
                 ImGui.TableSetColumnIndex(0);
                 DrawPlayerName(player, uiScale);
 
-                ImGui.TableSetColumnIndex(1);
+                var offset = showRanks ? 1 : 0;
+                if (showRanks)
+                {
+                    ImGui.TableSetColumnIndex(1);
+                    DrawOfficialTier(player);
+                }
+                ImGui.TableSetColumnIndex(1 + offset);
                 DrawCell(player.Deaths.ToString(), false);
 
-                ImGui.TableSetColumnIndex(2);
+                ImGui.TableSetColumnIndex(2 + offset);
                 DrawCell(FormatCompact(player.DamageDealt), false);
 
-                ImGui.TableSetColumnIndex(3);
+                ImGui.TableSetColumnIndex(3 + offset);
                 DrawCell(FormatCompact(player.HealingDone), false);
 
-                ImGui.TableSetColumnIndex(4);
+                ImGui.TableSetColumnIndex(4 + offset);
                 DrawCell(FormatCrystalTime(player.CrystalSeconds), false);
             }
             else
             {
                 ImGui.TableSetColumnIndex(0);
                 ImGui.TextDisabled("WAITING...");
-                for (var column = 1; column < 5; column++)
+                for (var column = 1; column < columns; column++)
                 {
                     ImGui.TableSetColumnIndex(column);
                     DrawCell(MissingValue, true);
@@ -252,6 +265,27 @@ internal sealed class CrystallineConflictPredictionWindow : Window
         }
 
         ImGui.EndTable();
+    }
+
+    private void DrawOfficialTier(CrystallineConflictPredictionPlayerSnapshot player)
+    {
+        var status = officialRanks.Status;
+        var entry = officialRanks.Find(player.Name, player.HomeWorldId);
+        var stale = status.Cache is { } cache && DateTimeOffset.UtcNow - cache.FetchedAt > TimeSpan.FromHours(24);
+        if (entry is null) ImGui.TextDisabled("Unknown");
+        else ImGui.TextUnformatted(entry.Tier + (stale ? " *" : string.Empty));
+        if (!ImGui.IsItemHovered()) return;
+        ImGui.BeginTooltip();
+        ImGui.TextUnformatted("Published Lodestone tier — not a live rank lookup.");
+        ImGui.TextUnformatted("Only the top 300 overall and top 10 per tier are published.");
+        ImGui.TextUnformatted("Unknown means not listed or no recent saved data; it does not mean unranked.");
+        ImGui.TextUnformatted(status.Message);
+        if (status.Cache is { Season: > 0 } saved)
+        {
+            ImGui.TextUnformatted($"Official snapshot: season {saved.Season}, {saved.SourceUpdatedText}");
+            if (stale) ImGui.TextUnformatted("* Saved over 24 hours ago. Refresh waits until outside combat and duties.");
+        }
+        ImGui.EndTooltip();
     }
 
     private void DrawPlayerName(

@@ -21,7 +21,10 @@ internal sealed record CrystallineConflictPredictionPlayerSnapshot(
     long DamageDealt,
     long HealingDone,
     int? CrystalSeconds,
-    bool IsFinal);
+    bool IsFinal)
+{
+    internal ushort HomeWorldId { get; init; }
+}
 
 internal sealed record CrystallineConflictPredictionSnapshot(
     bool IsActive,
@@ -617,7 +620,7 @@ internal sealed class CrystallineConflictPredictionService : IDisposable
             player.DamageDealt,
             player.HealingDone,
             player.CrystalSeconds,
-            finalResultObserved);
+            finalResultObserved) { HomeWorldId = player.WorldId };
 
     private bool IsExactContext() =>
         clientState.IsPvPExcludingDen &&

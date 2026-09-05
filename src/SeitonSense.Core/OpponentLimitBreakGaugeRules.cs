@@ -1,5 +1,12 @@
 namespace SeitonSense.Core;
 
+public enum OpponentLimitBreakGaugeDisplayMode : byte
+{
+    Hidden,
+    Preview,
+    Live,
+}
+
 public readonly record struct OpponentLimitBreakGaugeValue(
     TargetPressureActorIdentity Actor,
     int EnemySlot,
@@ -25,6 +32,24 @@ public static class OpponentLimitBreakGaugeRules
     public const int EnemyCount = 5;
     public const int CalibratedMaximumValue = 10_000;
     public const long MaximumSnapshotAgeMilliseconds = 250;
+
+    public static OpponentLimitBreakGaugeDisplayMode ResolveDisplayMode(
+        bool enabled,
+        bool showLiveBars,
+        bool counterPreview,
+        bool limitBreakPreview,
+        bool snapshotActive,
+        long publishedAtMilliseconds,
+        long nowMilliseconds,
+        IReadOnlyList<OpponentLimitBreakGaugeValue>? values)
+    {
+        if (limitBreakPreview || (counterPreview && showLiveBars))
+            return OpponentLimitBreakGaugeDisplayMode.Preview;
+        if (counterPreview || !enabled || !showLiveBars || !snapshotActive ||
+            !IsFresh(publishedAtMilliseconds, nowMilliseconds) || !IsCompleteExactEnemySet(values))
+            return OpponentLimitBreakGaugeDisplayMode.Hidden;
+        return OpponentLimitBreakGaugeDisplayMode.Live;
+    }
 
     public static bool TryCreateValue(
         TargetPressureActorIdentity actor,

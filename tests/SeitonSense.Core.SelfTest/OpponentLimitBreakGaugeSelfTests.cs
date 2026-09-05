@@ -2,6 +2,33 @@ using SeitonSense.Core;
 
 internal static class OpponentLimitBreakGaugeSelfTests
 {
+    internal static void PreviewAndLiveDisplayModesNeverMix()
+    {
+        var values = Enumerable.Range(1, 5).Select(slot => new OpponentLimitBreakGaugeValue(
+            new TargetPressureActorIdentity((ulong)slot, (uint)slot), slot, 30, 0, slot * 20, 100)).ToArray();
+        const long now = 10_000;
+        var preview = OpponentLimitBreakGaugeRules.ResolveDisplayMode(
+            false, false, false, true, false, -1, now, null);
+        True(preview == OpponentLimitBreakGaugeDisplayMode.Preview,
+            "explicit LB preview works while live bars and plugin are disabled");
+        True(OpponentLimitBreakGaugeRules.ResolveDisplayMode(true, true, true, false, true, now, now, values) ==
+            OpponentLimitBreakGaugeDisplayMode.Preview, "counter preview never labels live readings as sample data");
+        True(OpponentLimitBreakGaugeRules.ResolveDisplayMode(true, false, true, false, true, now, now, values) ==
+            OpponentLimitBreakGaugeDisplayMode.Hidden, "counter-only preview does not require LB bars");
+        True(OpponentLimitBreakGaugeRules.ResolveDisplayMode(true, true, false, false, true, now, now, values) ==
+            OpponentLimitBreakGaugeDisplayMode.Live, "live LB data does not depend on a pressure-counter toggle");
+        True(OpponentLimitBreakGaugeRules.ResolveDisplayMode(true, true, false, false, false, now, now, values) ==
+            OpponentLimitBreakGaugeDisplayMode.Hidden, "inactive live data cannot fall back to examples");
+        True(OpponentLimitBreakGaugeRules.ResolveDisplayMode(true, true, false, false, true, now - 251, now, values) ==
+            OpponentLimitBreakGaugeDisplayMode.Hidden, "stale live data cannot fall back to examples");
+        True(OpponentLimitBreakGaugeRules.ResolveDisplayMode(true, true, false, false, true, now + 1, now, values) ==
+            OpponentLimitBreakGaugeDisplayMode.Hidden, "future live data is hidden");
+        True(OpponentLimitBreakGaugeRules.ResolveDisplayMode(true, true, false, false, true, now, now, values[..4]) ==
+            OpponentLimitBreakGaugeDisplayMode.Hidden, "partial native enemy set stays hidden");
+        True(OpponentLimitBreakGaugeRules.ResolveDisplayMode(false, true, false, false, true, now, now, values) ==
+            OpponentLimitBreakGaugeDisplayMode.Hidden, "global off hides live data");
+    }
+
     internal static void DirectValuesAndLocalProofFailClosed()
     {
         True(

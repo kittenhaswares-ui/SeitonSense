@@ -3,6 +3,17 @@
 Seiton Sense is a local PvP awareness HUD with pressure tracking, nameplate
 cues, warnings, job helpers, Smart Action, and target highlights.
 
+Version 0.44.3.0 adds bigger, previewable incoming arrows, a separate LB preview,
+and clearer Opponents/Teammates statistics. The Prediction panel can show an
+**official published tier** from a small daily Lodestone cache. The official
+standings only list the top 300 overall and top 10 per tier; everyone else shows
+Unknown, not an invented rank. Downloads run outside combat and duties, without
+per-player searches or uploads. Configure this under Player Stats → Prediction.
+Healing-pot beam clipping is repaired, but actual pot detection still needs live
+confirmation. German Guardian Quick Chat now quotes the full message name while
+keeping its exact party slot and one invocation. Actual chat delivery still needs
+a live CC test; Guardian combat behavior is unchanged.
+
 Version 0.44.2.0 adds short **incoming CC arrows with enemy job icons**. A new
 enemy focusing or attacking you gets a warm-red, vanilla-style arrow toward
 your character; their existing Pressure icon is highlighted too. Repeated hits
@@ -72,21 +83,25 @@ press Guard to cancel it intentionally. `/farhelp` now always chooses the
 farthest reachable friendly party member; healer, role, job, and nearby-enemy
 observations never change that choice.
 
-Version 0.44.0.4 adds a dedicated **Player Stats** page. Search the opponents
-saved for your current character by `Name @ World`, then switch between
-**ERZNEMESIS** for the players you lost to most and **KANONENFUTTER** for the
-players you beat most. The table shows your enemy-only W/L, win rate, meetings,
-and last-seen date; leader badges require at least three meetings. Historical
+Version 0.44.0.4 adds a dedicated **Player Stats** page. Search the players
+saved for your current character by `Name @ World`. The current **Opponents**
+view offers **Most losses against** and **Most wins against**; **Teammates**
+offers **Most wins together** and **Most losses together**. Each view shows your
+role-specific W/L, win rate, games, and last-seen date in either role. Leaders
+require at least three games in that role. These are absolute totals, not skill
+ratings: one frequently encountered player can lead both wins and losses. Historical
 W/L, import, recording, reset, and prediction settings moved out of **HUD &
 Nameplates**. The movable match panel now keeps only its prediction and live
 match deaths, damage, healing, and crystal time.
 
-Searchable opponent names, Home Worlds, enemy-only totals, and last-seen time
+Searchable player names, Home Worlds, separate opponent/teammate totals, and last-seen time
 stay in the local `cc-map-stats.json` file. Seiton never uploads them and does not save
 raw Content IDs, full rosters, or per-match scoreboards. If PvpStats history was
 already imported before 0.44.0.4, press **Import old PvpStats player history**
-once more to add searchable names and opponent W/L without counting the old W/L
-again.
+once more to add searchable names and exact role totals without counting the old W/L
+again. Older teammate history may be incomplete: unknown old aggregate W/L is
+not assigned to a role. New matches and eligible new imports record teammate
+results separately; already completed imports are not silently replayed.
 
 Version 0.44.0.3 fixes **Smart Action in Wolves' Den duels**. It now proves the
 exact visible hostile `<t>` directly instead of depending on a hidden duel slot
@@ -374,10 +389,11 @@ and Super Focus Glow into one configurable custom-repository plugin.
   territory are counted; custom matches, Wolves' Den, ambiguous payloads, and
   corrupt storage count nothing. The local file uses salted HMAC keys and stores
   per-map totals plus bounded hashed deduplication records. When player history
-  is enabled, it also stores bounded local opponent names, Home Worlds, enemy-only W/L,
+  is enabled, it also stores bounded local player names, Home Worlds, separate opponent/teammate W/L,
   and last-seen time for the Player Stats page. Raw Content IDs, full rosters,
-  and per-match scoreboards are never stored. The panel downloads no artwork
-  and uses no network endpoint.
+  and per-match scoreboards are never stored. The optional official-tier column
+  reads only the daily public Lodestone standings; no artwork is downloaded and
+  no player history is uploaded. The prediction calculation itself stays local.
 - **Public-CC medicine-kit cues:** separate default-on toggles show an opening
   countdown to the assumed 30-second first spawn and green foreground beacons
   for currently detected medicine kits. The beacon scan is limited to Dalamud's
@@ -2469,7 +2485,7 @@ standalone plugins' saved configuration.
 
 Seiton Sense has no account, independent server, telemetry, or gameplay upload.
 When local CC player history is enabled, the dedicated Player Stats feature
-stores bounded opponent names, Home Worlds, enemy-only W/L, and last-seen time in
+stores bounded player names, Home Worlds, separate opponent/teammate W/L, and last-seen time in
 the local statistics file so search works. It never uploads them and does not
 store raw Content IDs, full rosters, or per-match scoreboards. Other combat,
 target, character-name, and key observations are not persisted as history.
@@ -2723,7 +2739,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 674-test Core registry, forty-six plugin self-tests,
+For the current source, the exact 686-test Core registry, forty-six plugin self-tests,
 and source checks pin configuration schema 53, the shared monotonic response clock and framework
 epoch, true not-ready-to-ready wakeups, strict unchanged-queue critical recovery,
 the immutable release-independent tap-to-land buffer, active-Sprint repeat

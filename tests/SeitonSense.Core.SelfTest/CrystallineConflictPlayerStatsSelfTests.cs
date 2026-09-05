@@ -65,6 +65,36 @@ internal static class CrystallineConflictPlayerStatsSelfTests
             wins.Select(static row => row.PlayerName),
             "win mode is wins desc then local win rate desc");
         SequenceEqual([1, 2, 3, 4], wins.Select(static row => row.Rank), "global ranks are ordinal");
+
+        var mixed = new[]
+        {
+            new CrystallineConflictPlayerStatsEntry("Yui", "Balmung", 20, 12, 100, 2, 7),
+            new CrystallineConflictPlayerStatsEntry("Partner", "Balmung", 1, 2, 100, 15, 3),
+            new CrystallineConflictPlayerStatsEntry("Ally Only", "Balmung", 0, 0, 100, 6, 1),
+            new CrystallineConflictPlayerStatsEntry("Enemy Only", "Balmung", 3, 4, 100),
+        };
+        var togetherWins = CrystallineConflictPlayerStatsRules.BuildRanking(mixed,
+            CrystallineConflictPlayerStatsRankingMode.WinsTogether);
+        SequenceEqual(["Partner", "Ally Only", "Yui"], togetherWins.Select(static row => row.PlayerName),
+            "teammate ranking uses only wins together and excludes opponent-only history");
+        var yuiTogether = Single(togetherWins, "Yui");
+        Equal(CrystallineConflictPlayerStatsRole.Teammates, yuiTogether.Role, "teammate role is explicit");
+        Equal(2L, yuiTogether.Wins, "opponent wins never enter teammate wins");
+        Equal(7L, yuiTogether.Losses, "opponent losses never enter teammate losses");
+        Equal(9L, yuiTogether.Games, "games are role-specific");
+        var togetherLosses = CrystallineConflictPlayerStatsRules.BuildRanking(mixed,
+            CrystallineConflictPlayerStatsRankingMode.LossesTogether);
+        Equal("Yui", togetherLosses[0].PlayerName, "teammate loss mode is independent of win mode");
+        var yuiAgainst = Single(CrystallineConflictPlayerStatsRules.BuildRanking(mixed,
+            CrystallineConflictPlayerStatsRankingMode.WinsAgainst), "Yui");
+        Equal(CrystallineConflictPlayerStatsRole.Opponents, yuiAgainst.Role, "opponent role is explicit");
+        Equal(20L, yuiAgainst.Wins, "teammate wins never enter opponent wins");
+        Equal(12L, yuiAgainst.Losses, "teammate losses never enter opponent losses");
+        Equal(32L, yuiAgainst.Games, "opponent role games remain separate");
+        Equal(0, CrystallineConflictPlayerStatsRules.BuildRanking(
+            [new CrystallineConflictPlayerStatsEntry("Invalid Ally", "Balmung", 1, 1, 100, -1, 0)],
+            CrystallineConflictPlayerStatsRankingMode.WinsTogether).Length,
+            "invalid teammate counters fail closed");
     }
 
     public static void BadgesAreGlobalAndRequireThreeEnemyMeetings()
@@ -109,6 +139,14 @@ internal static class CrystallineConflictPlayerStatsSelfTests
         True(
             searchedNemesis[0].Badges.HasFlag(CrystallineConflictPlayerStatsBadge.ArchNemesis),
             "global badge survives search");
+
+        var highVolume = CrystallineConflictPlayerStatsRules.BuildRanking(
+            [Entry("High Volume", "Cerberus", 30, 20, 100),
+             Entry("Low Volume", "Cerberus", 5, 1, 100)],
+            CrystallineConflictPlayerStatsRankingMode.LossesAgainst);
+        True(highVolume[0].Badges.HasFlag(CrystallineConflictPlayerStatsBadge.MostLosses) &&
+             highVolume[0].Badges.HasFlag(CrystallineConflictPlayerStatsBadge.MostWins),
+            "a high-volume player can honestly lead both absolute win and loss totals");
     }
 
     public static void SearchAndFinalIdentityTiesAreDeterministic()

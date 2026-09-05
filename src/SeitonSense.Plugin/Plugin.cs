@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.44.2.0";
+    private const string CurrentReleaseVersion = "0.44.3.0";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -56,6 +56,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly CrystallineConflictMapStatisticsService crystallineConflictMapStatistics;
     private readonly CrystallineConflictPvpStatsHistoryImportService pvpStatsHistoryImport;
     private readonly CrystallineConflictPredictionService crystallineConflictPrediction;
+    private readonly OfficialCrystallineConflictRankService officialRanks;
     private readonly CrystallineConflictInstantLeaveService crystallineConflictInstantLeave;
     private readonly CrystallineConflictPredictionWindow crystallineConflictPredictionWindow;
     private readonly WolvesDenRotationWindow wolvesDenRotationWindow;
@@ -169,7 +170,6 @@ public sealed class Plugin : IDalamudPlugin
             tracker,
             log,
             () => configuration.Enabled &&
-                  configuration.ShowPressureCounter &&
                   configuration.ShowOpponentLimitBreakBars);
         pressureTracker = new TargetPressureTracker(
             clientState,
@@ -435,11 +435,14 @@ public sealed class Plugin : IDalamudPlugin
             dutyState,
             crystallineConflictMapStatistics,
             log);
+        officialRanks = new OfficialCrystallineConflictRankService(
+            configuration, pluginInterface, clientState, objectTable, dataManager, framework, condition, log);
         crystallineConflictPredictionWindow = new CrystallineConflictPredictionWindow(
             configuration,
             crystallineConflictPrediction,
             gameGui,
-            textureProvider);
+            textureProvider,
+            officialRanks);
         wolvesDenRotationWindow = new WolvesDenRotationWindow(
             configuration,
             clientState,
@@ -474,11 +477,11 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "CC: a short arrow shows who newly targets or attacks you, with their job icon.",
-                "The matching job icon also lights up in your existing Pressure display.",
-                "Adjust or disable arrows under HUD & Nameplates, next to Pressure settings.",
-                "PLD Guardian sends Covering Target through the normal chat path, keeping the protected ally selected for the message.",
-                "These are visual/chat changes only. Guard, recovery, targeting and helper priorities stay unchanged.",
+                "Bigger incoming arrows: preview MCH/SCH arrows and resize them under HUD & Nameplates, even in Wolves' Den.",
+                "Prediction can show published official tiers. Saved daily outside matches; unlisted players stay Unknown.",
+                "Player Stats now separates Opponents and Teammates, with clear English win/loss lists.",
+                "LB bars have their own labeled preview and no longer depend on showing the Pressure counter.",
+                "Healing-pot beam clipping and German Guardian chat syntax corrected. Live detection and chat delivery still need confirmation.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
@@ -497,6 +500,7 @@ public sealed class Plugin : IDalamudPlugin
             pressureTracker,
             isolationAwareness,
             pressureCounter,
+            aggressorArrows,
             crystallineConflictInstantLeave,
             pvpStatsHistoryImport,
             playerState,
@@ -509,7 +513,8 @@ public sealed class Plugin : IDalamudPlugin
                 pvpStatsHistoryImport.Cancel();
                 return crystallineConflictMapStatistics.TryReset();
             },
-            crystallineConflictPredictionWindow.ResetWindowPosition);
+            crystallineConflictPredictionWindow.ResetWindowPosition,
+            officialRanks);
         windowSystem.AddWindow(pressureCounter);
         windowSystem.AddWindow(bufferLearningWindow);
         windowSystem.AddWindow(wolvesDenRotationWindow);
@@ -796,6 +801,7 @@ public sealed class Plugin : IDalamudPlugin
             combatLimitBreakRuntime.Start();
             pvpStatsHistoryImport.Start();
             crystallineConflictPrediction.Start();
+            officialRanks.Start();
         }
         catch (Exception startException)
         {
@@ -923,6 +929,7 @@ public sealed class Plugin : IDalamudPlugin
         Safe(() => commandManager.RemoveHandler(AliasCommand));
         Safe(() => { crystallineConflictInstantLeave.Dispose(); });
         Safe(() => { crystallineConflictPrediction.Dispose(); });
+        Safe(() => { officialRanks.Dispose(); });
         Safe(() => { pvpStatsHistoryImport.Dispose(); });
         Safe(() => { crystallineConflictMapStatistics.Dispose(); });
         Safe(() => { combatLimitBreakRuntime.Dispose(); });
@@ -1016,7 +1023,8 @@ public sealed class Plugin : IDalamudPlugin
                 chatGui.Print($"[Seiton Sense] {pressureTracker.Diagnostics.ToChatLine()}");
                 return;
             case "reset":
-                pressureCounter.PreviewEnabled = false;
+                pressureCounter.StopPreviews();
+                aggressorArrows.PreviewEnabled = false;
                 pressureCounter.ResetWindowPosition();
                 break;
             default:
@@ -1058,7 +1066,8 @@ public sealed class Plugin : IDalamudPlugin
                 overlay.ResourceAuraPreviewEnabled = false;
                 overlay.IsolationWarningPreviewEnabled = false;
                 overlay.HighPressureWarningPreviewEnabled = false;
-                pressureCounter.PreviewEnabled = false;
+                pressureCounter.StopPreviews();
+                aggressorArrows.PreviewEnabled = false;
                 break;
             case "preview":
                 overlay.PreviewEnabled = !overlay.PreviewEnabled;
@@ -1561,7 +1570,8 @@ public sealed class Plugin : IDalamudPlugin
                 overlay.ResourceAuraPreviewEnabled = false;
                 overlay.IsolationWarningPreviewEnabled = false;
                 overlay.HighPressureWarningPreviewEnabled = false;
-                pressureCounter.PreviewEnabled = false;
+                pressureCounter.StopPreviews();
+                aggressorArrows.PreviewEnabled = false;
                 pressureCounter.ResetWindowPosition();
                 break;
             case "help":
