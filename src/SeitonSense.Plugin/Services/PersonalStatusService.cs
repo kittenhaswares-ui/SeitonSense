@@ -354,6 +354,7 @@ internal sealed class PersonalStatusService : IDisposable
     internal SamuraiReactiveCounterCcProbeSnapshot SamuraiReactiveDiagnostics =>
         samuraiReactive.Snapshot;
     internal SamuraiCastInputStatus SamuraiCastInputStatus => nearAssist.SamuraiCastInputStatus;
+    internal SamuraiCastProtectionStatus SamuraiCastProtectionStatus => nearAssist.SamuraiCastProtectionStatus;
     internal PluginOwnedGuardVetoDiagnostics PluginOwnedGuardVetoDiagnostics => nearAssist.PluginOwnedGuardVetoDiagnostics;
     internal PaladinShieldSmiteProbeSnapshot PaladinShieldSmiteDiagnostics => paladinShieldSmite.Snapshot;
 

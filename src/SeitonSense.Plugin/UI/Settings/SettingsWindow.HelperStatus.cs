@@ -276,6 +276,7 @@ internal sealed partial class SettingsWindow
     private void DrawSamuraiInputStatus()
     {
         var status = personalStatus.SamuraiCastInputStatus;
+        var cast = personalStatus.SamuraiCastProtectionStatus;
         var enabled = configuration.Enabled && configuration.EnableSmartActionMacro;
         ImGui.Spacing();
         ImGui.Separator();
@@ -283,11 +284,15 @@ internal sealed partial class SettingsWindow
         ImGui.TextWrapped(!enabled ? "Off — enable Smart Action in Macro Helpers." :
             status.ProtectedCastActive ? "Your protected cast is recognized right now." :
             status.RequestsInFlight > 0 ? "Your cast request is being checked." :
+            cast.Phase == SamuraiCastProtectionPhase.Queued ? "Ogi/Tendo is queued. Movement stays available until the cast starts." :
             "Waiting for a protected cast started through /seitonsam.");
         ImGui.TextWrapped(!status.CastMetadataVerified ? "Cast information is not ready." :
             status.GameplayMovementHooksReady ? "The gameplay movement blocker is available." :
             "The gameplay movement blocker is unavailable; movement protection cannot be relied on.");
         var movement = status.Movement;
+        ImGui.TextWrapped($"Requests: {cast.RequestedCount}. Client accepted: {cast.AcceptedCastCount}. Casts actually observed: {cast.ObservedCastCount}.");
+        ImGui.TextWrapped($"Last change: {cast.LastEvent}. Last release: {cast.LastReleaseReason}.");
+        ImGui.TextWrapped($"Optional late-facing calls: {cast.LateFacingAttempts}. This counts calls, not confirmed turns or hits.");
         ImGui.TextWrapped($"Recognized cast requests: {status.AcceptedOwnedCasts}. Blocked movement reads: " +
             $"keys {movement.SuppressedDigitalReads}, gameplay controls {movement.SuppressedControlReads}, autorun {movement.SuppressedAutorunReads}.");
         ImGui.TextDisabled("These counters show observed input only, not proof that every mouse/controller path works.");

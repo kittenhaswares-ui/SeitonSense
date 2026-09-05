@@ -43,7 +43,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 53;
+    public int Version { get; set; } = 54;
     public string LastSeenReleaseNotesVersion { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
@@ -303,6 +303,8 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public float CombatFramesBackgroundOpacity { get; set; } = 0.92f;
     public bool EnableSmartTabTargeting { get; set; }
     public bool EnableSmartActionMacro { get; set; }
+    public bool EnableSamuraiLateCastFacing { get; set; }
+    public float SamuraiLateCastFacingWindowSeconds { get; set; } = 0.15f;
     public bool EnableNearAssistMacro { get; set; }
     public bool EnableBackwardPanicShukuchiCommand { get; set; } = false;
     public float NearAssistMaxAllyDistance { get; set; } = 25f;
@@ -311,6 +313,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool NearHelpPreferIncomingPressure { get; set; } = true;
     public bool ShowPressureCounter { get; set; } = true;
     public bool ShowCcAggressorArrows { get; set; } = true;
+    public bool ShowCcAllyTargetArrows { get; set; } = true;
     public float CcAggressorArrowScale { get; set; } = AggressorArrowRules.DefaultOverallScale;
     public float CcAggressorArrowDurationSeconds { get; set; } = AggressorArrowRules.DefaultDurationSeconds;
     public float CcAggressorArrowThickness { get; set; } = 2.4f;
@@ -347,7 +350,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 53)
+        if (Version >= 54)
         {
             if (repaired) Save();
             return;
@@ -906,7 +909,16 @@ public sealed class PluginConfiguration : IPluginConfiguration
             EnableBardRepellingShotProximityHelper = false;
         }
 
-        Version = 53;
+        if (Version < 54)
+        {
+            // Only the old exact default upgrades. Explicitly customized
+            // durations survive; an explicitly chosen .75 is indistinguishable
+            // from the old default in existing saved configurations.
+            CcAggressorArrowDurationSeconds = AggressorArrowRules.MigrateLegacyDuration(
+                CcAggressorArrowDurationSeconds);
+        }
+
+        Version = 54;
         ClampSettings();
         Save();
     }
@@ -915,7 +927,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 53;
+        Version = 54;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -1126,6 +1138,8 @@ public sealed class PluginConfiguration : IPluginConfiguration
         CombatFramesBackgroundOpacity = 0.92f;
         EnableSmartTabTargeting = false;
         EnableSmartActionMacro = false;
+        EnableSamuraiLateCastFacing = false;
+        SamuraiLateCastFacingWindowSeconds = 0.15f;
         EnableNearAssistMacro = false;
         EnableBackwardPanicShukuchiCommand = false;
         NearAssistMaxAllyDistance = 25f;
@@ -1134,6 +1148,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         NearHelpPreferIncomingPressure = true;
         ShowPressureCounter = true;
         ShowCcAggressorArrows = true;
+        ShowCcAllyTargetArrows = true;
         CcAggressorArrowScale = AggressorArrowRules.DefaultOverallScale;
         CcAggressorArrowDurationSeconds = AggressorArrowRules.DefaultDurationSeconds;
         CcAggressorArrowThickness = 2.4f;
@@ -1198,6 +1213,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         ShowPressureCounter = false;
         ShowCcAggressorArrows = false;
+        ShowCcAllyTargetArrows = false;
         ShowNameplateSeiton = false;
         ShowGuardUnavailable = false;
         ShowGuardCountdown = false;
@@ -1260,6 +1276,8 @@ public sealed class PluginConfiguration : IPluginConfiguration
     private bool ClampSettings()
     {
         var changed = false;
+        changed |= Clamp(SamuraiLateCastFacingWindowSeconds, 0.05f, 0.30f, 0.15f,
+            value => SamuraiLateCastFacingWindowSeconds = value);
         var guardianHp = Math.Clamp(GuardianNoGuardMinimumHpPercent, 0, 100);
         var guardianMp = Math.Clamp(GuardianNoGuardMinimumMpPercent, 0, 100);
         if (GuardianNoGuardMinimumHpPercent != guardianHp || GuardianNoGuardMinimumMpPercent != guardianMp)
@@ -1303,7 +1321,9 @@ public sealed class PluginConfiguration : IPluginConfiguration
         changed |= Clamp(PressureIconSpacing, 0f, 16f, 4f, value => PressureIconSpacing = value);
         changed |= Clamp(PressureBackgroundOpacity, 0f, 1f, 0.62f, value => PressureBackgroundOpacity = value);
         changed |= Clamp(PressureWindowSeconds, 0.5f, 8f, 3f, value => PressureWindowSeconds = value);
-        changed |= Clamp(CcAggressorArrowDurationSeconds, 0.35f, 1.5f, AggressorArrowRules.DefaultDurationSeconds, value => CcAggressorArrowDurationSeconds = value);
+        changed |= Clamp(CcAggressorArrowDurationSeconds, AggressorArrowRules.MinimumDurationSeconds,
+            AggressorArrowRules.MaximumDurationSeconds, AggressorArrowRules.DefaultDurationSeconds,
+            value => CcAggressorArrowDurationSeconds = value);
         changed |= Clamp(CcAggressorArrowScale, AggressorArrowRules.MinimumOverallScale, AggressorArrowRules.MaximumOverallScale,
             AggressorArrowRules.DefaultOverallScale, value => CcAggressorArrowScale = value);
         changed |= Clamp(CcAggressorArrowThickness, 1f, 5f, 2.4f, value => CcAggressorArrowThickness = value);

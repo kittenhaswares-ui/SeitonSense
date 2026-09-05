@@ -31,6 +31,7 @@ internal sealed class TargetPressureTracker : IDisposable
     private readonly Dictionary<TargetPressureActorIdentity, RecentPressureState> recentPressure = [];
     private readonly Dictionary<TargetPressureActorIdentity, ProtectionActorState> protectionStates = [];
     private readonly AggressorArrowTracker aggressorArrows = new();
+    private readonly AllyTargetArrowTracker allyTargetArrows = new();
     private TargetPressureRuntimeSnapshot snapshot = TargetPressureRuntimeSnapshot.Inactive;
     private IncomingAllyPressureRuntimeState incomingAllyPressure = IncomingAllyPressureRuntimeState.Inactive;
     private TargetPressureDiagnostics diagnostics = TargetPressureDiagnostics.Inactive;
@@ -338,9 +339,11 @@ internal sealed class TargetPressureTracker : IDisposable
             condition.IsValid && condition.Value.CrystallineConflictCasualRoulette,
             condition.IsValid && condition.Value.CrystallineConflictRankedRoulette);
         var isWolvesDen = supportedContext == SupportedPvPContext.WolvesDen;
+        var allyArrowsEnabledForContext = configuration.ShowCcAllyTargetArrows &&
+            supportedContext == SupportedPvPContext.CrystallineConflict;
         var pressureFeaturesEnabled = configuration.ShowPressureCounter ||
                                       (supportedContext == SupportedPvPContext.CrystallineConflict &&
-                                       configuration.ShowCcAggressorArrows) ||
+                                       (configuration.ShowCcAggressorArrows || allyArrowsEnabledForContext)) ||
                                       configuration.ShowIncomingPressureOnNameplates ||
                                       configuration.ShowTeamPressureOnNameplates ||
                                       configuration.EnableSmartTabTargeting ||
@@ -468,6 +471,8 @@ internal sealed class TargetPressureTracker : IDisposable
         var enemies = new List<(IPlayerCharacter Player, TargetPressureEnemyObservation Observation)>();
         var allies = new List<TargetPressureAllyObservation>();
         var partyAllies = new List<TargetPressurePartyAllyObservation>();
+        var allyArrowSources = allyArrowsEnabledForContext
+            ? new List<AllyTargetArrowSourceSnapshot>(4) : null;
         if (pressureStateTrackingEnabled)
         {
             // Near Help may legitimately select the local player for actions
@@ -522,6 +527,13 @@ internal sealed class TargetPressureTracker : IDisposable
                     true,
                     player.IsDead || player.CurrentHp == 0,
                     player.IsTargetable));
+            }
+
+            if (allyArrowSources is not null && partyEntityIds.Contains(player.EntityId))
+            {
+                allyArrowSources.Add(new AllyTargetArrowSourceSnapshot(
+                    identity, hardTarget, player.ClassJob.IsValid ? player.ClassJob.RowId : 0,
+                    player.Position, !player.IsDead && player.CurrentHp > 0 && player.IsTargetable));
             }
 
             if (pressureStateTrackingEnabled && partyEntityIds.Contains(player.EntityId))
@@ -611,6 +623,25 @@ internal sealed class TargetPressureTracker : IDisposable
         });
 
         var publishedAtMilliseconds = Environment.TickCount64;
+        // Resolve blue links only against this pass's unique, living hostile
+        // enemies. Never turn a friendly/non-player hard target into a cue.
+        var publishedAllyArrowSources = Array.Empty<AllyTargetArrowSourceSnapshot>();
+        if (allyArrowSources is not null)
+        {
+            var hostileTargets = enemies
+                .Where(pair => !pair.Observation.IsDead && pair.Observation.IsTargetable &&
+                    !partyEntityIds.Contains(pair.Observation.Actor.EntityId) &&
+                    (pair.Player.StatusFlags & (StatusFlags.PartyMember | StatusFlags.AllianceMember)) == 0)
+                .GroupBy(pair => pair.Observation.Actor.GameObjectId).Where(group => group.Count() == 1)
+                .Select(group => group.Single())
+                .GroupBy(pair => pair.Observation.Actor.EntityId).Where(group => group.Count() == 1)
+                .Select(group => group.Single().Observation.Actor).ToHashSet();
+            publishedAllyArrowSources = allyArrowSources.Select(source => source with
+            {
+                HostileTarget = source.HostileTarget is { } target && hostileTargets.Contains(target)
+                    ? target : null,
+            }).ToArray();
+        }
         var publishedIncomingAllyPressure = new IncomingAllyPressureRuntimeState(
             pressureStateTrackingEnabled,
             publishedAtMilliseconds,
@@ -634,6 +665,13 @@ internal sealed class TargetPressureTracker : IDisposable
                 localIdentity,
                 publishedAtMilliseconds,
                 arrowObservations ?? []),
+            CcAllyTargetArrowsActive = allyArrowsEnabledForContext,
+            AllyArrowSources = publishedAllyArrowSources,
+            AllyTargetArrows = allyTargetArrows.Observe(
+                allyArrowsEnabledForContext, localIdentity, publishedAtMilliseconds,
+                publishedAllyArrowSources.Select(source => new AllyTargetArrowObservation(
+                    source.Ally, source.HostileTarget,
+                    source.IsAliveAndTargetable && source.JobId != 0)).ToArray()),
         };
         Interlocked.Exchange(ref snapshot, published);
         Volatile.Write(ref diagnostics, new TargetPressureDiagnostics(
@@ -877,6 +915,7 @@ internal sealed class TargetPressureTracker : IDisposable
     private void ResetRuntime()
     {
         aggressorArrows.Reset();
+        allyTargetArrows.Reset();
         recentPressure.Clear();
         protectionStates.Clear();
         Interlocked.Exchange(ref requestedIncomingAllyPressureAt, -1);

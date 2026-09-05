@@ -19,12 +19,18 @@ internal readonly record struct CrystallineConflictMedicineKitDiagnostics(
     int ScannedObjectCount,
     int VisibleKitCount,
     int LearnedBaseIdCount,
+    int NamedObjectCount,
+    int IdentifiedObjectCount,
+    int NotReadyObjectCount,
+    string SampleBaseIds,
     string LastEvent)
 {
     internal string ToChatLine() =>
         $"cc-kits[enabled/context/timer={Enabled}/{ExactContext}/{NativeTimerAvailable}," +
         $"content={ContentTimeLeftSeconds:0.0}s,first={FirstSpawnCountdownSeconds:0.0}s," +
         $"scan/visible/learned={ScannedObjectCount}/{VisibleKitCount}/{LearnedBaseIdCount}," +
+        $"named/matched/notReady={NamedObjectCount}/{IdentifiedObjectCount}/{NotReadyObjectCount}," +
+        $"baseIds={SampleBaseIds}," +
         $"last={LastEvent}]";
 }
 
@@ -51,6 +57,10 @@ internal sealed class CrystallineConflictMedicineKitRenderer
     private long nextScanAtMilliseconds;
     private uint activeTerritory;
     private int scannedObjectCount;
+    private int namedObjectCount;
+    private int identifiedObjectCount;
+    private int notReadyObjectCount;
+    private uint[] sampleBaseIds = [];
     private float contentTimeLeftSeconds = float.NaN;
     private float firstSpawnCountdownSeconds;
     private bool nativeTimerAvailable;
@@ -81,6 +91,10 @@ internal sealed class CrystallineConflictMedicineKitRenderer
         scannedObjectCount,
         anchors.Length,
         learnedBaseIdsByTerritory.Values.Sum(static values => values.Count),
+        namedObjectCount,
+        identifiedObjectCount,
+        notReadyObjectCount,
+        sampleBaseIds.Length == 0 ? "none" : string.Join('/', sampleBaseIds),
         lastEvent);
 
     internal void Draw()
@@ -193,17 +207,29 @@ internal sealed class CrystallineConflictMedicineKitRenderer
         var found = new List<MedicineKitAnchor>(12);
         var seen = new HashSet<MedicineKitAnchorKey>();
         var scanned = 0;
+        var named = 0;
+        var identified = 0;
+        var notReady = 0;
+        var samples = new HashSet<uint>();
         try
         {
-            ScanObjectSlice(objectTable.EventObjects, territoryId, learnedBaseIds, found, seen, ref scanned);
-            ScanObjectSlice(objectTable.ReactionEventObjects, territoryId, learnedBaseIds, found, seen, ref scanned);
+            ScanObjectSlice(objectTable.EventObjects, territoryId, learnedBaseIds, found, seen,
+                samples, ref scanned, ref named, ref identified, ref notReady);
+            ScanObjectSlice(objectTable.ReactionEventObjects, territoryId, learnedBaseIds, found, seen,
+                samples, ref scanned, ref named, ref identified, ref notReady);
             anchors = found.ToArray();
             scannedObjectCount = scanned;
+            namedObjectCount = named;
+            identifiedObjectCount = identified;
+            notReadyObjectCount = notReady;
+            sampleBaseIds = samples.Order().ToArray();
             lastEvent = anchors.Length > 0
                 ? "Ready-to-draw medicine-kit objects detected from bounded event-object slices."
                 : firstSpawnCountdownSeconds > 0f
                     ? "Native first-spawn countdown active; no medicine-kit object detected yet."
-                    : "No localized ready-to-draw medicine-kit object detected.";
+                    : identified > 0
+                        ? "Medicine-kit identity found, but no matched object is ready to draw."
+                        : "No medicine-kit identity matched; this is detection, not beam projection.";
         }
         catch
         {
@@ -219,7 +245,11 @@ internal sealed class CrystallineConflictMedicineKitRenderer
         HashSet<uint> learnedBaseIds,
         List<MedicineKitAnchor> found,
         HashSet<MedicineKitAnchorKey> seen,
-        ref int scanned)
+        HashSet<uint> samples,
+        ref int scanned,
+        ref int named,
+        ref int identified,
+        ref int notReady)
     {
         foreach (var gameObject in objects)
         {
@@ -233,6 +263,8 @@ internal sealed class CrystallineConflictMedicineKitRenderer
             }
 
             var localizedName = gameObject.Name.TextValue?.Trim() ?? string.Empty;
+            if (localizedName.Length > 0) named++;
+            if (gameObject.BaseId != 0 && samples.Count < 8) samples.Add(gameObject.BaseId);
             var nameMatches =
                 CrystallineConflictMedicineKitRules.IsMedicineKitName(localizedName);
             if (nameMatches && gameObject.BaseId != 0)
@@ -244,7 +276,12 @@ internal sealed class CrystallineConflictMedicineKitRenderer
                 continue;
             }
 
-            if (!IsReadyToDraw(gameObject)) continue;
+            identified++;
+            if (!IsReadyToDraw(gameObject))
+            {
+                notReady++;
+                continue;
+            }
             var position = gameObject.Position;
             var key = new MedicineKitAnchorKey(
                 territoryId,
@@ -345,6 +382,22 @@ internal sealed class CrystallineConflictMedicineKitRenderer
         DrawBeaconLabel(draw, visibleTop + new Vector2(0f, 5f), distance, scale, viewport);
     }
 
+    internal static void DrawSettingsPreview(float configuredScale)
+    {
+        var scale = SafeScale(configuredScale);
+        var size = new Vector2(Math.Min(ImGui.GetContentRegionAvail().X, 450f), 245f * scale);
+        var origin = ImGui.GetCursorScreenPos();
+        ImGui.Dummy(size);
+        var draw = ImGui.GetWindowDrawList();
+        var bottom = origin + new Vector2(size.X * 0.5f, size.Y - 20f);
+        var top = bottom - new Vector2(0f, 180f * scale);
+        draw.AddLine(bottom, top, Pack(BeaconColor, 0.12f), 18f * scale);
+        draw.AddLine(bottom, top, Pack(BeaconColor, 0.3f), 8f * scale);
+        draw.AddLine(bottom, top, Pack(BeaconColor, 0.92f), 2.5f * scale);
+        draw.AddCircle(bottom, 11f * scale, Pack(BeaconColor, 0.95f), 32, 2.5f * scale);
+        draw.AddText(top + new Vector2(-65f, -20f), Pack(BeaconColor, 1f), "MEDICINE KIT - PREVIEW");
+    }
+
     private static void DrawBeaconLabel(
         ImDrawListPtr draw,
         Vector2 anchor,
@@ -381,6 +434,10 @@ internal sealed class CrystallineConflictMedicineKitRenderer
         activeTerritory = 0;
         anchors = [];
         scannedObjectCount = 0;
+        namedObjectCount = 0;
+        identifiedObjectCount = 0;
+        notReadyObjectCount = 0;
+        sampleBaseIds = [];
         nextScanAtMilliseconds = 0;
         nativeTimerAvailable = false;
         contentTimeLeftSeconds = float.NaN;

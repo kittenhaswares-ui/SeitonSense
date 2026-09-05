@@ -55,6 +55,9 @@ internal sealed record TargetPressureRuntimeSnapshot(
     internal uint TerritoryId { get; init; }
     internal Vector3 LocalWorldPosition { get; init; }
     internal IReadOnlyList<AggressorArrowPulse> AggressorArrows { get; init; } = [];
+    internal bool CcAllyTargetArrowsActive { get; init; }
+    internal IReadOnlyList<AllyTargetArrowPulse> AllyTargetArrows { get; init; } = [];
+    internal IReadOnlyList<AllyTargetArrowSourceSnapshot> AllyArrowSources { get; init; } = [];
 
     internal static TargetPressureRuntimeSnapshot Inactive { get; } = new(
         false,
@@ -79,6 +82,13 @@ internal sealed record TargetPressureRuntimeSnapshot(
         return match;
     }
 }
+
+internal readonly record struct AllyTargetArrowSourceSnapshot(
+    TargetPressureActorIdentity Ally,
+    TargetPressureActorIdentity? HostileTarget,
+    uint JobId,
+    Vector3 WorldPosition,
+    bool IsAliveAndTargetable);
 
 /// <summary>
 /// One fresh, exact-self view of enemies whose current hard target or cast

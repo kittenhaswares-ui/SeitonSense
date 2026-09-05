@@ -134,11 +134,12 @@ internal static class AggressorArrowSelfTests
         Empty(Observe(tracker, 1_600, TargetPressureSources.HardTarget), "reappearing actor cannot cause a storm");
         Observe(tracker, 1_700, TargetPressureSources.None);
         Pulse(Observe(tracker, 1_800, TargetPressureSources.HardTarget), Enemy, 1_800, "setup retained pulse");
-        for (var now = 2_000; now < 3_800; now += 200)
+        var retentionEnds = 1_800 + AggressorArrowRules.MaximumPulseRetentionMilliseconds;
+        for (var now = 2_000L; now < retentionEnds; now += 200)
             Pulse(Observe(tracker, now, TargetPressureSources.HardTarget), Enemy, 1_800,
                 "continuous publications do not refresh pulse lifetime");
-        Empty(Observe(tracker, 3_800, TargetPressureSources.HardTarget), "pulse retention ends exactly at 2000 ms");
-        Empty(Observe(tracker, 3_900, TargetPressureSources.HardTarget), "expired pulse cannot repeat while aggressive");
+        Empty(Observe(tracker, retentionEnds, TargetPressureSources.HardTarget), "pulse retention ends exactly at configured bound");
+        Empty(Observe(tracker, retentionEnds + 100, TargetPressureSources.HardTarget), "expired pulse cannot repeat while aggressive");
 
         tracker.Reset();
         Empty(tracker.Observe(true, Local, 5_000,
@@ -178,7 +179,7 @@ internal static class AggressorArrowSelfTests
 
     internal static void AlphaAndProjectionBoundsRejectInvalidGeometry()
     {
-        Check(AggressorArrowRules.DefaultDurationSeconds == .75f, "default duration is pinned");
+        Check(AggressorArrowRules.DefaultDurationSeconds == 2f, "longer default duration is pinned");
         Check(AggressorArrowRules.PulseAlpha(1_000, 1_000, .75f, false) == 1, "pulse begins visible");
         Check(AggressorArrowRules.PulseAlpha(1_000, 1_375, .75f, false) == .5f, "normal pulse fades");
         Check(AggressorArrowRules.PulseAlpha(1_000, 1_750, .75f, false) == 0, "duration boundary is exclusive");

@@ -61,6 +61,17 @@ internal sealed partial class SettingsWindow
             ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Ability\" <t>");
             ImGui.TextUnformatted("Use /seitonfar instead of /smartaction to choose the farthest reachable safe enemy.");
             ImGui.TextUnformatted("SAM: use /seitonsam to choose one safe enemy within 5y and protect the Ogi/Tendo cast from movement.");
+            ImGui.TextWrapped("Ogi/Tendo starters prefer the closest safe target, then SAM debuffs. Instant follow-ups keep their debuff preference. A target outside range or sight can still interrupt the cast.");
+            changed |= Checkbox("Experimental SAM: face the cast target once near completion",
+                configuration.EnableSamuraiLateCastFacing,
+                value => configuration.EnableSamuraiLateCastFacing = value);
+            if (configuration.EnableSamuraiLateCastFacing)
+            {
+                changed |= Slider("SAM facing: seconds before cast ends",
+                    configuration.SamuraiLateCastFacingWindowSeconds, 0.05f, 0.30f,
+                    value => configuration.SamuraiLateCastFacingWindowSeconds = value, "%.2f s");
+                ImGui.TextWrapped("Turns your character once toward the SAME cast target. Requires the game's automatic facing setting. No target switch or camera turn. This test cannot fix missing range or line of sight.");
+            }
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
                 "In Crystalline Conflict, Seiton chooses a living, reachable, safe enemy. It prefers low HP, team " +

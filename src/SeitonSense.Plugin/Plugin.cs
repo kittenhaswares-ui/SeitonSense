@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.44.4.0";
+    private const string CurrentReleaseVersion = "0.44.5.0";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -479,11 +479,11 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "New PLD macro: /seitonpld uses Guardian without selecting a target.",
-                "Endangered allies come first in Guardian range; otherwise it picks the closest ally within 6y.",
-                "Your active Guard stays protected. This explicit macro does not require automatic Guardian or its HP/MP limits.",
-                "Guardian chat rebuilt: one action-first Quick Chat command on every client language, with your exact party target.",
-                "Fixed delayed CC hit confirmations and added clearer Smart Action failure reasons. Live chat testing is still needed.",
+                "SAM: queued Ogi/Tendo no longer blocks its own cast. Nearby safe targets come first for cast starters.",
+                "SAM late-facing test is off by default and needs game automatic facing. It turns once toward the same cast target.",
+                "Ping Helpers now show timing and Chase failures separately, with added buffer and queue regression tests.",
+                "Longer enemy arrows and blue ally-to-enemy arrows show who your team is targeting.",
+                "Smart Action checks are separated from execution. Medicine-kit preview and detection details help identify missing beacons.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
@@ -1135,6 +1135,8 @@ public sealed class Plugin : IDalamudPlugin
                 var enAvantMovement = movementDirectedEnAvant.Diagnostics;
                 var instantLeave = crystallineConflictInstantLeave.Diagnostics;
                 var medicineKit = medicineKits.Diagnostics;
+                var samCast = nearAssist.SamuraiCastProtectionStatus;
+                var samInput = nearAssist.SamuraiCastInputStatus;
                 chatGui.Print(
                     $"[Seiton Sense] {tracker.Diagnostics.ToChatLine()}, native-anchors={overlay.NativeAnchorCount}, " +
                     $"resource-anchors={overlay.ResourceAuraAnchorCount}" +
@@ -1229,6 +1231,11 @@ public sealed class Plugin : IDalamudPlugin
                 chatGui.Print($"[Seiton Sense] smart-paean[{smartPaean.ToChatLine()}]");
                 chatGui.Print($"[Seiton Sense] {instantLeave.ToChatLine()}");
                 chatGui.Print($"[Seiton Sense] {medicineKit.ToChatLine()}");
+                chatGui.Print($"[Seiton Sense] sam-cast[phase={samCast.Phase}," +
+                    $"request/accepted/observed={samCast.RequestedCount}/{samCast.AcceptedCastCount}/{samCast.ObservedCastCount}," +
+                    $"inFlight={samCast.InFlightCount},movementHooks={samInput.GameplayMovementHooksReady}," +
+                    $"blocked[key/control/autorun]={samInput.Movement.SuppressedDigitalReads}/{samInput.Movement.SuppressedControlReads}/{samInput.Movement.SuppressedAutorunReads}," +
+                    $"lateFace={samCast.LateFacingAttempts},release={samCast.LastReleaseReason},last={samCast.LastEvent}]");
                 chatGui.Print(
                     $"[Seiton Sense] ast-orbis[meta={personalStatus.AstrologianHarmonicOrbisMetadataVerified}," +
                     $"phase={astrologianOrbis.Phase},decision={astrologianOrbis.Decision}," +

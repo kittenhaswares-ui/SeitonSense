@@ -25,6 +25,7 @@ internal sealed class AggressorArrowRenderer(
 {
     private bool previewEnabled;
     private long previewStartedAt;
+    internal bool PreviewAllies { get; private set; }
 
     internal bool PreviewEnabled
     {
@@ -34,7 +35,15 @@ internal sealed class AggressorArrowRenderer(
             if (previewEnabled == value) return;
             previewEnabled = value;
             previewStartedAt = value ? Environment.TickCount64 : 0;
+            if (!value) PreviewAllies = false;
         }
+    }
+
+    internal void StartPreview(bool allies)
+    {
+        PreviewAllies = allies;
+        PreviewEnabled = true;
+        previewStartedAt = Environment.TickCount64;
     }
 
     internal void Draw()
@@ -44,18 +53,18 @@ internal sealed class AggressorArrowRenderer(
             PreviewEnabled = false;
             return;
         }
-        if (!configuration.ShowCcAggressorArrows ||
+        if ((!configuration.ShowCcAggressorArrows && !configuration.ShowCcAllyTargetArrows) ||
             !pluginInterface.UiBuilder.ShouldModifyUi || gameGui.GameUiHidden ||
             !clientState.IsLoggedIn || !clientState.IsPvPExcludingDen)
             return;
 
         var current = tracker.Snapshot;
         var now = Environment.TickCount64;
-        if (!current.Active || !current.PressureActive || !current.CcAggressorArrowsActive ||
+        if (!current.Active || !current.PressureActive ||
             current.TerritoryId != clientState.TerritoryType ||
             current.PublishedAtMilliseconds < 0 || now < current.PublishedAtMilliseconds ||
             now - current.PublishedAtMilliseconds > AggressorArrowRules.MaximumSnapshotAgeMilliseconds ||
-            current.AggressorArrows.Count == 0)
+            (current.AggressorArrows.Count == 0 && current.AllyTargetArrows.Count == 0))
             return;
 
         // Validate only the local actor; all enemy positions/identities come from
@@ -70,9 +79,8 @@ internal sealed class AggressorArrowRenderer(
         if (!float.IsFinite(viewport.X) || !float.IsFinite(viewport.Y) ||
             viewport.X < 64f || viewport.Y < 64f)
             return;
-        if (!gameGui.WorldToScreen(current.LocalWorldPosition + new Vector3(0f, 1.05f, 0f),
-                out var to, out var localInViewport) || !localInViewport)
-            return;
+        var localVisible = gameGui.WorldToScreen(current.LocalWorldPosition + new Vector3(0f, 1.05f, 0f),
+            out var to, out var localInViewport) && localInViewport;
 
         var appearance = GetAppearance();
         var draw = ImGui.GetBackgroundDrawList();
@@ -81,6 +89,8 @@ internal sealed class AggressorArrowRenderer(
         {
             foreach (var pulse in current.AggressorArrows)
             {
+                if (!configuration.ShowCcAggressorArrows || !current.CcAggressorArrowsActive || !localVisible)
+                    break;
                 var alpha = AggressorArrowRules.PulseAlpha(
                     pulse.StartedAtMilliseconds, now, appearance.Duration, appearance.ReducedMotion) * appearance.Opacity;
                 if (alpha <= 0f) continue;
@@ -94,6 +104,28 @@ internal sealed class AggressorArrowRenderer(
 
                 var progress = Math.Clamp((now - pulse.StartedAtMilliseconds) / (appearance.Duration * 1000f), 0f, 1f);
                 DrawArrow(draw, from, to, Vector2.Zero, viewport, opponent.JobId, progress, alpha, appearance);
+            }
+            foreach (var pulse in current.AllyTargetArrows)
+            {
+                if (!configuration.ShowCcAllyTargetArrows || !current.CcAllyTargetArrowsActive) break;
+                var alpha = AggressorArrowRules.PulseAlpha(pulse.StartedAtMilliseconds, now,
+                    appearance.Duration, appearance.ReducedMotion) * appearance.Opacity;
+                if (alpha <= 0f) continue;
+                var source = FindAlly(current.AllyArrowSources, pulse.Ally);
+                var target = current.Find(pulse.Target.GameObjectId, pulse.Target.EntityId);
+                if (source is not { } ally || !ally.IsAliveAndTargetable ||
+                    ally.HostileTarget != pulse.Target || ally.JobId == 0 ||
+                    target is null || !target.IsAliveAndTargetable ||
+                    !IsFinite(ally.WorldPosition) || !IsFinite(target.WorldPosition) ||
+                    !gameGui.WorldToScreen(ally.WorldPosition + new Vector3(0f, 1.05f, 0f),
+                        out var from, out var allyInViewport) || !allyInViewport ||
+                    !gameGui.WorldToScreen(target.WorldPosition + new Vector3(0f, 1.05f, 0f),
+                        out var enemyTo, out var enemyInViewport) || !enemyInViewport)
+                    continue;
+                var progress = Math.Clamp((now - pulse.StartedAtMilliseconds) /
+                    (appearance.Duration * 1000f), 0f, 1f);
+                DrawArrow(draw, from, enemyTo, Vector2.Zero, viewport, ally.JobId,
+                    progress, alpha, appearance, allyArrow: true);
             }
         }
         finally
@@ -111,7 +143,9 @@ internal sealed class AggressorArrowRenderer(
             return;
         }
 
-        ImGui.TextColored(new Vector4(1f, 0.76f, 0.28f, 1f), "PREVIEW - MCH / SCH sample arrows, not live");
+        ImGui.TextColored(PreviewAllies ? new Vector4(.3f, .8f, 1f, 1f) : new Vector4(1f, .76f, .28f, 1f),
+            PreviewAllies ? "PREVIEW - ally MCH / SCH targeting an enemy, not live" :
+                "PREVIEW - enemy MCH / SCH targeting you, not live");
         ImGui.TextDisabled("Repeats automatically while these settings are open. Size changes apply immediately.");
         var appearance = GetAppearance();
         var minimum = ImGui.GetCursorScreenPos();
@@ -128,7 +162,8 @@ internal sealed class AggressorArrowRenderer(
             var elapsed = now - previewStartedAt;
             var target = minimum + new Vector2(size.X * 0.5f, size.Y * 0.83f);
             draw.AddCircle(target, 10f * appearance.UiScale, Pack(0.7f, 0.75f, 0.82f, 0.8f), 20, 1.5f);
-            draw.AddText(target + new Vector2(14f, -7f), Pack(0.75f, 0.8f, 0.88f, 1f), "YOU (sample)");
+            draw.AddText(target + new Vector2(14f, -7f), Pack(0.75f, 0.8f, 0.88f, 1f),
+                PreviewAllies ? "ENEMY (sample)" : "YOU (sample)");
             for (var index = 0; index < 2; index++)
             {
                 var age = (elapsed + cycle - (index * 200L % cycle)) % cycle;
@@ -137,7 +172,7 @@ internal sealed class AggressorArrowRenderer(
                 var source = minimum + new Vector2(size.X * (index == 0 ? 0.16f : 0.84f), size.Y * 0.38f);
                 var progress = Math.Clamp(age / (appearance.Duration * 1000f), 0f, 1f);
                 DrawArrow(draw, source, target, minimum, maximum, index == 0 ? 31u : 28u,
-                    progress, alpha, appearance);
+                    progress, alpha, appearance, PreviewAllies);
             }
         }
         finally
@@ -149,7 +184,7 @@ internal sealed class AggressorArrowRenderer(
 
     private void DrawArrow(ImDrawListPtr draw, Vector2 from, Vector2 to,
         Vector2 clipMinimum, Vector2 clipMaximum, uint jobId, float progress, float alpha,
-        in ArrowAppearance appearance)
+        in ArrowAppearance appearance, bool allyArrow = false)
     {
         var scale = appearance.VisualScale;
         var iconRadius = appearance.IconSize * 0.5f + 2f * scale;
@@ -168,16 +203,18 @@ internal sealed class AggressorArrowRenderer(
             Math.Min(62f * appearance.UiScale, distance * 0.18f) * appearance.OverallScale);
         var control = (start + end) * 0.5f - new Vector2(0f, curveHeight);
         var headT = appearance.ReducedMotion ? 0.98f : 0.48f + 0.5f * MathF.Sqrt(progress);
-        DrawCurve(draw, start, control, end, headT, appearance.Width, alpha, scale);
+        DrawCurve(draw, start, control, end, headT, appearance.Width, alpha, scale, allyArrow);
 
         var half = new Vector2(appearance.IconSize * 0.5f);
         var iconCenter = Curve(start, control, end, 0.16f) + new Vector2(0f, -iconRadius - 2f * scale);
         var iconMargin = new Vector2(iconRadius + 1f);
         iconCenter = Vector2.Clamp(iconCenter, clipMinimum + iconMargin, clipMaximum - iconMargin);
-        draw.AddCircleFilled(iconCenter, iconRadius, Pack(0.08f, 0.04f, 0.04f, alpha * 0.9f), 24);
+        draw.AddCircleFilled(iconCenter, iconRadius,
+            allyArrow ? Pack(.02f, .05f, .12f, alpha * .9f) : Pack(.08f, .04f, .04f, alpha * .9f), 24);
         draw.AddImage(icon.Handle, iconCenter - half, iconCenter + half,
             Vector2.Zero, Vector2.One, Pack(1f, 1f, 1f, alpha));
-        draw.AddCircle(iconCenter, iconRadius, Pack(1f, 0.5f, 0.14f, alpha), 24, 1.5f * scale);
+        draw.AddCircle(iconCenter, iconRadius,
+            allyArrow ? Pack(.2f, .7f, 1f, alpha) : Pack(1f, .5f, .14f, alpha), 24, 1.5f * scale);
     }
 
     private ArrowAppearance GetAppearance()
@@ -187,7 +224,8 @@ internal sealed class AggressorArrowRenderer(
             AggressorArrowRules.MinimumOverallScale, AggressorArrowRules.MaximumOverallScale);
         var scale = AggressorArrowRules.ResolveVisualScale(uiScale, overall);
         return new ArrowAppearance(
-            SafeFloat(configuration.CcAggressorArrowDurationSeconds, AggressorArrowRules.DefaultDurationSeconds, 0.35f, 1.5f),
+            SafeFloat(configuration.CcAggressorArrowDurationSeconds, AggressorArrowRules.DefaultDurationSeconds,
+                AggressorArrowRules.MinimumDurationSeconds, AggressorArrowRules.MaximumDurationSeconds),
             SafeFloat(configuration.CcAggressorArrowOpacity, 0.78f, 0.15f, 1f), uiScale, overall, scale,
             SafeFloat(configuration.CcAggressorArrowThickness, 2.4f, 1f, 5f) * scale,
             SafeFloat(configuration.CcAggressorArrowJobIconSize, 28f, 20f, 44f) * scale,
@@ -198,7 +236,7 @@ internal sealed class AggressorArrowRenderer(
         float OverallScale, float VisualScale, float Width, float IconSize, bool ReducedMotion);
 
     private static void DrawCurve(ImDrawListPtr draw, Vector2 start, Vector2 control,
-        Vector2 end, float headT, float width, float alpha, float scale)
+        Vector2 end, float headT, float width, float alpha, float scale, bool allyArrow)
     {
         const int segments = 18;
         var previous = start;
@@ -207,8 +245,10 @@ internal sealed class AggressorArrowRenderer(
             var t = headT * index / segments;
             var next = Curve(start, control, end, t);
             var fade = alpha * (0.35f + 0.65f * index / segments);
-            draw.AddLine(previous, next, Pack(0.9f, 0.09f, 0.03f, fade * 0.18f), width * 3.5f);
-            draw.AddLine(previous, next, Pack(1f, 0.26f + 0.27f * t, 0.08f, fade), width);
+            draw.AddLine(previous, next, allyArrow ? Pack(.08f, .35f, .95f, fade * .18f) :
+                Pack(.9f, .09f, .03f, fade * .18f), width * 3.5f);
+            draw.AddLine(previous, next, allyArrow ? Pack(.15f, .6f + .2f * t, 1f, fade) :
+                Pack(1f, .26f + .27f * t, .08f, fade), width);
             previous = next;
         }
 
@@ -216,8 +256,22 @@ internal sealed class AggressorArrowRenderer(
         var normal = new Vector2(-tangent.Y, tangent.X);
         var wing = Math.Max(7f * scale, width * 3.2f);
         var back = previous - tangent * wing;
-        draw.AddLine(previous, back + normal * wing * 0.62f, Pack(1f, 0.62f, 0.18f, alpha), width * 1.25f);
-        draw.AddLine(previous, back - normal * wing * 0.62f, Pack(1f, 0.62f, 0.18f, alpha), width * 1.25f);
+        var headColor = allyArrow ? Pack(.3f, .85f, 1f, alpha) : Pack(1f, .62f, .18f, alpha);
+        draw.AddLine(previous, back + normal * wing * 0.62f, headColor, width * 1.25f);
+        draw.AddLine(previous, back - normal * wing * 0.62f, headColor, width * 1.25f);
+    }
+
+    private static AllyTargetArrowSourceSnapshot? FindAlly(
+        IReadOnlyList<AllyTargetArrowSourceSnapshot> sources, TargetPressureActorIdentity identity)
+    {
+        AllyTargetArrowSourceSnapshot? match = null;
+        foreach (var source in sources)
+        {
+            if (source.Ally != identity) continue;
+            if (match is not null) return null;
+            match = source;
+        }
+        return match;
     }
 
     private static Vector2 Curve(Vector2 start, Vector2 control, Vector2 end, float t) =>

@@ -823,9 +823,10 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
                     return;
                 }
 
+                var temporalReason = string.Empty;
                 if (candidate.TemporalEligible &&
                     IsProvenTemporalFalse(candidate, nativeAfter, snapshotAfter,
-                        out var failure, out temporalRemainder, out _))
+                        out var failure, out temporalRemainder, out temporalReason))
                 {
                     var coreAction = new SmartActionBufferAction(
                         candidate.Request.RequestedActionId,
@@ -849,7 +850,9 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
                 }
                 else
                 {
-                    lastEvent = chaseReason;
+                    lastEvent = candidate.TemporalEligible
+                        ? $"Timing: {temporalReason}; Chase: {chaseReason}"
+                        : chaseReason;
                     return;
                 }
             }
@@ -2124,10 +2127,19 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
 
     private SmartActionBufferSafety ToCoreSafety(
         BufferedRuntimeAction runtime,
-        RuntimeSnapshot current) => new(
-        Enabled: configuration.Enabled &&
-                 configuration.EnableSmartActionBuffer &&
-                 !disposed,
+        RuntimeSnapshot current) => CreateCoreSafety(
+            runtime.Request.RequestedActionId,
+            current,
+            configuration.Enabled && configuration.EnableSmartActionBuffer && !disposed);
+
+    // The existing native BeingMoved cancellation policy is retained.
+    // This managed mapping is shared with tests; it does not establish which
+    // specific in-game movement events set that client condition.
+    internal static SmartActionBufferSafety CreateCoreSafety(
+        uint requestedActionId,
+        RuntimeSnapshot current,
+        bool enabled) => new(
+        Enabled: enabled,
         ConflictDetected: false,
         LoggedIn: current.LoggedIn && !current.BetweenAreas,
         IsAlive: current.IsAlive,
@@ -2137,7 +2149,7 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
         TerritoryId: current.TerritoryId,
         InstanceId: current.InstanceFingerprint,
         TargetId: current.Target.Fingerprint,
-        RequestedActionId: runtime.Request.RequestedActionId,
+        RequestedActionId: requestedActionId,
         ResolvedActionId: current.ResolvedActionId);
 
     private bool FinishCoreCancellationLocked(SmartActionBufferDecision decision)
@@ -2453,10 +2465,12 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
         expected.Target == current.Target &&
         expected.ResolvedActionId == current.ResolvedActionId;
 
-    private bool IsSafeSnapshot(RuntimeSnapshot snapshot) =>
-        configuration.Enabled &&
-        configuration.EnableSmartActionBuffer &&
-        !disposed &&
+    private bool IsSafeSnapshot(RuntimeSnapshot snapshot) => IsSafeBufferContext(
+        snapshot,
+        configuration.Enabled && configuration.EnableSmartActionBuffer && !disposed);
+
+    internal static bool IsSafeBufferContext(RuntimeSnapshot snapshot, bool enabled) =>
+        enabled &&
         snapshot.LoggedIn &&
         !snapshot.BetweenAreas &&
         snapshot.Local.GameObjectId is not 0 and not InvalidObjectId &&
@@ -2635,7 +2649,7 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
         uint FullStatus,
         double TemporalRemainderMilliseconds);
 
-    private readonly record struct RuntimeSnapshot(
+    internal readonly record struct RuntimeSnapshot(
         bool LoggedIn,
         bool BetweenAreas,
         uint TerritoryId,

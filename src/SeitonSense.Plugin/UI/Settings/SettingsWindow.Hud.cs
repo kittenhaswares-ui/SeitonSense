@@ -1,4 +1,5 @@
 using Dalamud.Bindings.ImGui;
+using SeitonSense.Core;
 
 namespace SeitonSense.Plugin.UI;
 
@@ -136,6 +137,13 @@ internal sealed partial class SettingsWindow
             "Public CC only. The opening countdown follows the 5:00 match timer. Ready medicine kits get a green " +
             "screen beacon when Seiton can identify them. The beacon can stay visible through terrain, but it does not " +
             "target, move, or use the kit for you. Detection still needs live in-match confirmation.");
+        if (ImGui.TreeNode("Preview medicine-kit beacon (sample only)"))
+        {
+            CrystallineConflictMedicineKitRenderer.DrawSettingsPreview(
+                configuration.CrystallineConflictMedicineKitOverlayScale);
+            ImGui.TextWrapped("This sample does not detect a real kit. If it appears here but not in CC, copy the cc-kits line from /seiton debug while a kit is present.");
+            ImGui.TreePop();
+        }
         return changed;
     }
 
@@ -247,36 +255,51 @@ internal sealed partial class SettingsWindow
             configuration.ShowPressureCounter,
             value => configuration.ShowPressureCounter = value);
         changed |= Checkbox(
-            "Show short incoming arrows with enemy job icons (CC only)",
+            "Show red incoming arrows with enemy job icons (CC only)",
             configuration.ShowCcAggressorArrows,
             value => configuration.ShowCcAggressorArrows = value);
+        changed |= Checkbox(
+            "Show blue arrows when allies target an enemy (CC only)",
+            configuration.ShowCcAllyTargetArrows,
+            value => configuration.ShowCcAllyTargetArrows = value);
         ImGui.BeginDisabled(!configuration.Enabled);
-        if (ImGui.Button(aggressorArrows.PreviewEnabled ? "Stop incoming-arrow preview" : "Preview incoming arrows (also in Wolves' Den)"))
-            aggressorArrows.PreviewEnabled = !aggressorArrows.PreviewEnabled;
+        var redPreview = aggressorArrows.PreviewEnabled && !aggressorArrows.PreviewAllies;
+        if (ImGui.Button(redPreview ? "Stop red-arrow preview" : "Preview red arrows (also in Wolves' Den)"))
+        {
+            if (redPreview) aggressorArrows.PreviewEnabled = false;
+            else aggressorArrows.StartPreview(allies: false);
+        }
+        var bluePreview = aggressorArrows.PreviewEnabled && aggressorArrows.PreviewAllies;
+        if (ImGui.Button(bluePreview ? "Stop blue-arrow preview" : "Preview blue ally arrows (also in Wolves' Den)"))
+        {
+            if (bluePreview) aggressorArrows.PreviewEnabled = false;
+            else aggressorArrows.StartPreview(allies: true);
+        }
         ImGui.EndDisabled();
-        if (configuration.ShowCcAggressorArrows || aggressorArrows.PreviewEnabled)
+        if (configuration.ShowCcAggressorArrows || configuration.ShowCcAllyTargetArrows || aggressorArrows.PreviewEnabled)
         {
             changed |= Slider(
-                "Incoming-arrow overall size", configuration.CcAggressorArrowScale,
+                "Arrow overall size", configuration.CcAggressorArrowScale,
                 0.75f, 3f, value => configuration.CcAggressorArrowScale = value, "%.2f x");
             changed |= Slider(
-                "Incoming-arrow duration", configuration.CcAggressorArrowDurationSeconds,
-                0.35f, 1.5f, value => configuration.CcAggressorArrowDurationSeconds = value, "%.2f s");
+                "Arrow duration", configuration.CcAggressorArrowDurationSeconds,
+                AggressorArrowRules.MinimumDurationSeconds, AggressorArrowRules.MaximumDurationSeconds,
+                value => configuration.CcAggressorArrowDurationSeconds = value, "%.2f s");
             changed |= Slider(
-                "Incoming-arrow thickness", configuration.CcAggressorArrowThickness,
+                "Arrow thickness", configuration.CcAggressorArrowThickness,
                 1f, 5f, value => configuration.CcAggressorArrowThickness = value, "%.1f px");
             changed |= Slider(
-                "Incoming-arrow opacity", configuration.CcAggressorArrowOpacity,
+                "Arrow opacity", configuration.CcAggressorArrowOpacity,
                 0.15f, 1f, value => configuration.CcAggressorArrowOpacity = value, "%.2f");
             changed |= Slider(
-                "Incoming-arrow job icon size", configuration.CcAggressorArrowJobIconSize,
+                "Arrow job icon size", configuration.CcAggressorArrowJobIconSize,
                 20f, 44f, value => configuration.CcAggressorArrowJobIconSize = value, "%.0f px");
         }
         if (aggressorArrows.PreviewEnabled) aggressorArrows.DrawSettingsPreview();
         ImGui.TextDisabled(
-            "A short arrow points from a new attacker toward you, with their job icon beside it. Uses the same " +
-            "pressure evidence as this counter; steady focus and repeated hits do not repeat it. Offscreen arrows " +
-            "are hidden. Visual only: no target or action changes.");
+            "Red: a new attacker targeting you. Blue: an ally newly targeting an enemy. The icon belongs to " +
+            "the player at the start of the arrow. Uses the same pressure observations as this counter; " +
+            "steady focus does not repeat arrows. Offscreen arrows are hidden. Visual only: no target or action changes.");
         changed |= Checkbox(
             "Lock pressure counter",
             configuration.PressureLocked,

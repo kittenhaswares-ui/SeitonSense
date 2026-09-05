@@ -12,6 +12,7 @@ using Lumina.Excel.Sheets;
 using SeitonSense.Core;
 using SeitonSense.Plugin.Models;
 using GameAction = Lumina.Excel.Sheets.Action;
+using CanonicalEnemy = SeitonSense.Plugin.Services.SmartActionCanonicalEnemy;
 
 namespace SeitonSense.Plugin.Services;
 
@@ -225,7 +226,7 @@ internal readonly record struct ExactAutomaticActionBoundaryResult(
 /// or an invalid ID for a failed deliberate carrier. Near Assist/Near Help may
 /// then reach their authored fallback; Far Help deliberately never does.
 /// </summary>
-internal sealed unsafe class NearAssistRedirector : IDisposable
+internal sealed unsafe partial class NearAssistRedirector : IDisposable
 {
     [ThreadStatic]
     private static int internalRedirectBypassDepth;
@@ -271,7 +272,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private readonly SmartActionGuardBypassCatalog smartActionGuardBypassActions;
     private readonly bool samuraiSmartActionCastsMetadataVerified;
     private readonly bool samuraiKuzushiMetadataVerified;
-    private readonly bool chitenMetadataVerified;
+    private readonly SmartActionTargetProtectionService targetProtection;
     private readonly bool stunMetadataVerified;
     private readonly bool debanaMetadataVerified;
     private readonly uint debanaStatusId;
@@ -291,7 +292,6 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private SmartActionSafetyLeaseState smartActionSafetyLeaseState =
         SmartActionSafetyLeaseState.Initial;
     private long smartActionTapGeneration;
-    private long samuraiSmartActionTapGeneration;
     private long smartActionSafetyTapGeneration;
     private long smartActionFallbackTapGeneration;
     private long wolvesDenPreservedCarrierTapGeneration;
@@ -332,9 +332,6 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private long smartTargetFallbackCount;
     private int smartTargetLastEnemySlot;
     private string smartTargetLastEvent = "Not started";
-    private OwnedSamuraiCastProtection? ownedSamuraiCastProtection;
-    private long acceptedOwnedSamuraiCasts;
-    private readonly HashSet<InFlightSamuraiCastScope> inFlightSamuraiCastScopes = [];
     private long helpArmedCount;
     private long helpRedirectedCount;
     private long helpFallbackCount;
@@ -391,7 +388,10 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         this.samuraiSmartActionCastsMetadataVerified =
             samuraiSmartActionCastsMetadataVerified;
         this.samuraiKuzushiMetadataVerified = samuraiKuzushiMetadataVerified;
-        this.chitenMetadataVerified = chitenMetadataVerified;
+        targetProtection = new SmartActionTargetProtectionService(
+            objectTable, smartActionProtectionStatuses, smartActionGuardBypassActions,
+            samuraiSmartActionCastsMetadataVerified, chitenMetadataVerified,
+            wolvesDenStrikingDummyMetadataVerified);
         this.stunMetadataVerified = stunMetadataVerified;
         this.debanaMetadataVerified = debanaMetadataVerified;
         this.debanaStatusId = debanaStatusId;
@@ -1908,7 +1908,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             syntheticHeldRepeat || integratedBufferReplayDepth > 0 || queuedHelperReplay;
         var exactOwnedQueuedGuardContinuation = queuedHelperReplay &&
             actionId == EnemyCombatConstants.GuardActionId;
-        if (ShouldBlockActionDuringOwnedSamuraiCast(thisPtr, actionType, actionId))
+        if (ShouldBlockActionDuringOwnedSamuraiCast(thisPtr, actionType, actionId,
+                SamuraiCastProtectionCoordinator.IsPluginOwnedAction(
+                    synchronousHelperOwned, pluginOwnedHeldRetry, exactAutomaticActionBoundaryScope is not null)))
             return false;
         // A ranked Smart Action target may be invisible to <t>. When its first
         // macro line cleanly arms Chase, suppress the following authored <t>
@@ -2975,29 +2977,14 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             actionType,
             actionId);
 
-        // Report the exact transition into native Original to the delayed
-        // replay owner. A false result before this line (for example current
-        // Smart Action protection or owned Auto-Guard) is not a clean client
-        // rejection and must never be retried.
-        if (integratedBufferReplayDepth == 1 &&
-            integratedBufferedReplayScope is { Consumed: true } replayScope &&
-            ReferenceEquals(replayScope.Owner, this))
-        {
-            replayScope.NativeBoundaryInvoked = true;
-        }
-        if (exactAutomaticScope is { Consumed: true } &&
-            ReferenceEquals(exactAutomaticScope.Owner, this))
-        {
-            exactAutomaticScope.NativeBoundaryInvoked = true;
-        }
-
-        var inFlightSamuraiCast = ownedSamuraiCastRequest
-            ? TryBeginExactInFlightSamuraiCast(
-                actionId,
-                ownedSamuraiCastActionId,
-                forwardedTargetId,
-                ownedSamuraiCastTapGeneration)
-            : null;
+        var inFlightSamuraiCast = TryBeginQueuedSamuraiCast(
+            thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode,
+            comboRouteId, out var blockedSamuraiQueue);
+        if (blockedSamuraiQueue) return false;
+        if (inFlightSamuraiCast is null && ownedSamuraiCastRequest)
+            inFlightSamuraiCast = TryBeginExactInFlightSamuraiCast(
+                actionId, ownedSamuraiCastActionId, forwardedTargetId,
+                ownedSamuraiCastTapGeneration, actionType, extraParam, comboRouteId);
         var observeNativeHelperQueue = synchronousHelperOwned ||
                                        queuedHelperReplay || queuedHelperGuardOwnership.HasOwnership;
         var helperQueueBefore = default(ClientActionAttemptFingerprint);
@@ -3018,56 +3005,46 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         var clientAccepted = false;
         try
         {
-            try
+            clientAccepted = SamuraiCastProtection.Execute(inFlightSamuraiCast, () =>
             {
-                clientAccepted = useActionHook!.Original(
-                    thisPtr,
-                    actionType,
-                    actionId,
-                    forwardedTargetId,
-                    extraParam,
-                    mode,
-                    comboRouteId,
-                    outOptAreaTargeted);
-            }
-            catch
-            {
-                if (observeNativeHelperQueue)
-                    ObserveQueuedHelperNativeCompletion(thisPtr, actionType, actionId,
-                        forwardedTargetId, extraParam, comboRouteId, helperQueueBefore,
-                        helperQueueContext, queuedHelperReplayToken,
-                        captureNewOwnership: synchronousHelperOwned && !exactExplicitGuardBreak &&
-                                             mode != ActionManager.UseActionMode.Queue,
-                        clientAccepted: false,
-                        ownGuardActiveOrAcceptedPropagation: queuedHelperGuardConfirmed);
-                integratedRuntime?.ActionBuffer.AbandonExactStandardHotbarRoot(
-                    integratedAttempt,
-                    "Native action boundary threw; buffer observation retired");
-                throw;
-            }
-
+                // Only this callback crosses native Original. In particular,
+                // a SAM queue preflight veto above is not a client rejection
+                // and must never be misclassified as a retryable invocation.
+                if (integratedBufferReplayDepth == 1 &&
+                    integratedBufferedReplayScope is { Consumed: true } replayScope &&
+                    ReferenceEquals(replayScope.Owner, this))
+                    replayScope.NativeBoundaryInvoked = true;
+                if (exactAutomaticScope is { Consumed: true } &&
+                    ReferenceEquals(exactAutomaticScope.Owner, this))
+                    exactAutomaticScope.NativeBoundaryInvoked = true;
+                return useActionHook!.Original(
+                    thisPtr, actionType, actionId, forwardedTargetId,
+                    extraParam, mode, comboRouteId, outOptAreaTargeted);
+            });
+        }
+        catch
+        {
             if (observeNativeHelperQueue)
                 ObserveQueuedHelperNativeCompletion(thisPtr, actionType, actionId,
                     forwardedTargetId, extraParam, comboRouteId, helperQueueBefore,
                     helperQueueContext, queuedHelperReplayToken,
                     captureNewOwnership: synchronousHelperOwned && !exactExplicitGuardBreak &&
                                          mode != ActionManager.UseActionMode.Queue,
-                    clientAccepted, queuedHelperGuardConfirmed);
+                    clientAccepted: false,
+                    ownGuardActiveOrAcceptedPropagation: queuedHelperGuardConfirmed);
+            integratedRuntime?.ActionBuffer.AbandonExactStandardHotbarRoot(
+                integratedAttempt,
+                "Native action boundary threw; buffer observation retired");
+            throw;
+        }
 
-            // Arm the accepted-cast lease before releasing the synchronous
-            // in-flight owner. Movement therefore sees an overlap, never the
-            // consumed-token gap between native acceptance and cast startup.
-            if (clientAccepted && inFlightSamuraiCast is not null)
-            {
-                ArmOwnedSamuraiCastProtection(
-                    ownedSamuraiCastActionId,
-                    forwardedTargetId);
-            }
-        }
-        finally
-        {
-            EndExactInFlightSamuraiCast(inFlightSamuraiCast);
-        }
+        if (observeNativeHelperQueue)
+            ObserveQueuedHelperNativeCompletion(thisPtr, actionType, actionId,
+                forwardedTargetId, extraParam, comboRouteId, helperQueueBefore,
+                helperQueueContext, queuedHelperReplayToken,
+                captureNewOwnership: synchronousHelperOwned && !exactExplicitGuardBreak &&
+                                     mode != ActionManager.UseActionMode.Queue,
+                clientAccepted, queuedHelperGuardConfirmed);
 
         if (clientAccepted && syntheticHeldRepeat && integratedRuntime is not null)
         {
@@ -3884,256 +3861,17 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         out ulong canonicalTargetId,
         out string targetLabel)
     {
-        canonicalTargetId = requestedTargetId;
-        targetLabel = "unknown target";
         var context = ResolveContext();
-        var attackShape = ClassifySmartActionAttackShape(action);
-
-        if (context == SupportedPvPContext.CrystallineConflict)
-        {
-            if (!TryBuildSmartActionProtectionSnapshot(
-                    localPlayer,
-                    GetPartyEntityIds(),
-                    attackShape,
-                    out var canonicalEnemies,
-                    out var ccProtectedActors))
-            {
-                return false;
-            }
-
-            var exactMatches = canonicalEnemies
-                .Where(enemy =>
-                    enemy.Player.GameObjectId == requestedTargetId ||
-                    enemy.Player.EntityId == requestedTargetId)
-                .Take(2)
-                .ToArray();
-            if (exactMatches.Length != 1) return false;
-
-            var target = exactMatches[0];
-            var safe = IsSmartActionProtectionSafe(
-                resolvedActionId,
-                localPlayer,
-                attackShape,
-                target,
-                action.EffectRange,
-                ccProtectedActors,
-                actionIgnoresGuard:
-                    CanSmartActionTargetGuard(resolvedActionId, action));
-            if (!safe) return false;
-
-            canonicalTargetId = target.Player.GameObjectId;
-            targetLabel = $"S{target.Slot}";
-            return true;
-        }
-
-        if (!SmartActionContextRules.CanInspectExactVisibleTargetTestFallback(
-                context,
-                configuration.EnableWolvesDenTesting,
-                combatPriorityMode: true,
-                attackShape))
-        {
-            targetLabel = $"Den context/shape not admitted: context={context},shape={attackShape}";
-            return false;
-        }
-        if (!DarkKnightWolvesDenCurrentTargetResolver.TryResolveExactCurrentHardTargetDirect(
-                objectTable,
-                wolvesDenStrikingDummyMetadataVerified,
-                localPlayer,
-                out var wolvesTarget,
-                out var wolvesIdentity,
-                out var wolvesKind,
-                out var nativeHardTargetId) ||
-            wolvesTarget is null)
-        {
-            targetLabel = "Den exact visible duel/dummy target proof unavailable";
-            return false;
-        }
-
-        var effectiveTargetId = SmartActionContextRules
-            .IsNativeSelectedTargetCarrier(requestedTargetId)
-            ? nativeHardTargetId
-            : requestedTargetId;
-        if (!ActorIdMatches(effectiveTargetId, wolvesTarget))
-        {
-            targetLabel = $"Den authored/current target mismatch: authored={effectiveTargetId:X}," +
-                          $"current={wolvesIdentity.GameObjectId:X}/{wolvesIdentity.EntityId:X}";
-            return false;
-        }
-        if (!TryClassifyExactWolvesDenTargetProtection(
-                wolvesTarget,
-                out var protectionKind))
-        {
-            targetLabel = "Den exact target protection-status proof ambiguous";
-            return false;
-        }
-
-        var targetGeometry = new SmartActionActorGeometry(
-            EnemySlotRules.FirstSlot,
-            wolvesIdentity,
-            ExactCanonicalIdentity: true,
-            wolvesTarget.Position,
-            wolvesTarget.HitboxRadius);
-        if (!TryBuildWolvesDenSmartActionProtectionSnapshot(
-                localPlayer,
-                wolvesTarget,
-                targetGeometry,
-                attackShape,
-                protectionKind,
-                out var wolvesProtectedActors))
-        {
-            targetLabel = $"Den area protection snapshot ambiguous: shape={attackShape}";
-            return false;
-        }
-        var wolvesSafe = IsSmartActionProtectionSafe(
+        return targetProtection.TryEvaluateExactSmartActionTargetProtection(
+            context,
+            configuration.EnableWolvesDenTesting,
+            context == SupportedPvPContext.CrystallineConflict ? GetPartyEntityIds() : null,
             resolvedActionId,
             localPlayer,
-            attackShape,
-            targetGeometry,
-            action.EffectRange,
-            wolvesProtectedActors,
-            actionIgnoresGuard:
-                CanSmartActionTargetGuard(resolvedActionId, action));
-        if (!wolvesSafe)
-        {
-            var incidentalChiten = wolvesProtectedActors.Any(actor =>
-                actor.Geometry.Actor != wolvesIdentity &&
-                (actor.Kind & SmartActionProtectionKind.Chiten) != 0);
-            targetLabel = $"Den protection blocked: target={protectionKind},shape={attackShape}," +
-                          $"incidentalChiten={incidentalChiten},chitenMeta={chitenMetadataVerified}";
-            return false;
-        }
-
-        canonicalTargetId = wolvesTarget.GameObjectId;
-        targetLabel = wolvesKind == DarkKnightWolvesDenTargetKind.StrikingDummy
-            ? "Wolves' Den dummy <t>"
-            : "Wolves' Den duel <t>";
-        return true;
-    }
-
-    private bool TryClassifyExactWolvesDenTargetProtection(
-        IBattleChara target,
-        out SmartActionProtectionKind protectionKind)
-    {
-        protectionKind = SmartActionProtectionKind.None;
-        var player = target as IPlayerCharacter;
-        var jobId = player?.ClassJob.IsValid == true
-            ? player.ClassJob.RowId
-            : 0u;
-        if (player is not null &&
-            !chitenMetadataVerified &&
-            jobId is 0 or EnemyCombatConstants.SamuraiJobId)
-        {
-            protectionKind |= SmartActionProtectionKind.Chiten;
-        }
-
-        foreach (var status in target.StatusList)
-        {
-            var exactKind = ClassifySmartActionProtectionStatus(status.StatusId);
-            if (exactKind == SmartActionProtectionKind.None) continue;
-            if (exactKind == SmartActionProtectionKind.Chiten &&
-                (player is null ||
-                 jobId != EnemyCombatConstants.SamuraiJobId &&
-                 !(!chitenMetadataVerified && jobId == 0)))
-            {
-                return false;
-            }
-
-            protectionKind |= exactKind;
-        }
-
-        return protectionKind == SmartActionProtectionKind.None ||
-               SmartActionProtectionRules.IsExactProtectionKind(protectionKind);
-    }
-
-    private bool TryBuildWolvesDenSmartActionProtectionSnapshot(
-        IPlayerCharacter localPlayer,
-        IBattleChara exactTarget,
-        SmartActionActorGeometry targetGeometry,
-        SmartActionAttackShape attackShape,
-        SmartActionProtectionKind targetProtectionKind,
-        out SmartActionProtectedActor[] protectedActors)
-    {
-        var protections = new List<SmartActionProtectedActor>(5);
-        if (targetProtectionKind != SmartActionProtectionKind.None)
-        {
-            protections.Add(new SmartActionProtectedActor(
-                targetGeometry,
-                targetProtectionKind));
-        }
-
-        if (!SmartActionProtectionRules.RequiresCompleteHostileSnapshot(attackShape))
-        {
-            protectedActors = protections.ToArray();
-            return true;
-        }
-
-        var observedGameObjectIds = new HashSet<ulong>
-        {
-            exactTarget.GameObjectId,
-        };
-        var observedEntityIds = new HashSet<uint>
-        {
-            exactTarget.EntityId,
-        };
-        var nextSyntheticSlot = EnemySlotRules.FirstSlot + 1;
-        foreach (var player in objectTable.PlayerObjects.OfType<IPlayerCharacter>())
-        {
-            if (!IsLivePlayer(player) ||
-                player.GameObjectId == localPlayer.GameObjectId ||
-                HasSameNativeIdentity(player, exactTarget) ||
-                (player.StatusFlags & StatusFlags.Hostile) == 0)
-            {
-                continue;
-            }
-
-            if (!observedGameObjectIds.Add(player.GameObjectId) ||
-                !observedEntityIds.Add(player.EntityId))
-            {
-                protectedActors = [];
-                return false;
-            }
-
-            var jobId = player.ClassJob.IsValid ? player.ClassJob.RowId : 0;
-            var incidentalKind = !chitenMetadataVerified &&
-                                 jobId is 0 or EnemyCombatConstants.SamuraiJobId
-                ? SmartActionProtectionKind.Chiten
-                : SmartActionProtectionKind.None;
-            foreach (var status in player.StatusList)
-            {
-                if (status.StatusId != SmartActionProtectionRules.ChitenStatusId)
-                    continue;
-                if (jobId != EnemyCombatConstants.SamuraiJobId &&
-                    !(!chitenMetadataVerified && jobId == 0))
-                {
-                    protectedActors = [];
-                    return false;
-                }
-
-                incidentalKind |= SmartActionProtectionKind.Chiten;
-            }
-
-            if (incidentalKind == SmartActionProtectionKind.None)
-                continue;
-            if (nextSyntheticSlot > EnemySlotRules.LastSlot)
-            {
-                protectedActors = [];
-                return false;
-            }
-
-            protections.Add(new SmartActionProtectedActor(
-                new SmartActionActorGeometry(
-                    nextSyntheticSlot++,
-                    new TargetPressureActorIdentity(
-                        player.GameObjectId,
-                        player.EntityId),
-                    ExactCanonicalIdentity: true,
-                    player.Position,
-                    player.HitboxRadius),
-                incidentalKind));
-        }
-
-        protectedActors = protections.ToArray();
-        return true;
+            action,
+            requestedTargetId,
+            out canonicalTargetId,
+            out targetLabel);
     }
 
     private bool UseActionLocationDetour(
@@ -4765,310 +4503,6 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         }
     }
 
-    private InFlightSamuraiCastScope? TryBeginExactInFlightSamuraiCast(
-        uint rawActionId,
-        uint resolvedActionId,
-        ulong targetGameObjectId,
-        long tapGeneration)
-    {
-        try
-        {
-            var local = objectTable.LocalPlayer;
-            if (!IsLivePlayer(local) ||
-                local!.ClassJob.IsValid != true ||
-                local.ClassJob.RowId != SamuraiSmartActionCastRules.SamuraiJobId)
-            {
-                return null;
-            }
-
-            lock (tokenGate)
-            {
-                if (disposed ||
-                    !started ||
-                    !configuration.Enabled ||
-                    !configuration.EnableSmartActionMacro ||
-                    !clientState.IsLoggedIn ||
-                    !SamuraiOgiCastProtectionRules.CanBeginExactInFlightRequest(
-                        samuraiSmartActionCastsMetadataVerified,
-                        exactSeitonSamOwner: true,
-                        tapGeneration,
-                        samuraiSmartActionTapGeneration,
-                        rawActionId,
-                        resolvedActionId,
-                        IsNetworkObjectId(targetGameObjectId)))
-                {
-                    return null;
-                }
-
-                var scope = new InFlightSamuraiCastScope(
-                    clientState.TerritoryType,
-                    local.GameObjectId,
-                    local.EntityId,
-                    rawActionId,
-                    resolvedActionId,
-                    targetGameObjectId,
-                    tapGeneration,
-                    Environment.CurrentManagedThreadId);
-                inFlightSamuraiCastScopes.Add(scope);
-                return scope;
-            }
-        }
-        catch (Exception exception)
-        {
-            // The ownership bridge is protective only. A bookkeeping failure
-            // must not suppress the exact authored action itself.
-            LogFailure(
-                exception,
-                "Seiton Sense could not begin exact in-flight /seitonsam ownership.");
-            return null;
-        }
-    }
-
-    private void EndExactInFlightSamuraiCast(InFlightSamuraiCastScope? scope)
-    {
-        if (scope is null) return;
-        lock (tokenGate) inFlightSamuraiCastScopes.Remove(scope);
-    }
-
-    private void ArmOwnedSamuraiCastProtection(
-        uint resolvedCastActionId,
-        ulong targetGameObjectId)
-    {
-        var local = objectTable.LocalPlayer;
-        if (!SamuraiOgiCastProtectionRules.IsReviewedCastAction(resolvedCastActionId) ||
-            !IsLivePlayer(local) ||
-            local!.ClassJob.IsValid != true ||
-            local.ClassJob.RowId != SamuraiSmartActionCastRules.SamuraiJobId ||
-            !IsNetworkObjectId(targetGameObjectId))
-        {
-            return;
-        }
-
-        var now = Environment.TickCount64;
-        lock (tokenGate)
-        {
-            ownedSamuraiCastProtection = new OwnedSamuraiCastProtection(
-                clientState.TerritoryType,
-                local.GameObjectId,
-                local.EntityId,
-                resolvedCastActionId,
-                targetGameObjectId,
-                now,
-                now + SamuraiOgiCastProtectionRules.MaximumLeaseMilliseconds,
-                ObservedExactCast: false);
-            Interlocked.Increment(ref acceptedOwnedSamuraiCasts);
-        }
-    }
-
-    internal bool IsSamuraiCastMovementSuppressed()
-    {
-        if (!IsSamuraiCastProtectionRuntimeEnabled())
-        {
-            RevokeOwnedSamuraiCastProtection();
-            return false;
-        }
-        var exactRequestInFlight = false;
-        lock (tokenGate)
-        {
-            exactRequestInFlight = !disposed && inFlightSamuraiCastScopes.Count > 0;
-        }
-
-        if (exactRequestInFlight)
-        {
-            return SamuraiOgiCastProtectionRules.ShouldSuppressMovement(
-                exactSeitonSamRequestInFlight: exactRequestInFlight,
-                acceptedOwnedCastActive: false);
-        }
-
-        return SamuraiOgiCastProtectionRules.ShouldSuppressMovement(
-            exactSeitonSamRequestInFlight: false,
-            acceptedOwnedCastActive: IsOwnedSamuraiCastProtected());
-    }
-
-    internal SamuraiCastInputStatus SamuraiCastInputStatus
-    {
-        get
-        {
-            var active = IsOwnedSamuraiCastProtected();
-            lock (tokenGate)
-            {
-                return new SamuraiCastInputStatus(
-                    samuraiSmartActionCastsMetadataVerified,
-                    integratedInputRuntime?.GameplayMovementHooksOperational == true,
-                    active,
-                    inFlightSamuraiCastScopes.Count,
-                    Interlocked.Read(ref acceptedOwnedSamuraiCasts),
-                    integratedInputRuntime?.SamuraiMovementDiagnostics ?? default);
-            }
-        }
-    }
-
-    internal bool IsOwnedSamuraiCastProtected()
-    {
-        if (!IsSamuraiCastProtectionRuntimeEnabled())
-        {
-            RevokeOwnedSamuraiCastProtection();
-            return false;
-        }
-        OwnedSamuraiCastProtection lease;
-        lock (tokenGate)
-        {
-            if (ownedSamuraiCastProtection is not { } current) return false;
-            lease = current;
-        }
-
-        try
-        {
-            var now = Environment.TickCount64;
-            var local = objectTable.LocalPlayer;
-            var actionManager = ActionManager.Instance();
-            var identityValid = now <= lease.ExpiresAtMilliseconds &&
-                                clientState.TerritoryType == lease.TerritoryId &&
-                                IsLivePlayer(local) &&
-                                local!.GameObjectId == lease.LocalGameObjectId &&
-                                local.EntityId == lease.LocalEntityId &&
-                                local.ClassJob.IsValid &&
-                                local.ClassJob.RowId ==
-                                SamuraiSmartActionCastRules.SamuraiJobId &&
-                                actionManager != null;
-            // BeingMoved also reports ordinary movement input. It must never
-            // revoke this shield, whose purpose is to stop that same input.
-            // CC and the disappearance of the exact native cast below remain
-            // the cancellation evidence, including a knockback-ended cast.
-            if (!identityValid || HasCastBreakingCrowdControl(local!))
-            {
-                ClearOwnedSamuraiCastProtection(lease);
-                return false;
-            }
-
-            if (local!.IsCasting)
-            {
-                var castActionId = actionManager->CastActionId;
-                var adjustedCastActionId = castActionId == 0
-                    ? 0
-                    : actionManager->GetAdjustedActionId(castActionId);
-                var exactCast = castActionId == lease.ResolvedCastActionId ||
-                                adjustedCastActionId == lease.ResolvedCastActionId;
-                if (exactCast)
-                {
-                    if (!lease.ObservedExactCast)
-                    {
-                        lock (tokenGate)
-                        {
-                            if (ownedSamuraiCastProtection == lease)
-                                ownedSamuraiCastProtection = lease with { ObservedExactCast = true };
-                        }
-                    }
-
-                    return true;
-                }
-
-                ClearOwnedSamuraiCastProtection(lease);
-                return false;
-            }
-
-            // Once the exact native cast was observed, its disappearance is
-            // authoritative. Release movement and helpers on that same poll.
-            if (lease.ObservedExactCast)
-            {
-                ClearOwnedSamuraiCastProtection(lease);
-                return false;
-            }
-
-            if (now - lease.AcceptedAtMilliseconds <=
-                SamuraiOgiCastProtectionRules.StartPropagationMilliseconds)
-            {
-                return true;
-            }
-
-            ClearOwnedSamuraiCastProtection(lease);
-            return false;
-        }
-        catch (Exception exception)
-        {
-            ClearOwnedSamuraiCastProtection(lease);
-            LogFailure(
-                exception,
-                "Seiton Sense /seitonsam cast protection failed open.");
-            return false;
-        }
-    }
-
-    private bool ShouldBlockActionDuringOwnedSamuraiCast(
-        ActionManager* actionManager,
-        ActionType actionType,
-        uint actionId)
-    {
-        if (!IsOwnedSamuraiCastProtected() || !IsSupportedActionType(actionType))
-            return false;
-
-        try
-        {
-            var resolvedActionId = ResolveActionId(actionManager, actionType, actionId);
-            if (resolvedActionId == HeldCastCancellationRules.AutomaticPurifyActionId)
-                return false;
-            if (resolvedActionId == EnemyCombatConstants.GuardActionId)
-                return exactAutomaticActionBoundaryScope is not null;
-
-            return true;
-        }
-        catch (Exception exception)
-        {
-            LogFailure(
-                exception,
-                "Seiton Sense blocked one ambiguous action while protecting an owned SAM cast.");
-            return true;
-        }
-    }
-
-    private void ClearOwnedSamuraiCastProtection(OwnedSamuraiCastProtection expected)
-    {
-        lock (tokenGate)
-        {
-            if (ownedSamuraiCastProtection == expected)
-                ownedSamuraiCastProtection = null;
-        }
-    }
-
-    private bool IsSamuraiCastProtectionRuntimeEnabled()
-    {
-        try
-        {
-            return SamuraiOgiCastProtectionRules.CanMaintainCastProtection(
-                started,
-                disposed,
-                configuration.Enabled,
-                configuration.EnableSmartActionMacro,
-                clientState.IsLoggedIn,
-                ResolveContext(),
-                configuration.EnableWolvesDenTesting);
-        }
-        catch
-        {
-            // A missing runtime/context view must immediately release input.
-            return false;
-        }
-    }
-
-    private void RevokeOwnedSamuraiCastProtection()
-    {
-        lock (tokenGate)
-        {
-            ownedSamuraiCastProtection = null;
-            inFlightSamuraiCastScopes.Clear();
-            samuraiSmartActionTapGeneration = 0;
-        }
-    }
-
-    private static bool HasCastBreakingCrowdControl(IPlayerCharacter player) =>
-        player.StatusList.Any(static status =>
-            (status.StatusId is EnemyCombatConstants.PvPStunStatusId or
-                EnemyCombatConstants.PvPSilenceStatusId or
-                EnemyCombatConstants.DeepFreezeStatusId or
-                EnemyCombatConstants.MiracleOfNatureStatusId) &&
-            float.IsFinite(status.RemainingTime) &&
-            status.RemainingTime > 0f);
-
     private bool IsLocalGuardActiveOrPropagating()
     {
         try
@@ -5466,9 +4900,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                     enemy.HitboxRadius,
                     out edgeDistanceYalms))
             {
-                reason = samuraiMelee
-                    ? "Seiton SAM fallback: enemy distance snapshot ambiguous"
-                    : "Seiton Far fallback: enemy distance snapshot ambiguous";
+                if (samuraiMelee) continue;
+                reason = "Seiton Far fallback: enemy distance snapshot ambiguous";
                 return originalTargetId;
             }
             if (samuraiMelee &&
@@ -5628,7 +5061,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 : samuraiMelee
                     ? "Seiton SAM fallback: no exact safe target inside 5y"
                     : "Smart Action fallback: no exact reachable candidate";
-            if (!heldActionSelection && !farthestReachable && !samuraiMelee &&
+            if (!heldActionSelection && !farthestReachable &&
                 context == SupportedPvPContext.CrystallineConflict)
             {
                 // Explain only this already incoming CC macro miss from the
@@ -6270,6 +5703,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
     private void OnFrameworkUpdate(IFramework _)
     {
+        UpdateSamuraiLateCastFacing();
         if (disposed || !started) return;
 
         try
@@ -6918,170 +6352,19 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         HashSet<uint> partyEntityIds,
         SmartActionAttackShape attackShape,
         out CanonicalEnemy[] canonicalEnemies,
-        out SmartActionProtectedActor[] protectedActors)
-    {
-        if (!smartActionProtectionStatuses.IsVerified)
-        {
-            canonicalEnemies = [];
-            protectedActors = [];
-            return false;
-        }
-
-        var enemies = new List<CanonicalEnemy>(5);
-        var protections = new List<SmartActionProtectedActor>(5);
-        var occupiedGameObjectIds = new HashSet<ulong>();
-        var occupiedEntityIds = new HashSet<uint>();
-        var occupiedActorIdentities = new HashSet<(ulong GameObjectId, uint EntityId)>();
-
-        for (var slot = EnemySlotRules.FirstSlot; slot <= EnemySlotRules.LastSlot; slot++)
-        {
-            var enemy = EnemySlotResolver.Resolve(objectTable, slot);
-            if (!IsLivePlayer(enemy) ||
-                enemy!.GameObjectId == localPlayer.GameObjectId ||
-                IsAlly(enemy, partyEntityIds))
-            {
-                continue;
-            }
-
-            if (!occupiedGameObjectIds.Add(enemy.GameObjectId) ||
-                !occupiedEntityIds.Add(enemy.EntityId) ||
-                !occupiedActorIdentities.Add((enemy.GameObjectId, enemy.EntityId)))
-            {
-                canonicalEnemies = [];
-                protectedActors = [];
-                return false;
-            }
-
-            var canonical = new CanonicalEnemy(slot, enemy);
-            enemies.Add(canonical);
-
-            var jobId = enemy.ClassJob.IsValid ? enemy.ClassJob.RowId : 0;
-            var protectionKind = !chitenMetadataVerified &&
-                                 (jobId == EnemyCombatConstants.SamuraiJobId || jobId == 0)
-                ? SmartActionProtectionKind.Chiten
-                : SmartActionProtectionKind.None;
-            foreach (var status in enemy.StatusList)
-            {
-                var exactKind = ClassifySmartActionProtectionStatus(status.StatusId);
-                if (exactKind == SmartActionProtectionKind.None) continue;
-                if (exactKind == SmartActionProtectionKind.Chiten)
-                {
-                    if (jobId != EnemyCombatConstants.SamuraiJobId &&
-                        !(!chitenMetadataVerified && jobId == 0))
-                    {
-                        canonicalEnemies = [];
-                        protectedActors = [];
-                        return false;
-                    }
-
-                    protectionKind |= exactKind;
-                    continue;
-                }
-
-                protectionKind |= exactKind;
-            }
-
-            if (protectionKind != SmartActionProtectionKind.None)
-            {
-                protections.Add(new SmartActionProtectedActor(
-                    CreateSmartActionActorGeometry(canonical),
-                    protectionKind));
-            }
-        }
-
-        // A direct action can hit only its selected actor. Its own exact S-slot
-        // status proof above is therefore sufficient even if an unrelated
-        // hostile briefly appears in only one of Dalamud's two actor views.
-        // Area and unknown shapes retain the strict complete-world comparison
-        // below because an omitted protected peer could still be hit.
-        if (!SmartActionProtectionRules.RequiresCompleteHostileSnapshot(attackShape))
-        {
-            canonicalEnemies = enemies.ToArray();
-            protectedActors = protections.ToArray();
-            return true;
-        }
-
-        // Area safety now needs complete incidental geometry only for Chiten,
-        // the one reviewed protection which can retaliate against the caller.
-        // A transient object-table actor absent from S1-S5 therefore blocks
-        // only when it is a SAM, has unknown job metadata, or visibly carries
-        // Chiten. Unrelated non-SAM Guard/Cover/LB actors cannot be selected
-        // without a canonical slot and must not globally stall every AoE.
-        var observedHostileGameObjectIds = new HashSet<ulong>();
-        var observedHostileEntityIds = new HashSet<uint>();
-        foreach (var player in objectTable.PlayerObjects.OfType<IPlayerCharacter>())
-        {
-            if (!IsLivePlayer(player) ||
-                player.GameObjectId == localPlayer.GameObjectId ||
-                IsAlly(player, partyEntityIds))
-            {
-                continue;
-            }
-
-            if (!observedHostileGameObjectIds.Add(player.GameObjectId) ||
-                !observedHostileEntityIds.Add(player.EntityId))
-            {
-                canonicalEnemies = [];
-                protectedActors = [];
-                return false;
-            }
-
-            var accountedFor = occupiedActorIdentities.Contains(
-                (player.GameObjectId, player.EntityId));
-            if (accountedFor) continue;
-
-            var jobId = player.ClassJob.IsValid ? player.ClassJob.RowId : 0;
-            var couldCarryChiten =
-                jobId is 0 or EnemyCombatConstants.SamuraiJobId ||
-                player.StatusList.Any(status =>
-                    status.StatusId == SmartActionProtectionRules.ChitenStatusId);
-            if (!couldCarryChiten) continue;
-
-            canonicalEnemies = [];
-            protectedActors = [];
-            return false;
-        }
-
-        canonicalEnemies = enemies.ToArray();
-        protectedActors = protections.ToArray();
-        return true;
-    }
+        out SmartActionProtectedActor[] protectedActors) =>
+        targetProtection.TryBuildSmartActionProtectionSnapshot(
+            localPlayer, partyEntityIds, attackShape,
+            out canonicalEnemies, out protectedActors);
 
     private static SmartActionAttackShape ClassifySmartActionAttackShape(GameAction action) =>
-        SmartActionProtectionRules.ClassifyAttackShape(
-            action.EffectRange,
-            action.CastType);
+        SmartActionTargetProtectionService.ClassifySmartActionAttackShape(action);
 
-    private SmartActionProtectionKind ClassifySmartActionProtectionStatus(
-        uint statusId) =>
-        statusId == SmartActionProtectionRules.ChitenStatusId
-            ? SmartActionProtectionKind.Chiten
-            : smartActionProtectionStatuses.Classify(statusId);
+    private SmartActionProtectionKind ClassifySmartActionProtectionStatus(uint statusId) =>
+        targetProtection.ClassifySmartActionProtectionStatus(statusId);
 
-    /// <summary>
-    /// Guard may be selected when strict startup metadata proves that the
-    /// action ignores/reduces Guard, or when the current exact PvP row is one
-    /// of the closed ordinary hostile-target movement actions. This permission
-    /// applies only to the selected actor's Guard; Chiten, Cover, and
-    /// invulnerability remain blocking protections on that candidate.
-    /// </summary>
-    private bool CanSmartActionTargetGuard(
-        uint resolvedActionId,
-        GameAction action) =>
-        !SmartActionMovementGuardBypassRules.IsGuardBlockedCcMovement(resolvedActionId) &&
-        (smartActionGuardBypassActions.Contains(resolvedActionId) ||
-         (action.RowId == resolvedActionId &&
-          action.ClassJob.IsValid &&
-          SmartActionMovementGuardBypassRules.AllowsGuardTarget(
-              action.ClassJob.RowId,
-              resolvedActionId) &&
-          action.ActionCategory.IsValid &&
-          action.ActionCategory.RowId is 3 or 4 &&
-          action.IsPvP &&
-          action.CanTargetHostile &&
-          !action.TargetArea &&
-          action.Range > 0 &&
-          action.AffectsPosition));
+    private bool CanSmartActionTargetGuard(uint resolvedActionId, GameAction action) =>
+        targetProtection.CanSmartActionTargetGuard(resolvedActionId, action);
 
     private bool IsSmartActionProtectionSafe(
         uint resolvedActionId,
@@ -7091,55 +6374,10 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         float effectRange,
         IReadOnlyList<SmartActionProtectedActor> protectedActors,
         bool actionIgnoresGuard,
-        bool allowDamageOnlyInvulnerabilityForCcUtility = false)
-        => IsSmartActionProtectionSafe(
-            resolvedActionId,
-            localPlayer,
-            attackShape,
-            CreateSmartActionActorGeometry(target),
-            effectRange,
-            protectedActors,
-            actionIgnoresGuard,
-            allowDamageOnlyInvulnerabilityForCcUtility);
-
-    private bool IsSmartActionProtectionSafe(
-        uint resolvedActionId,
-        IPlayerCharacter localPlayer,
-        SmartActionAttackShape attackShape,
-        SmartActionActorGeometry targetGeometry,
-        float effectRange,
-        IReadOnlyList<SmartActionProtectedActor> protectedActors,
-        bool actionIgnoresGuard,
-        bool allowDamageOnlyInvulnerabilityForCcUtility = false)
-    {
-        if (allowDamageOnlyInvulnerabilityForCcUtility)
-        {
-            return attackShape == SmartActionAttackShape.DirectSingleTarget &&
-                   effectRange == 0f &&
-                   SmartActionProtectionRules
-                       .IsDirectCrowdControlUtilityTargetSafe(
-                           targetGeometry,
-                           protectedActors);
-        }
-
-        if (SamuraiSmartActionCastRules.IsOgiNamikiriConeAction(resolvedActionId) &&
-            samuraiSmartActionCastsMetadataVerified)
-        {
-            return SamuraiSmartActionCastRules.IsOgiNamikiriProtectionSafe(
-                localPlayer.Position,
-                targetGeometry,
-                effectRange,
-                protectedActors,
-                actionIgnoresGuard);
-        }
-
-        return SmartActionProtectionRules.IsActionProtectionSafe(
-            attackShape,
-            targetGeometry,
-            effectRange,
-            protectedActors,
-            actionIgnoresGuard);
-    }
+        bool allowDamageOnlyInvulnerabilityForCcUtility = false) =>
+        targetProtection.IsSmartActionProtectionSafe(
+            resolvedActionId, localPlayer, attackShape, target, effectRange,
+            protectedActors, actionIgnoresGuard, allowDamageOnlyInvulnerabilityForCcUtility);
 
     private bool IsExactCrowdControlUtilityTargetStatusSafe(
         uint resolvedActionId,
@@ -7261,14 +6499,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
     private static SmartActionActorGeometry CreateSmartActionActorGeometry(
         CanonicalEnemy enemy) =>
-        new(
-            enemy.Slot,
-            new TargetPressureActorIdentity(
-                enemy.Player.GameObjectId,
-                enemy.Player.EntityId),
-            ExactCanonicalIdentity: true,
-            enemy.Player.Position,
-            enemy.Player.HitboxRadius);
+        SmartActionTargetProtectionService.CreateSmartActionActorGeometry(enemy);
 
     private Dictionary<ulong, CanonicalEnemy> ResolveCanonicalEnemies(
         IPlayerCharacter localPlayer,
@@ -8234,7 +7465,6 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         return NearAssistSelectionRules.ClassifyPlayableJob(jobId);
     }
 
-    private readonly record struct CanonicalEnemy(int Slot, IPlayerCharacter Player);
 
     private readonly record struct SmartKardiaEukrasiaPreflight(
         uint TerritoryId,
@@ -8293,41 +7523,6 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         int OwnSourceKuzushiCount = 0,
         int OwnSourceDebanaCount = 0,
         int ExactStunCount = 0);
-
-    private readonly record struct OwnedSamuraiCastProtection(
-        uint TerritoryId,
-        ulong LocalGameObjectId,
-        uint LocalEntityId,
-        uint ResolvedCastActionId,
-        ulong TargetGameObjectId,
-        long AcceptedAtMilliseconds,
-        long ExpiresAtMilliseconds,
-        bool ObservedExactCast);
-
-    /// <summary>
-    /// Reference-identity scope for one exact /seitonsam request while the sole
-    /// native UseAction Original is on the stack. Multiple scopes can coexist
-    /// under reentrancy; each finally removes only the scope it created.
-    /// </summary>
-    private sealed class InFlightSamuraiCastScope(
-        uint territoryId,
-        ulong localGameObjectId,
-        uint localEntityId,
-        uint rawActionId,
-        uint resolvedActionId,
-        ulong targetGameObjectId,
-        long tapGeneration,
-        int managedThreadId)
-    {
-        internal uint TerritoryId { get; } = territoryId;
-        internal ulong LocalGameObjectId { get; } = localGameObjectId;
-        internal uint LocalEntityId { get; } = localEntityId;
-        internal uint RawActionId { get; } = rawActionId;
-        internal uint ResolvedActionId { get; } = resolvedActionId;
-        internal ulong TargetGameObjectId { get; } = targetGameObjectId;
-        internal long TapGeneration { get; } = tapGeneration;
-        internal int ManagedThreadId { get; } = managedThreadId;
-    }
 
     private readonly record struct ArmedNearHelpTarget(
         uint TerritoryId,

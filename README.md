@@ -3,6 +3,31 @@
 Seiton Sense is a local PvP awareness HUD with pressure tracking, nameplate
 cues, warnings, job helpers, Smart Action, and target highlights.
 
+## Smart Action core cleanup and Samurai cast reliability
+
+The first cleanup step separates enemy observation and protection checks from
+action execution. CC uses exact enemy slots; enabled Wolves' Den testing uses
+your visible duel/dummy target. Both feed the same protection rules. This is a
+bounded change, not a replacement of Purify, Recuperate, or the whole scheduler.
+
+For `/seitonsam`, reviewed Ogi/Tendo cast starters prefer the closest safe target
+within 5y before SAM debuffs and the usual tie-breakers. Instant follow-ups keep
+their existing debuff-first order. A bad optional observation on one candidate
+no longer blocks other safe candidates. Native reach/visibility and Chiten checks
+still apply, and a started cast never changes target.
+
+The SAM cast work also covers the handoff from a queued request to the actual
+cast. A queued Ogi must not be rejected by its own cast protection. Repeated
+macro presses must not restart an already protected cast. Purify and a deliberate
+manual Guard remain escape routes; normal movement resumes when the cast ends
+or is cancelled by the game. Offline tests do not establish live input coverage.
+
+Live checks for this update: use Ogi once while holding WASD, then repeat with
+both mouse buttons; test an initially queued cast; interrupt it with CC or manual
+Guard. Confirm movement resumes and no second action is sent. In CC, compare a
+near safe target with a farther marked target. Real server range/visibility loss
+can still cancel the cast; this is not a latency or range override.
+
 Version 0.44.4.0 adds `/seitonpld`, an explicit no-target Guardian macro. It picks
 an endangered reachable ally first, otherwise the closest ally within 6y. It
 uses Guardian itself; do not add a second `/pvpaction` line. Automatic Guardian
@@ -12,7 +37,7 @@ settings still apply. See Macro Helpers for the short explanation.
 Guardian Quick Chat now uses the canonical `/quickchat` command in every language,
 with the full localized action name first and the frozen party slot last. The old
 German target-first construction is removed. There is one chat-entry invocation,
-no fallback resend and no target switch; live chat delivery remains unverified.
+no fallback resend and no target switch. The user has confirmed delivery in a CC test.
 Delayed CC confirmation packets can no longer erase a newer accepted attempt.
 
 Manual Smart Action failures in Wolves' Den now include a more precise reason
@@ -2314,8 +2339,9 @@ with the RDM fresh-Guard engage. Reset Defaults clears previews and restores
 every action, target-
 write, and party-visible communication master to off.
 
-Configuration schema 53 is current. It adds the local CC prediction/history
-panel settings while retaining the release-independent tap-to-land chase that
+Configuration schema 54 is current. It adds longer enemy arrows and blue
+ally-to-enemy target arrows while retaining the local CC prediction/history
+panel settings and the release-independent tap-to-land chase that
 replaced the held-only chase with the
 release-independent tap-to-land wait, protects active PvP Sprint from a second
 Sprint press by default, and adds the separate optional idle Smart Sprint.
@@ -2766,8 +2792,8 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 692-test Core registry, forty-six plugin self-tests,
-and source checks pin configuration schema 53, the shared monotonic response clock and framework
+For the current source, the exact 700-test Core registry, fifty-six plugin self-tests,
+and source checks pin configuration schema 54, the shared monotonic response clock and framework
 epoch, true not-ready-to-ready wakeups, strict unchanged-queue critical recovery,
 the immutable release-independent tap-to-land buffer, active-Sprint repeat
 protection, optional action-bar-idle Smart Sprint, the default-off exact public-CC instant-leave state

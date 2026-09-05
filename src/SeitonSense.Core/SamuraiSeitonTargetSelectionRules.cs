@@ -15,8 +15,9 @@ public readonly record struct SamuraiSeitonTargetSelectionCandidate(
 
 /// <summary>
 /// Pure deterministic target policy for /seitonsam. Candidates carrying one or
-/// more reviewed vulnerability rows win first; a safe exact stack-count tie is
-/// then resolved by nearest hitbox edge, HP ratio, pressure, Guard cooldown, MP,
+/// more reviewed vulnerability rows win first for instant actions. Reviewed cast
+/// starters prefer the nearest hitbox edge first to leave more range margin.
+/// Ties use vulnerability rows, HP ratio, pressure, Guard cooldown, MP,
 /// and stable native enemy slot. Every selected endpoint must be within 5 yalms
 /// and retain the ordinary Smart Action identity, reach/LoS, and protection gates.
 /// </summary>
@@ -26,7 +27,8 @@ public static class SamuraiSeitonTargetSelectionRules
 
     public static int SelectBestCandidateIndex(
         IReadOnlyList<SamuraiSeitonTargetSelectionCandidate>? candidates,
-        TargetPressureActorIdentity localPlayer)
+        TargetPressureActorIdentity localPlayer,
+        bool prioritizeCastReach = false)
     {
         if (!HasUnambiguousCandidateSet(candidates, localPlayer)) return -1;
 
@@ -35,7 +37,7 @@ public static class SamuraiSeitonTargetSelectionRules
         {
             var candidate = candidates[index];
             if (!IsEligibleCandidate(candidate, localPlayer)) continue;
-            if (bestIndex < 0 || Compare(candidate, candidates[bestIndex]) < 0)
+            if (bestIndex < 0 || Compare(candidate, candidates[bestIndex], prioritizeCastReach) < 0)
                 bestIndex = index;
         }
 
@@ -51,7 +53,9 @@ public static class SamuraiSeitonTargetSelectionRules
         intent = default;
         if (resolvedActionId == 0) return false;
 
-        var selectedIndex = SelectBestCandidateIndex(candidates, localPlayer);
+        var selectedIndex = SelectBestCandidateIndex(
+            candidates, localPlayer,
+            SamuraiOgiCastProtectionRules.IsReviewedCastAction(resolvedActionId));
         if (selectedIndex < 0) return false;
 
         var selected = candidates![selectedIndex].Selection;
@@ -99,7 +103,9 @@ public static class SamuraiSeitonTargetSelectionRules
         var selections = new SmartTargetSelectionCandidate[candidates.Count];
         for (var index = 0; index < candidates.Count; index++)
         {
-            if (!HasValidSamuraiEvidence(candidates[index])) return false;
+            // Optional SAM ranking evidence belongs to this candidate only.
+            // An expired/duplicate status or unreadable distance must not veto
+            // another exactly identified, reachable and protection-safe actor.
             selections[index] = candidates[index].Selection;
         }
 
@@ -118,13 +124,16 @@ public static class SamuraiSeitonTargetSelectionRules
 
     private static int Compare(
         SamuraiSeitonTargetSelectionCandidate left,
-        SamuraiSeitonTargetSelectionCandidate right)
+        SamuraiSeitonTargetSelectionCandidate right,
+        bool prioritizeCastReach)
     {
+        var distance = left.EdgeDistanceYalms.CompareTo(right.EdgeDistanceYalms);
+        if (prioritizeCastReach && distance != 0) return distance;
+
         var preferredStatusCount = PreferredStatusCount(right).CompareTo(
             PreferredStatusCount(left));
         if (preferredStatusCount != 0) return preferredStatusCount;
 
-        var distance = left.EdgeDistanceYalms.CompareTo(right.EdgeDistanceYalms);
         if (distance != 0) return distance;
 
         var health = CompareRatio(

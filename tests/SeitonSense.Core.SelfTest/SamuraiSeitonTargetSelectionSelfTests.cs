@@ -118,8 +118,8 @@ internal static class SamuraiSeitonTargetSelectionSelfTests
             Candidate(1, distance: 1f),
             Candidate(2, distance: float.NaN),
         };
-        Equal(-1, Select(unknownDistance),
-            "one unknown distance makes the complete ordering unsafe");
+        Equal(0, Select(unknownDistance),
+            "unknown distance excludes only that candidate, not a valid alternative");
 
         var duplicateStatus = new[]
         {
@@ -127,6 +127,12 @@ internal static class SamuraiSeitonTargetSelectionSelfTests
         };
         Equal(-1, Select(duplicateStatus),
             "duplicate exact status rows fail closed instead of adding preference");
+        Equal(1, Select([duplicateStatus[0], Candidate(2, distance: 2f)]),
+            "duplicate bonus rows do not veto another safe candidate");
+        Equal(1, Select([
+                Candidate(1, distance: 1f) with { OwnSourceKuzushiCount = -1 },
+                Candidate(2, distance: 2f)]),
+            "an expiring bonus row does not veto another safe candidate");
 
         var duplicateActor = new[]
         {
@@ -146,11 +152,11 @@ internal static class SamuraiSeitonTargetSelectionSelfTests
         };
         True(SamuraiSeitonTargetSelectionRules.TryCreateIntent(
                 actionId,
-                [Candidate(1, distance: 1f), selected],
+                [Candidate(1, distance: 3f), selected],
                 LocalSamurai,
                 out var intent),
             "one exact Samurai target is frozen");
-        Equal(3, intent.EnemySlot, "preferred exact target is frozen");
+        Equal(3, intent.EnemySlot, "nearest exact cast target is frozen");
 
         True(SamuraiSeitonTargetSelectionRules.CanUseExactIntent(
                 intent,
@@ -188,6 +194,45 @@ internal static class SamuraiSeitonTargetSelectionSelfTests
                 LocalSamurai,
                 actionId + 1),
             "resolved action drift cancels the frozen intent");
+    }
+
+    public static void CastStartersPreferRangeMarginWithoutChangingInstantPriority()
+    {
+        var near = Candidate(1, distance: 1f, hp: 90);
+        var markedAtEdge = Candidate(2, distance: 4.9f, hp: 10) with
+        {
+            OwnSourceKuzushiCount = 1,
+            OwnSourceDebanaCount = 1,
+            ExactStunCount = 1,
+        };
+        foreach (var action in new[]
+                 {
+                     SamuraiSmartActionCastRules.OgiNamikiriActionId,
+                     SamuraiSmartActionCastRules.TendoSetsugekkaActionId,
+                 })
+        {
+            True(SamuraiSeitonTargetSelectionRules.TryCreateIntent(
+                    action, [near, markedAtEdge], LocalSamurai, out var cast),
+                "reviewed cast has a safe candidate");
+            Equal(1, cast.EnemySlot, "cast prefers more range margin over bonus rows");
+        }
+        True(SamuraiSeitonTargetSelectionRules.TryCreateIntent(
+                SamuraiSmartActionCastRules.OgiNamikiriFollowUpActionId,
+                [near, markedAtEdge], LocalSamurai, out var instant),
+            "instant follow-up has a safe candidate");
+        Equal(2, instant.EnemySlot, "instant action retains vulnerability priority");
+        True(SamuraiSeitonTargetSelectionRules.TryCreateIntent(
+                SamuraiSmartActionCastRules.OgiNamikiriActionId,
+                [near, markedAtEdge with { EdgeDistanceYalms = 1f }],
+                LocalSamurai, out var equalDistance),
+            "equal distance candidates remain ranked");
+        Equal(2, equalDistance.EnemySlot, "bonus rows still break an equal-distance tie");
+        True(SamuraiSeitonTargetSelectionRules.TryCreateIntent(
+                SamuraiSmartActionCastRules.OgiNamikiriActionId,
+                [near with { Selection = near.Selection with { HasNativeRangeAndLineOfSight = false } }, markedAtEdge],
+                LocalSamurai, out var blockedNear),
+            "unreachable near candidate leaves a valid alternative");
+        Equal(2, blockedNear.EnemySlot, "distance preference cannot bypass native range/LoS");
     }
 
     private static int Select(

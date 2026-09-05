@@ -15,15 +15,20 @@ public readonly record struct AggressorArrowPulse(
 /// <summary>Pure, display-only bounds shared by the pressure arrow tracker and renderer.</summary>
 public static class AggressorArrowRules
 {
-    public const float DefaultDurationSeconds = .75f;
+    public const float LegacyDefaultDurationSeconds = .75f;
+    public const float DefaultDurationSeconds = 2f;
     public const float MinimumDurationSeconds = .35f;
-    public const float MaximumDurationSeconds = 1.5f;
+    public const float MaximumDurationSeconds = 4f;
     public const long MaximumSnapshotAgeMilliseconds = 500;
-    public const long MaximumPulseRetentionMilliseconds = 2_000;
+    public const long MaximumPulseRetentionMilliseconds = 4_500;
     public const float MinimumProjectedLengthPixels = 8;
     public const float DefaultOverallScale = 1.35f;
     public const float MinimumOverallScale = 0.75f;
     public const float MaximumOverallScale = 3f;
+
+    public static float MigrateLegacyDuration(float duration) =>
+        !float.IsFinite(duration) || duration == LegacyDefaultDurationSeconds
+            ? DefaultDurationSeconds : duration;
 
     public static float ResolveVisualScale(float uiScale, float overallScale) =>
         Math.Clamp(float.IsFinite(uiScale) ? uiScale : 1f, 0.75f, 2f) *

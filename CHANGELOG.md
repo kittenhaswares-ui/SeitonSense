@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.44.5.0
+
+- SAM: an exact queued Ogi/Tendo request can continue into its cast instead of
+  being blocked by its own protection. Rejected or cancelled requests cannot
+  restore an old movement lock. Client acceptance and observed casting are
+  counted separately.
+- Reviewed SAM cast starters choose the closest safe target within 5y first.
+  Instant follow-ups keep their debuff preference. Unclear bonus data on one
+  enemy no longer vetoes other safe targets.
+- Optional SAM test: face the same cast target once near completion. Disabled
+  by default; timing adjustable from 50 to 300 ms, starting at 150 ms. This is a
+  test window, not a measured latency correction. Native range and sight still
+  apply, and camera/visible target are unchanged. Requires the game's automatic
+  facing setting.
+- Ping Helpers now report timing and Chase failures separately. New tests cover
+  the runtime's actual safety mapping and queue handoff. Existing movement-state,
+  own Guard, CC, death, and exact action-ownership checks are retained.
+- Enemy arrows last 2 seconds by default. Blue arrows show a teammate newly
+  targeting an enemy. Both are configurable and previewable.
+- Smart Action target observations/protection are separated from execution,
+  with equivalence tests for existing protection rules. Purify/Recup priorities
+  are unchanged.
+- Medicine-kit settings include a clearly labelled sample beacon. Debug output
+  separates missing identification from unavailable objects. This does not
+  claim the reported live kit-detection failure is fixed.
+- Offline scenario tests cover queued casts, early/late release, movement input,
+  target policy and buffer safety. WASD, both-button mouse movement, late facing,
+  and actual medicine-kit detection still need in-game confirmation.
+
 ## 0.44.4.0
 
 - New PLD macro: `/seitonpld` uses Guardian without selecting a target.

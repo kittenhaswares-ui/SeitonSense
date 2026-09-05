@@ -1,5 +1,13 @@
 # Privacy
 
+## Smart Action and Samurai cleanup
+
+Target protection is evaluated from the existing local actor observations; the
+cleanup adds no background scans, uploads, or saved player data. Samurai cast
+ownership and release reasons exist only in memory for local diagnostics. The
+same exact target stays attached to a cast; neither target substitution after
+cast startup nor network-position adjustment is used.
+
 ## Official tier cache
 
 The optional official-tier display makes read-only HTTPS requests to
@@ -1985,8 +1993,9 @@ hitbox radius plus the game's world-to-screen projection. It draws two fixed
 sampled rings and does not scan other actors, retain movement history, raycast
 terrain, change a target, or issue/suppress an action.
 
-Configuration schema 53 is current. It adds the local CC prediction/history
-settings and retains the release-independent tap-to-land behavior with
+Configuration schema 54 is current. It adds longer enemy arrows and blue
+ally-to-enemy target arrows using the existing local pressure observations.
+It retains the local CC prediction/history settings and tap-to-land behavior with
 one release-independent tap-to-land reservation (0-3000 ms, 2200 ms default),
 adds default-on exact active-Sprint repeat protection, and adds a separate
 default-off 3000-5000 ms idle Smart Sprint option. Smart Sprint retains only a
