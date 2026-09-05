@@ -30,6 +30,7 @@ internal sealed class TargetPressureTracker : IDisposable
     private readonly IReadOnlySet<uint> verifiedProtectionStatusIds;
     private readonly Dictionary<TargetPressureActorIdentity, RecentPressureState> recentPressure = [];
     private readonly Dictionary<TargetPressureActorIdentity, ProtectionActorState> protectionStates = [];
+    private readonly AggressorArrowTracker aggressorArrows = new();
     private TargetPressureRuntimeSnapshot snapshot = TargetPressureRuntimeSnapshot.Inactive;
     private IncomingAllyPressureRuntimeState incomingAllyPressure = IncomingAllyPressureRuntimeState.Inactive;
     private TargetPressureDiagnostics diagnostics = TargetPressureDiagnostics.Inactive;
@@ -338,6 +339,8 @@ internal sealed class TargetPressureTracker : IDisposable
             condition.IsValid && condition.Value.CrystallineConflictRankedRoulette);
         var isWolvesDen = supportedContext == SupportedPvPContext.WolvesDen;
         var pressureFeaturesEnabled = configuration.ShowPressureCounter ||
+                                      (supportedContext == SupportedPvPContext.CrystallineConflict &&
+                                       configuration.ShowCcAggressorArrows) ||
                                       configuration.ShowIncomingPressureOnNameplates ||
                                       configuration.ShowTeamPressureOnNameplates ||
                                       configuration.EnableSmartTabTargeting ||
@@ -543,6 +546,11 @@ internal sealed class TargetPressureTracker : IDisposable
             partyAllies);
 
         var result = new List<TargetPressureOpponentSnapshot>(enemies.Count);
+        var arrowsEnabledForContext = configuration.ShowCcAggressorArrows &&
+            supportedContext == SupportedPvPContext.CrystallineConflict;
+        var arrowObservations = arrowsEnabledForContext
+            ? new List<AggressorArrowObservation>(enemies.Count)
+            : null;
         var protectionCount = 0;
         var liveIdentities = new HashSet<TargetPressureActorIdentity>();
         foreach (var (player, observation) in enemies)
@@ -557,6 +565,14 @@ internal sealed class TargetPressureTracker : IDisposable
                 }
             }
             var displays = UpdateProtections(player, observation.Actor, now, isLargeScalePvP);
+            var eligibleForArrow = !observation.IsDead && observation.IsTargetable;
+            arrowObservations?.Add(new AggressorArrowObservation(
+                observation.Actor,
+                sources,
+                recentPressure.TryGetValue(observation.Actor, out var recent)
+                    ? recent.LastHarmfulActionAtMilliseconds
+                    : -1,
+                eligibleForArrow));
             protectionCount += displays.Count;
             result.Add(new TargetPressureOpponentSnapshot(
                 observation.Actor.GameObjectId,
@@ -569,6 +585,8 @@ internal sealed class TargetPressureTracker : IDisposable
                     : 0,
                 displays)
             {
+                WorldPosition = player.Position,
+                IsAliveAndTargetable = eligibleForArrow,
                 TotalTeamTargetCount = pressureEnabledForContext
                     ? core.GetTotalTeamTargetCount(observation.Actor, localHardTarget)
                     : 0,
@@ -602,8 +620,18 @@ internal sealed class TargetPressureTracker : IDisposable
             true,
             pressureEnabledForContext,
             localIdentity,
-            Environment.TickCount64,
-            result.ToArray());
+            publishedAtMilliseconds,
+            result.ToArray())
+        {
+            CcAggressorArrowsActive = arrowsEnabledForContext,
+            TerritoryId = clientState.TerritoryType,
+            LocalWorldPosition = localPlayer.Position,
+            AggressorArrows = aggressorArrows.Observe(
+                arrowsEnabledForContext,
+                localIdentity,
+                publishedAtMilliseconds,
+                arrowObservations ?? []),
+        };
         Interlocked.Exchange(ref snapshot, published);
         Volatile.Write(ref diagnostics, new TargetPressureDiagnostics(
             true,
@@ -657,15 +685,19 @@ internal sealed class TargetPressureTracker : IDisposable
             if (sources == TargetPressureSources.None) continue;
 
             var expiresAt = SaturatingAdd(pressureEvent.ObservedAtMilliseconds, windowMilliseconds);
+            var harmfulAt = (sources & TargetPressureSources.RecentHarmfulAction) != 0
+                ? pressureEvent.ObservedAtMilliseconds
+                : -1;
             if (recentPressure.TryGetValue(source, out var previous))
             {
                 recentPressure[source] = new RecentPressureState(
                     Math.Max(previous.ExpiresAtMilliseconds, expiresAt),
-                    previous.Evidence | sources);
+                    previous.Evidence | sources,
+                    Math.Max(previous.LastHarmfulActionAtMilliseconds, harmfulAt));
             }
             else
             {
-                recentPressure[source] = new RecentPressureState(expiresAt, sources);
+                recentPressure[source] = new RecentPressureState(expiresAt, sources, harmfulAt);
             }
         }
     }
@@ -841,6 +873,7 @@ internal sealed class TargetPressureTracker : IDisposable
 
     private void ResetRuntime()
     {
+        aggressorArrows.Reset();
         recentPressure.Clear();
         protectionStates.Clear();
         Interlocked.Exchange(ref requestedIncomingAllyPressureAt, -1);
@@ -869,7 +902,8 @@ internal sealed class TargetPressureTracker : IDisposable
 
     private readonly record struct RecentPressureState(
         long ExpiresAtMilliseconds,
-        TargetPressureSources Evidence);
+        TargetPressureSources Evidence,
+        long LastHarmfulActionAtMilliseconds);
 
     private sealed record IncomingAllyPressureRuntimeState(
         bool Active,

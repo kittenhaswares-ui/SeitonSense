@@ -309,6 +309,11 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool NearAssistPreferTeamPressure { get; set; }
     public bool NearHelpPreferIncomingPressure { get; set; } = true;
     public bool ShowPressureCounter { get; set; } = true;
+    public bool ShowCcAggressorArrows { get; set; } = true;
+    public float CcAggressorArrowDurationSeconds { get; set; } = AggressorArrowRules.DefaultDurationSeconds;
+    public float CcAggressorArrowThickness { get; set; } = 2.4f;
+    public float CcAggressorArrowOpacity { get; set; } = 0.78f;
+    public float CcAggressorArrowJobIconSize { get; set; } = 28f;
     public bool PressureLocked { get; set; }
     public bool PressureClickThroughWhenLocked { get; set; } = true;
     public bool PressureShowBackground { get; set; } = true;
@@ -1125,6 +1130,11 @@ public sealed class PluginConfiguration : IPluginConfiguration
         NearAssistPreferTeamPressure = false;
         NearHelpPreferIncomingPressure = true;
         ShowPressureCounter = true;
+        ShowCcAggressorArrows = true;
+        CcAggressorArrowDurationSeconds = AggressorArrowRules.DefaultDurationSeconds;
+        CcAggressorArrowThickness = 2.4f;
+        CcAggressorArrowOpacity = 0.78f;
+        CcAggressorArrowJobIconSize = 28f;
         PressureLocked = false;
         PressureClickThroughWhenLocked = true;
         PressureShowBackground = true;
@@ -1183,6 +1193,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public void ApplyCombatFramesCleanPreset()
     {
         ShowPressureCounter = false;
+        ShowCcAggressorArrows = false;
         ShowNameplateSeiton = false;
         ShowGuardUnavailable = false;
         ShowGuardCountdown = false;
@@ -1288,6 +1299,10 @@ public sealed class PluginConfiguration : IPluginConfiguration
         changed |= Clamp(PressureIconSpacing, 0f, 16f, 4f, value => PressureIconSpacing = value);
         changed |= Clamp(PressureBackgroundOpacity, 0f, 1f, 0.62f, value => PressureBackgroundOpacity = value);
         changed |= Clamp(PressureWindowSeconds, 0.5f, 8f, 3f, value => PressureWindowSeconds = value);
+        changed |= Clamp(CcAggressorArrowDurationSeconds, 0.35f, 1.5f, AggressorArrowRules.DefaultDurationSeconds, value => CcAggressorArrowDurationSeconds = value);
+        changed |= Clamp(CcAggressorArrowThickness, 1f, 5f, 2.4f, value => CcAggressorArrowThickness = value);
+        changed |= Clamp(CcAggressorArrowOpacity, 0.15f, 1f, 0.78f, value => CcAggressorArrowOpacity = value);
+        changed |= Clamp(CcAggressorArrowJobIconSize, 20f, 44f, 28f, value => CcAggressorArrowJobIconSize = value);
         changed |= Clamp(
             WolvesDenRotationPanelScale,
             0.75f,

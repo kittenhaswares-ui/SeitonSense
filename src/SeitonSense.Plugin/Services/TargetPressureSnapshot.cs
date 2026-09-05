@@ -1,3 +1,4 @@
+using System.Numerics;
 using SeitonSense.Core;
 
 namespace SeitonSense.Plugin.Services;
@@ -34,6 +35,8 @@ internal sealed record TargetPressureOpponentSnapshot(
     /// cannot silently change the established team-pressure badges or ranking.
     /// </summary>
     internal int TotalTeamTargetCount { get; init; }
+    internal Vector3 WorldPosition { get; init; }
+    internal bool IsAliveAndTargetable { get; init; }
 
     internal bool IsIncoming => IncomingEvidence != TargetPressureEvidence.None;
     internal string SlotLabel => EnemySlot is >= 1 and <= 5 ? $"S{EnemySlot}" : string.Empty;
@@ -48,6 +51,11 @@ internal sealed record TargetPressureRuntimeSnapshot(
     long PublishedAtMilliseconds,
     IReadOnlyList<TargetPressureOpponentSnapshot> Opponents)
 {
+    internal bool CcAggressorArrowsActive { get; init; }
+    internal uint TerritoryId { get; init; }
+    internal Vector3 LocalWorldPosition { get; init; }
+    internal IReadOnlyList<AggressorArrowPulse> AggressorArrows { get; init; } = [];
+
     internal static TargetPressureRuntimeSnapshot Inactive { get; } = new(
         false,
         false,

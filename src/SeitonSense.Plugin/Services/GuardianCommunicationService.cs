@@ -521,7 +521,9 @@ internal sealed class GuardianCommunicationService
                 return GuardianTeamCommunicationCommandOutcome.TerminalFailure;
         }
 
-        dispatchEvent = $"{command.Kind} {result}";
+        dispatchEvent = command.Kind == GuardianTeamCommunicationCommandKind.SendQuickChat
+            ? $"Cover target P{command.PartySlot}: chat entry {result}; delivery not confirmed"
+            : $"{command.Kind} {result}";
         return result switch
         {
             ReviewedPvpCommandDispatchResult.Invoked =>

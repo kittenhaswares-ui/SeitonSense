@@ -101,7 +101,7 @@ internal sealed partial class SettingsWindow
                 value => configuration.GuardianNoGuardMinimumMpPercent = value,
                 "%d%%");
             changed |= Checkbox(
-                "After accepted Auto Guardian: Quick Chat + Bind pair (party-visible)",
+                "Tell the team who you cover + paired Bind markers",
                 configuration.PaladinGuardianAnnounceAndMark,
                 value => configuration.PaladinGuardianAnnounceAndMark = value);
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
@@ -116,8 +116,9 @@ internal sealed partial class SettingsWindow
                 "The activation card means FFXIV accepted the request, not " +
                 "that the ally was definitely saved.");
             ImGui.TextDisabled(
-                "The communication option sends the localized CC 'Cover target' Quick Chat and places paired Bind " +
-                "markers on the ally and you. Existing or changed markers are left alone.");
+                "CC only: after an accepted automatic Guardian, send 'Covering Target' ('Ziel decken' in German) " +
+                "for that ally without changing your target. Send once, then mark the ally and you. " +
+                "Existing or changed markers are left alone.");
             ImGui.PopTextWrapPos();
         }
 

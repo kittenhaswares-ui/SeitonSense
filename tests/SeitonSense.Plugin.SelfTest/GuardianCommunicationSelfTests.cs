@@ -13,12 +13,24 @@ internal static class GuardianCommunicationSelfTests
                 new ReviewedPvpCommand(ReviewedPvpCommandKind.GuardianCoveringTarget, slot, ClientLanguage.German));
             var english = ReviewedPvpCommandDispatcher.ResolveExactHardcodedCommand(
                 new ReviewedPvpCommand(ReviewedPvpCommandKind.GuardianCoveringTarget, slot, ClientLanguage.English));
+            var french = ReviewedPvpCommandDispatcher.ResolveExactHardcodedCommand(
+                new ReviewedPvpCommand(ReviewedPvpCommandKind.GuardianCoveringTarget, slot, ClientLanguage.French));
+            var japanese = ReviewedPvpCommandDispatcher.ResolveExactHardcodedCommand(
+                new ReviewedPvpCommand(ReviewedPvpCommandKind.GuardianCoveringTarget, slot, ClientLanguage.Japanese));
             Require(german == $"/schnellchat <{slot}> Ziel decken", "German command keeps native localized syntax.");
             Require(english == $"/quickchat \"Covering Target\" <{slot}>", "English command keeps its own syntax.");
+            Require(french == $"/quickchat \"Soutien : cible\" <{slot}>", "French command uses the same frozen party slot.");
+            Require(japanese == $"/quickchat \"援護：ターゲット\" <{slot}>", "Japanese command uses the same frozen party slot.");
+        }
+        foreach (var invalidSlot in new[] { -1, 0, 9, int.MaxValue })
+        {
+            Require(ReviewedPvpCommandDispatcher.ResolveExactHardcodedCommand(
+                new ReviewedPvpCommand(ReviewedPvpCommandKind.GuardianCoveringTarget, invalidSlot, ClientLanguage.German)) is null,
+                "Unreviewed party slots cannot cross the command boundary.");
         }
         Require(ReviewedPvpCommandDispatcher.ResolveExactHardcodedCommand(
-            new ReviewedPvpCommand(ReviewedPvpCommandKind.GuardianCoveringTarget, 9, ClientLanguage.German)) is null,
-            "Unreviewed party slots cannot cross the command boundary.");
+            new ReviewedPvpCommand(ReviewedPvpCommandKind.GuardianCoveringTarget, 2, (ClientLanguage)99)) is null,
+            "An unknown language must not fall back to a possibly wrong shoutout.");
     }
 
     internal static void GuardianQuickChatRetriesOnlyBeforeNativeInvocation()

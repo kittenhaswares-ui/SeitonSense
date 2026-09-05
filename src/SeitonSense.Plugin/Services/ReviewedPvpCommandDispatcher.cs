@@ -239,7 +239,18 @@ internal sealed class ReviewedPvpCommandDispatcher
             // Exceptions after this point have unknown delivery. Never retry
             // those; only positively pre-invocation failures may be re-offered.
             invocationStarted = true;
-            shell->ExecuteCommandInner(command, uiModule);
+            if (guardianQuickChat)
+            {
+                // Quick Chat is a chat entry, not a marker shell command. Let
+                // the normal chat-entry path parse the localized action name
+                // and party placeholder. The inner shell path can return
+                // without producing a team message. Never try both paths.
+                uiModule->ProcessChatBoxEntry(command, 0, false);
+            }
+            else
+            {
+                shell->ExecuteCommandInner(command, uiModule);
+            }
             return ReviewedPvpCommandDispatchResult.Invoked;
         }
         catch

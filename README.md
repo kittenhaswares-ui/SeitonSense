@@ -3,6 +3,15 @@
 Seiton Sense is a local PvP awareness HUD with pressure tracking, nameplate
 cues, warnings, job helpers, Smart Action, and target highlights.
 
+Version 0.44.2.0 adds short **incoming CC arrows with enemy job icons**. A new
+enemy focusing or attacking you gets a warm-red, vanilla-style arrow toward
+your character; their existing Pressure icon is highlighted too. Repeated hits
+do not continuously restart it. Configure the cues beside the Pressure settings
+under HUD & Nameplates. This is a read-only overlay, not an injected native VFX.
+Guardian's Covering Target / Ziel decken shoutout now uses the normal chat-entry
+handler while keeping the exact protected ally. No combat or Guard behavior is
+changed. Actual chat receipt and visual appearance still need live CC testing.
+
 Version 0.44.1.1 strengthens own-Guard protection at the final helper boundary,
 including exact deferred native-queue actions. Only accepted Guard starts the
 propagation protection; a rejected press remains immediately retryable. Helper
@@ -1426,7 +1435,7 @@ card shows the selected party slot and explicitly labels the result **CLIENT
 ACCEPTED**. This is dispatch feedback, not proof that the server applied Guardian
 or intercepted damage.
 
-The separate **After accepted Auto Guardian: Quick Chat + Bind pair** option is
+The separate **Tell the team who you cover + paired Bind markers** option is
 also disabled by default. It can run only after this automatic Guardian request
 returns client-accepted in exact Crystalline Conflict; manually used Guardian,
 Far Help, and rejected requests do not arm it. It freezes the same exact party
@@ -1446,6 +1455,11 @@ FFXIV can represent an unused native marker slot as either `0` or
 `0xE0000000`. Seiton Sense accepts both only when the slot index, availability,
 and timestamp telemetry are otherwise exact; this prevents an empty slot from
 silently skipping the Bind sequence without weakening foreign-marker safety.
+
+Quick Chat now enters through FFXIV's normal chat-entry handler instead of the
+inner marker-command handler. It still uses the reviewed localized command and
+the exact protected party slot; it does not type into your chat box or add chat
+history. Marker commands retain their existing separate route.
 
 This communication path never changes a hard, soft, focus, or mouseover target,
 initiates another combat action, selects another ally, or falls back. If FFXIV
@@ -2709,7 +2723,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 669-test Core registry, forty-six plugin self-tests,
+For the current source, the exact 674-test Core registry, forty-six plugin self-tests,
 and source checks pin configuration schema 53, the shared monotonic response clock and framework
 epoch, true not-ready-to-ready wakeups, strict unchanged-queue critical recovery,
 the immutable release-independent tap-to-land buffer, active-Sprint repeat

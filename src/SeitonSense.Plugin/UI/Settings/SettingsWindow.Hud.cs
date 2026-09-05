@@ -247,6 +247,29 @@ internal sealed partial class SettingsWindow
             configuration.ShowPressureCounter,
             value => configuration.ShowPressureCounter = value);
         changed |= Checkbox(
+            "Show short incoming arrows with enemy job icons (CC only)",
+            configuration.ShowCcAggressorArrows,
+            value => configuration.ShowCcAggressorArrows = value);
+        if (configuration.ShowCcAggressorArrows)
+        {
+            changed |= Slider(
+                "Incoming-arrow duration", configuration.CcAggressorArrowDurationSeconds,
+                0.35f, 1.5f, value => configuration.CcAggressorArrowDurationSeconds = value, "%.2f s");
+            changed |= Slider(
+                "Incoming-arrow thickness", configuration.CcAggressorArrowThickness,
+                1f, 5f, value => configuration.CcAggressorArrowThickness = value, "%.1f px");
+            changed |= Slider(
+                "Incoming-arrow opacity", configuration.CcAggressorArrowOpacity,
+                0.15f, 1f, value => configuration.CcAggressorArrowOpacity = value, "%.2f");
+            changed |= Slider(
+                "Incoming-arrow job icon size", configuration.CcAggressorArrowJobIconSize,
+                20f, 44f, value => configuration.CcAggressorArrowJobIconSize = value, "%.0f px");
+        }
+        ImGui.TextDisabled(
+            "A short arrow points from a new attacker toward you, with their job icon beside it. Uses the same " +
+            "pressure evidence as this counter; steady focus and repeated hits do not repeat it. Offscreen arrows " +
+            "are hidden. Visual only: no target or action changes.");
+        changed |= Checkbox(
             "Lock pressure counter",
             configuration.PressureLocked,
             value => configuration.PressureLocked = value);

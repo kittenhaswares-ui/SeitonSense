@@ -951,11 +951,11 @@ Assert-Literals $smartActionBufferCompatibilitySelfTests @(
     'reActionOwnsExactAction: false)',
     'reActionOwnsExactAction: true)'
 ) 'Generic-buffer compatibility self-tests'
-if ($staticIntegratedTestCount -ne 628 -or
+if ($staticIntegratedTestCount -ne 633 -or
     $logicalRepeatTestCount -ne 31 -or
     $physicalLatchTestCount -ne 6 -or
     $repeatPolicyTestCount -ne 4 -or
-    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 669 -or
+    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 674 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches($smartActionBufferSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferCompatibilitySelfTests\.\w+').Count -ne 6 -or
@@ -965,7 +965,7 @@ if ($staticIntegratedTestCount -ne 628 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatPolicySelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartSprintSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches((Read-RequiredSource $smartSprintSelfTestsPath 'Smart Sprint self-tests'), '\bpublic static void\s+\w+\s*\(').Count -ne 7) {
-    throw 'Schema 53 must retain seven smart-buffer tests, six compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, seven Smart Sprint tests, four Player Stats tests, and the exact 669-test combined Core registry.'
+    throw 'Schema 53 must retain seven smart-buffer tests, six compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, seven Smart Sprint tests, four Player Stats tests, and the exact 674-test combined Core registry.'
 }
 
 # Pin the two schema-42 visual overlays and the fail-closed local map-result
@@ -3698,7 +3698,7 @@ if ($unexpectedAction.Count -gt 0) {
 
 # All party-visible commands share one closed, typed dispatcher. It remains the
 # sole raw RaptureShell write boundary.
-$rawShellApiMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b(RaptureShellModule|GetRaptureShellModule|ExecuteCommandInner|Utf8String\.FromString)\b')
+$rawShellApiMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b(RaptureShellModule|GetRaptureShellModule|ExecuteCommandInner|ProcessChatBoxEntry|Utf8String\.FromString)\b')
 $unexpectedRawShellApis = @($rawShellApiMatches | Where-Object {
     $reviewedDispatcherBoundary = $_.Path -eq $reviewedPvpCommandDispatcherPath
     -not $reviewedDispatcherBoundary
@@ -3731,9 +3731,11 @@ Assert-Literals $reviewedPvpCommandDispatcher @(
     'ReviewedPvpCommandDispatchResult.TextCommandUnavailableBeforeInvocation',
     'Utf8String.FromString(exactHardcodedCommand)',
     'shell->ExecuteCommandInner(command, uiModule)',
+    'uiModule->ProcessChatBoxEntry(command, 0, false)',
     'command->Dtor(true)'
 ) 'Single closed reviewed PvP shell-command boundary'
 if ([regex]::Matches($reviewedPvpCommandDispatcher, '\bExecuteCommandInner\s*\(').Count -ne 1 -or
+    [regex]::Matches($reviewedPvpCommandDispatcher, '\bProcessChatBoxEntry\s*\(').Count -ne 1 -or
     [regex]::Matches($reviewedPvpCommandDispatcher, '\bUtf8String\.FromString\s*\(').Count -ne 1 -or
     [regex]::Matches($reviewedPvpCommandDispatcher, '\bIsTextCommandUnavailable\b').Count -ne 1 -or
     [regex]::Matches($reviewedPvpCommandDispatcher, '\bTryExecuteShellCommand\s*\(').Count -ne 3 -or
@@ -3906,7 +3908,7 @@ if ($normalizedGuardianTeamCommunicationRules -notmatch 'if \(state\.Phase == Gu
     $normalizedGuardianTeamCommunicationRules -notmatch 'private static GuardianTeamCommunicationDecision ObserveReadyQuickChat\(.*?if \(!MatchesLocal\(episode, observation\.LocalPlayer\)\).*?if \(!MatchesTarget\(episode, observation\.PartyTarget\)\).*?if \(observation\.NowMilliseconds >= state\.PendingCommandExpiresAtMilliseconds\).*?if \(!observation\.TextInputStateKnown \|\| observation\.TextInputActive\).*?return Result\(state, GuardianTeamCommunicationDecisionKind\.Waiting,.*?var command = state\.PendingCommand!\.Value;' -or
     $normalizedGuardianTeamCommunicationRules -notmatch 'if \(gateFailure is not \(GuardianTeamCommunicationDecisionReason\.None or GuardianTeamCommunicationDecisionReason\.TextInputUnavailable or GuardianTeamCommunicationDecisionReason\.TextInputActive\)\)' -or
     $normalizedReviewedPvpCommandDispatcher -notmatch 'ClassifyUnavailableShell\( bool guardianQuickChat, bool invocationStarted\) => guardianQuickChat && !invocationStarted \? ReviewedPvpCommandDispatchResult\.TextCommandUnavailableBeforeInvocation : ReviewedPvpCommandDispatchResult\.NativeUnavailable;' -or
-    $normalizedReviewedPvpCommandDispatcher -notmatch 'invocationStarted = true; shell->ExecuteCommandInner\(command, uiModule\);' -or
+    $normalizedReviewedPvpCommandDispatcher -notmatch 'invocationStarted = true; if \(guardianQuickChat\) \{.*?uiModule->ProcessChatBoxEntry\(command, 0, false\); \} else \{ shell->ExecuteCommandInner\(command, uiModule\); \}' -or
     $normalizedReviewedPvpCommandDispatcher -notmatch 'guardianQuickChat: command\.Kind == ReviewedPvpCommandKind\.GuardianCoveringTarget\);') {
     throw 'Guardian unsent quickchat may wait through text input only within its original deadline and exact actor episode; only proven pre-native Guardian shell failure may defer, never unknown delivery after invocation.'
 }
@@ -5523,8 +5525,8 @@ if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
     [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 11 -or
     [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 11 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 628) {
-    throw 'All four shared protection-end tests, all eleven SAM reactive tests, four Player Stats tests, and the exact 628-test static Core registry before the appended repeat-policy suites must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 633) {
+    throw 'All four shared protection-end tests, all eleven SAM reactive tests, four Player Stats tests, and the exact 633-test static Core registry before the appended repeat-policy suites must remain pinned.'
 }
 Assert-Literals $samuraiReactiveRuntimeRules @(
     'public static bool IsExactCurrentOwnSourceKuzushi(',
@@ -9221,7 +9223,26 @@ if ($normalizedPersonalStatus -notmatch 'darkKnightShadowbringerHeldInputEnabled
 
 $targetPressureTracker = Read-RequiredSource (Join-Path $pluginServicesRoot 'TargetPressureTracker.cs') 'Target pressure tracker'
 $normalizedTargetPressureTracker = $targetPressureTracker -replace '\s+', ' '
-if ($normalizedTargetPressureTracker -notmatch 'var pressureFeaturesEnabled = configuration\.ShowPressureCounter \|\| configuration\.ShowIncomingPressureOnNameplates \|\| configuration\.ShowTeamPressureOnNameplates \|\| configuration\.EnableSmartTabTargeting \|\| configuration\.EnableSmartActionMacro \|\| configuration\.EnableNearAssistMacro \|\| configuration\.NearAssistPreferTeamPressure') {
+$aggressorArrowRules = Read-RequiredSource (Join-Path $coreRoot 'AggressorArrowRules.cs') 'Read-only CC arrow rules'
+$aggressorArrowRenderer = Read-RequiredSource (Join-Path $pluginUiRoot 'AggressorArrowRenderer.cs') 'Read-only CC arrow renderer'
+if (($aggressorArrowRules + $aggressorArrowRenderer) -match '\b(UseAction|UseActionLocation|ExecuteAction|ProcessChatBoxEntry|ExecuteCommandInner|HookFromAddress|SetTarget|SendAction)\s*\(' -or
+    ($aggressorArrowRules + $aggressorArrowRenderer) -match '\.(Target|FocusTarget|SoftTarget|MouseOverTarget)\s*=') {
+    throw 'CC incoming arrows must remain read-only and may not dispatch actions, chat, target changes, or hooks.'
+}
+Assert-Literals $aggressorArrowRenderer @(
+    'configuration.ShowCcAggressorArrows',
+    'current.CcAggressorArrowsActive',
+    'current.TerritoryId != clientState.TerritoryType',
+    'AggressorArrowRules.MaximumSnapshotAgeMilliseconds',
+    'current.LocalPlayer != new TargetPressureActorIdentity(local.GameObjectId, local.EntityId)',
+    '62000u + opponent.JobId',
+    'AggressorArrowRules.IsValidProjectedSegment',
+    'ImGui.GetBackgroundDrawList()'
+) 'CC arrow job icon, fresh same-context identity, and non-interactive draw path'
+if ([regex]::Matches($integratedCoreTestProgram, '\bAggressorArrowSelfTests\.\w+').Count -ne 5) {
+    throw 'All five CC arrow scenario groups must remain registered.'
+}
+if ($normalizedTargetPressureTracker -notmatch 'var pressureFeaturesEnabled = configuration\.ShowPressureCounter \|\| \(supportedContext == SupportedPvPContext\.CrystallineConflict && configuration\.ShowCcAggressorArrows\) \|\| configuration\.ShowIncomingPressureOnNameplates \|\| configuration\.ShowTeamPressureOnNameplates \|\| configuration\.EnableSmartTabTargeting \|\| configuration\.EnableSmartActionMacro \|\| configuration\.EnableNearAssistMacro \|\| configuration\.NearAssistPreferTeamPressure') {
     throw 'Smart Tab, Smart Action, and Near Assist must each keep team-pressure production active independently of visible pressure surfaces and one another.'
 }
 if ($normalizedTargetPressureTracker -notmatch 'var isAstrologian = localJobId == AstrologianHarmonicOrbisRules\.AstrologianJobId;' -or
@@ -10565,7 +10586,8 @@ Assert-Literals $nearAssistPressureSelection @(
     'candidate.ExactEnemyTarget.IsValid'
 ) 'Optional Near Assist pressure preference'
 Assert-Literals $pressureCounter @(
-    'tracker.Snapshot.Opponents.Where',
+    'var pressureSnapshot = tracker.Snapshot;',
+    'pressureSnapshot.Opponents.Where',
     'TargetPressureEvidence',
     'opponent.IsIncoming'
 ) 'Read-only pressure counter'
@@ -10577,7 +10599,7 @@ Assert-Literals $targetPressureSnapshot @(
 ) 'Immutable target pressure runtime snapshot with isolated total-team follow-up count'
 if ($normalizedTargetPressureTracker -notmatch 'internal int GetTeamTargetCount\(ulong gameObjectId, uint entityId\).*?opponent\.TeamTargetCount' -or
     $normalizedTargetPressureTracker -notmatch 'internal bool TryGetFreshTeamTargetCount\( TargetPressureActorIdentity expectedLocalPlayer, TargetPressureActorIdentity expectedEnemy, long nowMilliseconds, long maximumAgeMilliseconds, out int teamTargetCount\).*?!expectedLocalPlayer\.IsValid.*?!expectedEnemy\.IsValid.*?!current\.Active.*?!current\.PressureActive.*?current\.LocalPlayer != expectedLocalPlayer.*?current\.PublishedAtMilliseconds < 0.*?nowMilliseconds < current\.PublishedAtMilliseconds.*?maximumAgeMilliseconds < 0.*?nowMilliseconds - current\.PublishedAtMilliseconds > maximumAgeMilliseconds.*?current\.Find\(expectedEnemy\.GameObjectId, expectedEnemy\.EntityId\).*?opponent\.TotalTeamTargetCount < 0.*?teamTargetCount = opponent\.TotalTeamTargetCount; return true;' -or
-    $normalizedTargetPressureTracker -notmatch 'new TargetPressureOpponentSnapshot\( observation\.Actor\.GameObjectId, observation\.Actor\.EntityId, observation\.JobId, observation\.CcEnemySlot, ToRuntimeEvidence\(sources\), pressureEnabledForContext \? core\.GetAllyTargetCount\(observation\.Actor\) : 0, displays\) \{ TotalTeamTargetCount = pressureEnabledForContext \? core\.GetTotalTeamTargetCount\(observation\.Actor, localHardTarget\) : 0, \}' -or
+    $normalizedTargetPressureTracker -notmatch 'new TargetPressureOpponentSnapshot\( observation\.Actor\.GameObjectId, observation\.Actor\.EntityId, observation\.JobId, observation\.CcEnemySlot, ToRuntimeEvidence\(sources\), pressureEnabledForContext \? core\.GetAllyTargetCount\(observation\.Actor\) : 0, displays\) \{ WorldPosition = player\.Position, IsAliveAndTargetable = eligibleForArrow, TotalTeamTargetCount = pressureEnabledForContext \? core\.GetTotalTeamTargetCount\(observation\.Actor, localHardTarget\) : 0, \}' -or
     $normalizedTargetPressureTracker -notmatch 'result\.Sum\(static enemy => enemy\.TeamTargetCount\)') {
     throw 'The fresh follow-up reader must fail closed on active exact local/enemy identity and snapshot age, return only isolated TotalTeamTargetCount, and leave legacy TeamTargetCount publication/diagnostics ally-only.'
 }
@@ -10694,7 +10716,8 @@ Assert-Literals $directPressureBody @(
 if ($directPressureBody -match '\b(IncomingOpponents|IsIncoming|RecentHarmfulAction|MachinistLimitBreakMarker)\b') {
     throw 'High-pressure eligibility must not use the HOWMANY incoming union, recent harmful actions, or the MCH marker.'
 }
-if ($normalizedTargetPressureTracker -notmatch 'new TargetPressureRuntimeSnapshot\( true, pressureEnabledForContext, localIdentity, Environment\.TickCount64, result\.ToArray\(\)\)') {
+if ($normalizedTargetPressureTracker -notmatch 'var publishedAtMilliseconds = Environment\.TickCount64;' -or
+    $normalizedTargetPressureTracker -notmatch 'new TargetPressureRuntimeSnapshot\( true, pressureEnabledForContext, localIdentity, publishedAtMilliseconds, result\.ToArray\(\)\)') {
     throw 'Each pressure publication must bind exact local identity and a current monotonic timestamp to one immutable opponent set.'
 }
 
@@ -13075,18 +13098,18 @@ $whatsNewWindow = Read-RequiredSource $whatsNewWindowPath 'What''s New window'
 $releaseNotesContentRules = Read-RequiredSource $releaseNotesContentRulesPath 'Release-note content rules'
 $releaseNotesContentSelfTests = Read-RequiredSource $releaseNotesContentSelfTestsPath 'Release-note content self-tests'
 Assert-Literals $projectFile @(
-    '<Version>0.44.1.1</Version>',
-    '<AssemblyVersion>0.44.1.1</AssemblyVersion>',
-    '<FileVersion>0.44.1.1</FileVersion>'
-) 'v0.44.1.1 project version'
+    '<Version>0.44.2.0</Version>',
+    '<AssemblyVersion>0.44.2.0</AssemblyVersion>',
+    '<FileVersion>0.44.2.0</FileVersion>'
+) 'v0.44.2.0 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.44.1.1";',
-    'Automatic helpers and queued retries now stop during your Guard.',
-    'Guardian shoutouts survive brief typing or UI delays.',
-    'PLD Intervene pauses during Guardian, your own Guard, or below 3,000 MP.',
-    'Guardian can save without ready Guard above your chosen HP/MP limits (default: over 80% HP and 60% MP).',
-    'Smart Action can hit weakened Guard. Optional Auto Shield Smite targets full enemy Guard.'
-) 'v0.44.1.1 version-acknowledged player-facing What''s New content'
+    'private const string CurrentReleaseVersion = "0.44.2.0";',
+    'CC: a short arrow shows who newly targets or attacks you, with their job icon.',
+    'The matching job icon also lights up in your existing Pressure display.',
+    'Adjust or disable arrows under HUD & Nameplates, next to Pressure settings.',
+    'PLD Guardian sends Covering Target through the normal chat path, keeping the protected ally selected for the message.',
+    'These are visual/chat changes only. Guard, recovery, targeting and helper priorities stay unchanged.'
+) 'v0.44.2.0 version-acknowledged player-facing What''s New content'
 Assert-Literals $releaseNotesContentRules @(
     'public const int MaximumBulletCount = 5;',
     'if (bullets is null) return [];',
@@ -13145,17 +13168,17 @@ if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.44.1.1"',
-    'Stronger own-Guard protection for helpers and queued retries.',
-    'Brief typing or UI delays no longer drop an unsent Guardian shoutout; configurable Guardian fallback above 80% HP/60% MP.',
-    'Intervene pauses during Guardian, own Guard, or below 3000 MP.',
-    'Smart Action permits weakened Guard; optional Auto Shield Smite targets full Guard.',
+    '"AssemblyVersion": "0.44.2.0"',
+    'CC: short incoming arrows with enemy job icons show new attention or attacks and highlight the matching Pressure icon.',
+    'Adjustable under HUD & Nameplates.',
+    'PLD Guardian now sends Covering Target through the normal chat path for the protected ally.',
+    'Combat helpers and Guard behavior are unchanged.',
     '"IsHide": false',
     '"IsTestingExclusive": false',
-    '"DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.1.1/dist/SeitonSense-0.44.1.1.zip"',
-    '"DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.1.1/dist/SeitonSense-0.44.1.1.zip"',
-    '"DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.1.1/dist/SeitonSense-0.44.1.1.zip"'
-) 'v0.44.1.1 custom-repository metadata'
+    '"DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.2.0/dist/SeitonSense-0.44.2.0.zip"',
+    '"DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.2.0/dist/SeitonSense-0.44.2.0.zip"',
+    '"DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.2.0/dist/SeitonSense-0.44.2.0.zip"'
+) 'v0.44.2.0 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -13617,7 +13640,7 @@ Assert-Literals $normalizedReadme @(
     'BRD **Mannstopper** keeps Smart Action ranking but avoids Chiten, Guard, Purify protection, Meikyo, Paean, and other real CC immunity.',
     'PLD and DRK damage-only invulnerability remains a valid Mannstopper target',
     'The CC prediction panel now stays visible during preparation while the exact 5v5 roster is still loading.',
-    'For the current source, the exact 669-test Core registry, forty-six plugin self-tests, and source checks pin configuration schema 53',
+    'For the current source, the exact 674-test Core registry, forty-six plugin self-tests, and source checks pin configuration schema 53',
     'the independent default-off automatic basic-shot cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
@@ -15507,4 +15530,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 53, local CC statistics schema 5, the exact 669-test Core registry, and 46 plugin self-tests. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, PLD Guardian, Recuperate, then Auto-Guard own priority in that order. Guardian requires exact Guard and Guardian metadata, ready Guardian, and either ready Guard or fresh self HP/MP strictly above configurable thresholds (defaults 80%/60%) through the final boundary; active or accepted-propagating own Guard always blocks it: <=20% is unconditional, <=40% needs fresh exact 2+ focus, and <=50% needs fresh exact 3+ focus. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-actor reservation from either a certified direct standard hotbar press, an exact lease/generation-backed /smartaction visible-<t> fallback, or a target-independent CC Smart Action S1-S5 winner; only the first two bind the visible hard target. Queue stays rejected. Release cannot cancel it; new action, context, Guard, CC, identity, protection, or exact-action/actor drift does, only a post-revalidated clean native range/LoS false may retry, accepted or ambiguous outcomes are terminal, and it never reranks or writes target/facing. The optional quiet-held-errors setting avoids global sound hooks and suppresses only a plugin-owned synthetic repeat whose exact hostile target returns native line-of-sight code 562; the first press, out-of-range, and every unknown error remain native. /seitonfar remains reachable-only. Enabled Wolves Den Smart Action resolves the exact stable visible hard target or reviewed dummy; a matching native duel identity may replace a stale Hostile flag, conflicting actor views still fail closed, and only the first non-exact carrier per tap may preserve the one-shot for the following exact <t>. Every current damaging non-ground-target shape shares the same closed admission and final-protection path. Exact /seitonsam Ogi/Tendo request-in-flight ownership suppresses movement through native acceptance and then hands off to the bounded accepted-cast lease; merely arming /seitonsam does not suppress movement, and ordinary /smartaction never gains this behavior. Exact repeat-Guard protection is identity- and territory-bound: a client-accepted request or exact live Guard blocks plugin-owned repeats during propagation, while a rejected or ambiguous provisional request remains immediately retryable; the first visible Guard frame then owns the full 1000-ms exact-repeat window. Current-name semantic protection metadata tolerates removed historical duplicate rows while still requiring Guard, Covered, Hallowed Ground, and Undead Redemption. Metadata-verified Shield Smite and Chain Stratagem may select Guard; other primary protections remain candidate-local blockers and only incidental/global Chiten vetoes AoE. Every exact Smart Action-owned harmful non-ground-target PvP cast uses reachable S1-S5 ranking only in CC; in enabled Wolves Den it preserves the exact visible hostile/dummy target through the same closed protection path. Exact Near Help-owned friendly PvP casts use one-shot current ally ranking after atomic exact-generation consumption, while Near Assist retains cast-time hidden-carrier suppression with visible-target pass-through. A Smart Action fallback transfers only a live exact owner into the same bounded reservation. Auto-Zantetsuken uses an identity/context-bound 500-ms no-target collection from the first exact own-source Kuzushi, ranks the fresh live cluster only after maturity, and rechecks collection, frozen identity, current Kuzushi, protection, Bind, readiness, range, and line of sight at the final boundary. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not reset it, Guard refreshes the idle baseline through its exact status/propagation episode, and a complete idle interval must pass after Guard ends. Player Stats is a dedicated local-only searchable opponent view: ally-only identities stay HMAC-only, clear opponent Name + World appears only after enemy history, last-seen tracks later encounters in either role, and schema-4 PvpStats backfill is cutoff-bounded, contained-row-only, one-shot, and never double-adds participant W/L. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."
+Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 53, local CC statistics schema 5, the exact 674-test Core registry, and 46 plugin self-tests. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, PLD Guardian, Recuperate, then Auto-Guard own priority in that order. Guardian requires exact Guard and Guardian metadata, ready Guardian, and either ready Guard or fresh self HP/MP strictly above configurable thresholds (defaults 80%/60%) through the final boundary; active or accepted-propagating own Guard always blocks it: <=20% is unconditional, <=40% needs fresh exact 2+ focus, and <=50% needs fresh exact 3+ focus. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-actor reservation from either a certified direct standard hotbar press, an exact lease/generation-backed /smartaction visible-<t> fallback, or a target-independent CC Smart Action S1-S5 winner; only the first two bind the visible hard target. Queue stays rejected. Release cannot cancel it; new action, context, Guard, CC, identity, protection, or exact-action/actor drift does, only a post-revalidated clean native range/LoS false may retry, accepted or ambiguous outcomes are terminal, and it never reranks or writes target/facing. The optional quiet-held-errors setting avoids global sound hooks and suppresses only a plugin-owned synthetic repeat whose exact hostile target returns native line-of-sight code 562; the first press, out-of-range, and every unknown error remain native. /seitonfar remains reachable-only. Enabled Wolves Den Smart Action resolves the exact stable visible hard target or reviewed dummy; a matching native duel identity may replace a stale Hostile flag, conflicting actor views still fail closed, and only the first non-exact carrier per tap may preserve the one-shot for the following exact <t>. Every current damaging non-ground-target shape shares the same closed admission and final-protection path. Exact /seitonsam Ogi/Tendo request-in-flight ownership suppresses movement through native acceptance and then hands off to the bounded accepted-cast lease; merely arming /seitonsam does not suppress movement, and ordinary /smartaction never gains this behavior. Exact repeat-Guard protection is identity- and territory-bound: a client-accepted request or exact live Guard blocks plugin-owned repeats during propagation, while a rejected or ambiguous provisional request remains immediately retryable; the first visible Guard frame then owns the full 1000-ms exact-repeat window. Current-name semantic protection metadata tolerates removed historical duplicate rows while still requiring Guard, Covered, Hallowed Ground, and Undead Redemption. Metadata-verified Shield Smite and Chain Stratagem may select Guard; other primary protections remain candidate-local blockers and only incidental/global Chiten vetoes AoE. Every exact Smart Action-owned harmful non-ground-target PvP cast uses reachable S1-S5 ranking only in CC; in enabled Wolves Den it preserves the exact visible hostile/dummy target through the same closed protection path. Exact Near Help-owned friendly PvP casts use one-shot current ally ranking after atomic exact-generation consumption, while Near Assist retains cast-time hidden-carrier suppression with visible-target pass-through. A Smart Action fallback transfers only a live exact owner into the same bounded reservation. Auto-Zantetsuken uses an identity/context-bound 500-ms no-target collection from the first exact own-source Kuzushi, ranks the fresh live cluster only after maturity, and rechecks collection, frozen identity, current Kuzushi, protection, Bind, readiness, range, and line of sight at the final boundary. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not reset it, Guard refreshes the idle baseline through its exact status/propagation episode, and a complete idle interval must pass after Guard ends. Player Stats is a dedicated local-only searchable opponent view: ally-only identities stay HMAC-only, clear opponent Name + World appears only after enemy history, last-seen tracks later encounters in either role, and schema-4 PvpStats backfill is cutoff-bounded, contained-row-only, one-shot, and never double-adds participant W/L. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."

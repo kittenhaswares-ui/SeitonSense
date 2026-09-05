@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.44.2.0
+
+- CC: short, vanilla-style incoming arrows show enemies newly focusing or
+  attacking you. Each arrow carries the enemy's job icon.
+- The same enemy's icon lights up in the existing Pressure display. Repeated
+  hits do not keep restarting the arrow.
+- Arrow visibility, duration, size and opacity are configurable under HUD &
+  Nameplates. No extra input window or combat automation is added.
+- Guardian's Covering Target / Ziel decken shoutout now uses the normal chat
+  entry path instead of the internal marker-command handler. It keeps the exact
+  protected party member and never changes your selected target.
+- Offline checks cover target changes, stale/dead actors and duplicate cues.
+  Native chat receipt and arrow appearance still need live CC confirmation.
+
 ## 0.44.1.1
 
 - Automatic helpers cannot cancel your active or already accepted Guard. The

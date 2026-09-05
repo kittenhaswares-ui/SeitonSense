@@ -105,6 +105,8 @@ internal sealed class PressureCounterWindow : Window, IDisposable
 
     public override void Draw()
     {
+        var pressureSnapshot = tracker.Snapshot;
+        var now = Environment.TickCount64;
         var gaugeSnapshot = limitBreakGauges.Snapshot;
         var gauges = PreviewEnabled
             ? PreviewLimitBreakGauges
@@ -123,7 +125,7 @@ internal sealed class PressureCounterWindow : Window, IDisposable
 
         var opponents = PreviewEnabled
             ? PreviewOpponents
-            : tracker.Snapshot.Opponents.Where(static opponent => opponent.IsIncoming).ToArray();
+            : pressureSnapshot.Opponents.Where(static opponent => opponent.IsIncoming).ToArray();
         var count = opponents.Length;
         var color = CountColor(count, configuration.PressureUseThreatColors);
         DrawSharpCount(count.ToString(), color);
@@ -138,7 +140,21 @@ internal sealed class PressureCounterWindow : Window, IDisposable
         for (var index = 0; index < opponents.Length; index++)
         {
             if (index > 0 && index % iconsPerRow != 0) ImGui.SameLine(0, spacing);
-            DrawOpponentIcon(opponents[index], iconSize);
+            var pulseAlpha = 0f;
+            if (!PreviewEnabled && configuration.ShowCcAggressorArrows &&
+                pressureSnapshot.CcAggressorArrowsActive && now >= pressureSnapshot.PublishedAtMilliseconds &&
+                now - pressureSnapshot.PublishedAtMilliseconds <= AggressorArrowRules.MaximumSnapshotAgeMilliseconds)
+            {
+                foreach (var pulse in pressureSnapshot.AggressorArrows)
+                {
+                    if (pulse.Actor != new TargetPressureActorIdentity(opponents[index].GameObjectId, opponents[index].EntityId))
+                        continue;
+                    pulseAlpha = AggressorArrowRules.PulseAlpha(pulse.StartedAtMilliseconds, now,
+                        configuration.CcAggressorArrowDurationSeconds, pluginInterface.UiBuilder.ShouldUseReducedMotion);
+                    break;
+                }
+            }
+            DrawOpponentIcon(opponents[index], iconSize, pulseAlpha);
         }
 
         ImGui.EndGroup();
@@ -237,7 +253,7 @@ internal sealed class PressureCounterWindow : Window, IDisposable
         ImGui.Dummy(new Vector2(MathF.Ceiling(textSize.X), MathF.Ceiling(textSize.Y)));
     }
 
-    private void DrawOpponentIcon(TargetPressureOpponentSnapshot opponent, float size)
+    private void DrawOpponentIcon(TargetPressureOpponentSnapshot opponent, float size, float pulseAlpha)
     {
         var topLeft = PixelRound(ImGui.GetCursorScreenPos());
         var bottomRight = topLeft + new Vector2(size);
@@ -258,6 +274,12 @@ internal sealed class PressureCounterWindow : Window, IDisposable
             4f * ImGuiHelpers.GlobalScale,
             ImDrawFlags.None,
             Math.Max(2f, size * 0.07f));
+
+        if (pulseAlpha > 0f)
+            ImGui.GetWindowDrawList().AddRect(
+                topLeft - new Vector2(3f), bottomRight + new Vector2(3f),
+                ImGui.ColorConvertFloat4ToU32(new Vector4(1f, 0.58f, 0.12f, pulseAlpha)),
+                5f * ImGuiHelpers.GlobalScale, ImDrawFlags.None, 2f * ImGuiHelpers.GlobalScale);
 
         if (configuration.PressureShowEnemySlots && !string.IsNullOrEmpty(opponent.SlotLabel))
             DrawCornerLabel(opponent.SlotLabel, topLeft, bottomRight);

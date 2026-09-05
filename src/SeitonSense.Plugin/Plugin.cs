@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.44.1.1";
+    private const string CurrentReleaseVersion = "0.44.2.0";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -46,6 +46,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly AutoLowMpFocusTargetService autoLowMpFocusTarget;
     private readonly IsolationAwarenessService isolationAwareness;
     private readonly PressureCounterWindow pressureCounter;
+    private readonly AggressorArrowRenderer aggressorArrows;
     private readonly AutoSeitonToggleWindow autoSeitonToggle;
     private readonly WhatsNewWindow whatsNew;
     private readonly NearAssistRedirector nearAssist;
@@ -385,6 +386,9 @@ public sealed class Plugin : IDalamudPlugin
             textureProvider,
             gameGui,
             pluginInterface);
+        aggressorArrows = new AggressorArrowRenderer(
+            configuration, pressureTracker, pluginInterface, clientState,
+            objectTable, gameGui, textureProvider);
         bufferLearningWindow = new BufferLearningWindow(
             configuration,
             integratedInput.ActionBuffer);
@@ -470,11 +474,11 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Automatic helpers and queued retries now stop during your Guard.",
-                "Guardian shoutouts survive brief typing or UI delays.",
-                "PLD Intervene pauses during Guardian, your own Guard, or below 3,000 MP.",
-                "Guardian can save without ready Guard above your chosen HP/MP limits (default: over 80% HP and 60% MP).",
-                "Smart Action can hit weakened Guard. Optional Auto Shield Smite targets full enemy Guard.",
+                "CC: a short arrow shows who newly targets or attacks you, with their job icon.",
+                "The matching job icon also lights up in your existing Pressure display.",
+                "Adjust or disable arrows under HUD & Nameplates, next to Pressure settings.",
+                "PLD Guardian sends Covering Target through the normal chat path, keeping the protected ally selected for the message.",
+                "These are visual/chat changes only. Guard, recovery, targeting and helper priorities stay unchanged.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
@@ -948,6 +952,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         windowSystem.Draw();
         localReachRings.Draw();
+        aggressorArrows.Draw();
         medicineKits.Draw();
         targetHighlights.Draw();
         overlay.Draw();
