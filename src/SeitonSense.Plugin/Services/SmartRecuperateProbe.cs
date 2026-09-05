@@ -413,7 +413,7 @@ internal sealed unsafe class SmartRecuperateProbe
         }
 
         var guardSuppressed = SmartRecuperateRules.ShouldSuppressForOwnGuard(
-            nearAssist.IsExactLocalGuardActive(intent.LocalPlayer));
+            nearAssist.IsExactLocalGuardActiveOrPropagating(intent.LocalPlayer));
         var actionStateReadable = TryGetActionState(
             currentLocal,
             out var resolvedActionId,
@@ -464,15 +464,18 @@ internal sealed unsafe class SmartRecuperateProbe
             return ClientActionAttemptOutcome.SoftUnavailable;
 
         var boundaryBefore = nativeBoundary;
-        attempted = true;
-        var accepted = nearAssist.RunWithoutRedirect(() =>
-            actionManager->UseAction(
-                ActionType.Action,
-                intent.ActionId,
-                intent.LocalPlayer.GameObjectId,
-                0,
-                ActionManager.UseActionMode.None,
-                0));
+        var accepted = OwnGuardActionBoundary.Invoke(
+            () => nearAssist.IsExactLocalGuardActiveOrPropagating(intent.LocalPlayer),
+            () => nearAssist.RunWithoutRedirect(() =>
+                actionManager->UseAction(
+                    ActionType.Action,
+                    intent.ActionId,
+                    intent.LocalPlayer.GameObjectId,
+                    0,
+                    ActionManager.UseActionMode.None,
+                    0)),
+            out attempted);
+        if (!attempted) return ClientActionAttemptOutcome.SoftUnavailable;
         return ClientActionAttemptBoundaryRules.ClassifyCriticalRecovery(
             accepted,
             intent.ActionId,

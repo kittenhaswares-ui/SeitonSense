@@ -55,7 +55,10 @@ public static class SmartActionProtectionRules
 {
     public const uint ChitenStatusId = 1_240;
     public const uint GuardStatusId = 3_054;
-    public const uint GuardLargeScaleStatusId = 3_673;
+    public const uint WeakenedGuardStatusId = 3_673;
+    // Historical name retained for callers. This is the reduced-damage Guard
+    // form, not a separate large-scale-mode protection. Its CC immunity stays.
+    public const uint GuardLargeScaleStatusId = WeakenedGuardStatusId;
 
     public static SmartActionProtectionKind ClassifyExactStatus(uint statusId) =>
         statusId switch

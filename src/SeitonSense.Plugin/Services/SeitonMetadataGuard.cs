@@ -48,6 +48,10 @@ internal sealed record PvPMetadataValidation(
     BackwardDashMetadataCatalog BackwardDashActions,
     SmartActionProtectionStatusCatalog SmartActionProtectionStatuses)
 {
+    internal IReadOnlySet<uint> PaladinCoverStatusIds { get; init; } = new HashSet<uint>();
+    internal IReadOnlySet<uint> PaladinCoveredStatusIds { get; init; } = new HashSet<uint>();
+    internal bool PaladinShieldSmiteVerified { get; init; }
+
     public static PvPMetadataValidation None { get; } = new(
         false, false, false, false, false, false, false, false, false, false, false,
         false, false, false, false, false, false, false, false, false, false, false,
@@ -243,6 +247,36 @@ internal static class PvPMetadataGuard
                 smartActionProtectionStatuses = catalog;
                 return true;
             });
+
+        _ = ValidateFeature("Smart Action weakened Guard", log, () =>
+        {
+            var rows = dataManager.GetExcelSheet<Status>(ClientLanguage.English);
+            if (!rows.TryGetRow(SmartActionProtectionRules.WeakenedGuardStatusId, out var row) ||
+                row.Name.ToString() != "Guard" || row.Icon != 214_715 || row.StatusCategory != 1 ||
+                !row.Description.ToString().Contains("Damage taken is reduced.", StringComparison.Ordinal) ||
+                !row.Description.ToString().Contains("effects are nullified.", StringComparison.Ordinal))
+                return false;
+            smartActionProtectionStatuses = smartActionProtectionStatuses.WithVerifiedWeakenedGuard(row.RowId);
+            return smartActionProtectionStatuses.IsWeakenedGuardStatus(row.RowId);
+        });
+
+        // Read both sides of Guardian independently: Cover is carried by the
+        // protecting Paladin, whereas Covered is carried by the ally. Unrelated
+        // SmartAction/DRK/NIN metadata must not disable this PLD-only check.
+        IReadOnlySet<uint> paladinCoverStatusIds = new HashSet<uint>();
+        IReadOnlySet<uint> paladinCoveredStatusIds = new HashSet<uint>();
+        _ = ValidateFeature("Paladin Guardian link statuses", log, () =>
+        {
+            var rows = dataManager.GetExcelSheet<Status>(ClientLanguage.English);
+            var ids = rows.Where(status => status.Name.ToString() == "Cover")
+                .Select(status => status.RowId).ToHashSet();
+            var coveredIds = rows.Where(status => status.Name.ToString() == "Covered")
+                .Select(status => status.RowId).ToHashSet();
+            if (ids.Count == 0 || coveredIds.Count == 0) return false;
+            paladinCoverStatusIds = ids;
+            paladinCoveredStatusIds = coveredIds;
+            return true;
+        });
 
         var smartActionGuardBypassActions = SmartActionGuardBypassCatalog.Empty;
         _ = ValidateFeature("Smart Action Guard-bypass actions", log, () =>
@@ -1685,7 +1719,12 @@ internal static class PvPMetadataGuard
             ninjaShukuchiHiddenStatuses,
             smartActionGuardBypassActions,
             backwardDashActions,
-            smartActionProtectionStatuses);
+            smartActionProtectionStatuses)
+        {
+            PaladinCoverStatusIds = paladinCoverStatusIds,
+            PaladinCoveredStatusIds = paladinCoveredStatusIds,
+            PaladinShieldSmiteVerified = shieldSmiteVerified,
+        };
 
         log.Information(
             "Seiton Sense metadata: Seiton={Seiton}, ViperSerpentTail={ViperSerpentTail}, " +

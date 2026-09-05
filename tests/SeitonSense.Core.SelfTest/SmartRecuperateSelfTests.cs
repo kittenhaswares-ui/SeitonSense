@@ -14,11 +14,11 @@ internal static class SmartRecuperateSelfTests
         Equal((ushort)10, SmartRecuperateRules.RecastHundredMilliseconds, "verified recast row");
         Equal(1_000L, SmartRecuperateRules.RecastMilliseconds, "accepted recast latch");
         False(
-            SmartRecuperateRules.ShouldSuppressForOwnGuard(exactGuardActive: false),
-            "a provisional Guard request without exact status cannot suppress Recuperate");
+            SmartRecuperateRules.ShouldSuppressForOwnGuard(exactGuardActiveOrPropagating: false),
+            "a rejected or ambiguous Guard request cannot suppress Recuperate");
         True(
-            SmartRecuperateRules.ShouldSuppressForOwnGuard(exactGuardActive: true),
-            "exact live Guard still suppresses Recuperate");
+            SmartRecuperateRules.ShouldSuppressForOwnGuard(exactGuardActiveOrPropagating: true),
+            "exact live Guard or accepted propagation suppresses Recuperate");
 
         var below = Observe(Observation() with { CurrentHp = 84_001 });
         None(below, SmartRecuperateDecisionReason.MissingHealthBelowThreshold, "15,999 missing");

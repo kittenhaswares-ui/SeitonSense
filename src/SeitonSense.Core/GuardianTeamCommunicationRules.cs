@@ -318,6 +318,12 @@ public static class GuardianTeamCommunicationRules
         if (!observation.ConfigurationEnabled)
             return CancelOrCleanOwned(state, observation, GuardianTeamCommunicationDecisionReason.ConfigurationDisabled);
 
+        // This command has never crossed the native boundary. A brief chat/UI
+        // input state must not discard the accepted Guardian episode. The same
+        // frozen target and original deadline still apply while waiting.
+        if (state.Phase == GuardianTeamCommunicationPhase.ReadyToSendQuickChat)
+            return ObserveReadyQuickChat(state, observation);
+
         if (!observation.TextInputStateKnown)
             return CancelOrCleanOwned(state, observation, GuardianTeamCommunicationDecisionReason.TextInputUnavailable);
         if (observation.TextInputActive)
@@ -424,7 +430,9 @@ public static class GuardianTeamCommunicationRules
         }
 
         var gateFailure = GetInitialGateFailure(observation);
-        if (gateFailure != GuardianTeamCommunicationDecisionReason.None)
+        if (gateFailure is not (GuardianTeamCommunicationDecisionReason.None or
+            GuardianTeamCommunicationDecisionReason.TextInputUnavailable or
+            GuardianTeamCommunicationDecisionReason.TextInputActive))
         {
             return Result(consumed, GuardianTeamCommunicationDecisionKind.Cancelled, gateFailure);
         }
@@ -459,6 +467,17 @@ public static class GuardianTeamCommunicationRules
             null,
             -1);
         var command = QuickChatCommand(episode);
+        if (gateFailure != GuardianTeamCommunicationDecisionReason.None)
+        {
+            return Result(active with
+            {
+                Phase = GuardianTeamCommunicationPhase.ReadyToSendQuickChat,
+                PendingCommand = command,
+                PendingCommandExpiresAtMilliseconds = SaturatingAdd(
+                    observation.NowMilliseconds, CommandConfirmationTimeoutMilliseconds),
+            }, GuardianTeamCommunicationDecisionKind.Waiting, gateFailure);
+        }
+
         return Issue(
             active,
             GuardianTeamCommunicationPhase.AwaitingQuickChatResult,
@@ -535,6 +554,14 @@ public static class GuardianTeamCommunicationRules
                     ? GuardianTeamCommunicationDecisionKind.Completed
                     : GuardianTeamCommunicationDecisionKind.Waiting,
                 GuardianTeamCommunicationDecisionReason.CommandResultTimeout);
+        }
+
+        if (!observation.TextInputStateKnown || observation.TextInputActive)
+        {
+            return Result(state, GuardianTeamCommunicationDecisionKind.Waiting,
+                !observation.TextInputStateKnown
+                    ? GuardianTeamCommunicationDecisionReason.TextInputUnavailable
+                    : GuardianTeamCommunicationDecisionReason.TextInputActive);
         }
 
         var command = state.PendingCommand!.Value;

@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.44.1.0";
+    private const string CurrentReleaseVersion = "0.44.1.1";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -470,11 +470,11 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Job Tools now focuses on your current job. All other jobs remain one click away.",
-                "Helper Status explains why helpers wait; detailed numbers are tucked under Advanced.",
-                "/seitonsam now also covers the game's movement-state and autorun input paths.",
-                "Bard's Repelling Shot can retry sooner when the game becomes ready again.",
-                "More full-sequence tests and version-specific downloads help prevent repeat regressions.",
+                "Automatic helpers and queued retries now stop during your Guard.",
+                "Guardian shoutouts survive brief typing or UI delays.",
+                "PLD Intervene pauses during Guardian, your own Guard, or below 3,000 MP.",
+                "Guardian can save without ready Guard above your chosen HP/MP limits (default: over 80% HP and 60% MP).",
+                "Smart Action can hit weakened Guard. Optional Auto Shield Smite targets full enemy Guard.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

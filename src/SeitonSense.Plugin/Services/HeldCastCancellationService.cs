@@ -18,6 +18,7 @@ internal enum HeldCastCancellationNativeStatus : byte
     BlockedByOwnGuard = 4,
     BlockedByAutomaticRecoveryCastBoundary = 5,
     BlockedByOwnedSamuraiCast = 6,
+    BlockedByPaladinSafety = 7,
 }
 
 internal sealed record HeldCastCancellationSnapshot(
@@ -69,6 +70,7 @@ internal sealed unsafe class HeldCastCancellationService
     private readonly AutomaticRecoveryShotCastMetadataValidation
         automaticRecoveryShotCastMetadata;
     private readonly Func<bool> ownedSamuraiCastProtected;
+    private readonly Func<uint, TargetPressureActorIdentity, bool> finalPaladinActionAllowed;
     private HeldCastCancellationState state = HeldCastCancellationState.Initial;
     private HeldCastCancellationSnapshot snapshot = HeldCastCancellationSnapshot.Initial;
     private HeldCastCancellationRequest? lastRequestedIntent;
@@ -83,7 +85,8 @@ internal sealed unsafe class HeldCastCancellationService
             finalOwnGuardActiveOrPropagating,
         AutomaticRecoveryShotCastMetadataValidation
             automaticRecoveryShotCastMetadata,
-        Func<bool> ownedSamuraiCastProtected)
+        Func<bool> ownedSamuraiCastProtected,
+        Func<uint, TargetPressureActorIdentity, bool> finalPaladinActionAllowed)
     {
         this.log = log;
         this.finalOwnGuardActiveOrPropagating =
@@ -96,6 +99,8 @@ internal sealed unsafe class HeldCastCancellationService
                 nameof(automaticRecoveryShotCastMetadata));
         this.ownedSamuraiCastProtected = ownedSamuraiCastProtected
             ?? throw new ArgumentNullException(nameof(ownedSamuraiCastProtected));
+        this.finalPaladinActionAllowed = finalPaladinActionAllowed
+            ?? throw new ArgumentNullException(nameof(finalPaladinActionAllowed));
     }
 
     internal HeldCastCancellationSnapshot Snapshot => Volatile.Read(ref snapshot);
@@ -202,15 +207,15 @@ internal sealed unsafe class HeldCastCancellationService
                     nativeStatus = HeldCastCancellationNativeStatus
                         .BlockedByOwnedSamuraiCast;
                 }
-                else if (request!.Value.HelperKind is
-                             HeldCastCancellationHelperKind.Purify or
-                             HeldCastCancellationHelperKind.SmartRecuperate
-                         ? DefensiveUtilityProbe.HasActiveGuard(localPlayer)
-                         : finalOwnGuardActiveOrPropagating(
-                             request.Value.LocalPlayer))
+                else if (finalOwnGuardActiveOrPropagating(request!.Value.LocalPlayer))
                 {
                     nativeStatus =
                         HeldCastCancellationNativeStatus.BlockedByOwnGuard;
+                }
+                else if (!finalPaladinActionAllowed(
+                             request!.Value.HelperActionId, request.Value.LocalPlayer))
+                {
+                    nativeStatus = HeldCastCancellationNativeStatus.BlockedByPaladinSafety;
                 }
                 else if (!AutomaticKeylessCastBoundaryStillValid(
                              request!.Value,
@@ -382,6 +387,8 @@ internal sealed unsafe class HeldCastCancellationService
                 "Keyless helper cast cancellation vetoed by the final exact reviewed basic-shot boundary",
             HeldCastCancellationNativeStatus.BlockedByOwnedSamuraiCast =>
                 "Helper cast cancellation vetoed while /seitonsam protects the current SAM cast",
+            HeldCastCancellationNativeStatus.BlockedByPaladinSafety =>
+                "Paladin cast cancellation paused by current protection or resource conditions",
             HeldCastCancellationNativeStatus.NativeBoundaryUnavailable =>
                 "Native cast-cancel boundary unavailable; no retry in this cast epoch",
             HeldCastCancellationNativeStatus.RequestFaulted =>

@@ -7,6 +7,7 @@ using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using Lumina.Excel.Sheets;
 using SeitonSense.Core;
+using SeitonSense.Plugin.Models;
 using GameAction = Lumina.Excel.Sheets.Action;
 using GameStatus = Lumina.Excel.Sheets.Status;
 
@@ -117,6 +118,7 @@ internal sealed class DefensiveUtilityProbe
     private readonly TargetPressureTracker pressureTracker;
     private readonly NearAssistRedirector nearAssist;
     private readonly IPluginLog log;
+    private readonly PluginConfiguration configuration;
     private readonly bool guardMetadataVerified;
     private readonly bool guardianMetadataVerified;
     private readonly HashSet<TargetPressureActorIdentity> guardianSpentActors = [];
@@ -147,12 +149,14 @@ internal sealed class DefensiveUtilityProbe
         TargetPressureTracker pressureTracker,
         NearAssistRedirector nearAssist,
         IPluginLog log,
-        PvPMetadataValidation metadata)
+        PvPMetadataValidation metadata,
+        PluginConfiguration configuration)
     {
         this.objectTable = objectTable;
         this.pressureTracker = pressureTracker;
         this.nearAssist = nearAssist;
         this.log = log;
+        this.configuration = configuration;
         var localMetadata = ValidateMetadata(dataManager, log);
         guardMetadataVerified = metadata.GuardVerified && localMetadata.Guard;
         guardianMetadataVerified = metadata.GuardianVerified && localMetadata.Guardian;
@@ -636,12 +640,7 @@ internal sealed class DefensiveUtilityProbe
                           inputEligible &&
                           !guardActive &&
                           !higherPriorityClaimed;
-        var guardianActionSpecificallyReady = guardMetadataVerified &&
-                                              guardianMetadataVerified &&
-                                              IsActionSpecificallyReady(
-                                                  EnemyCombatConstants.GuardActionId) &&
-                                              IsActionSpecificallyReady(
-                                                  EnemyCombatConstants.GuardianActionId);
+        var guardianActionSpecificallyReady = IsGuardianActionSpecificallyReady(localPlayer);
         if (frozenGuardianRetry is { } frozenGuardian)
         {
             action = DefensiveUtilityActionKind.Guardian;
@@ -1124,7 +1123,8 @@ internal sealed class DefensiveUtilityProbe
         if (!guardMetadataVerified ||
             !nearAssist.CanProtectAutomaticGuard ||
             !HasValidLocalPlayer(localPlayer) ||
-            HasActiveGuard(localPlayer))
+            nearAssist.IsExactLocalGuardActiveOrPropagating(
+                new(localPlayer.GameObjectId, localPlayer.EntityId)))
         {
             return GuardUseAttemptResult.NotInvoked;
         }
@@ -1244,7 +1244,8 @@ internal sealed class DefensiveUtilityProbe
             !guardianMetadataVerified ||
             !HasValidLocalPlayer(localPlayer) ||
             !IsPaladin(localPlayer) ||
-            HasActiveGuard(localPlayer) ||
+            nearAssist.IsExactLocalGuardActiveOrPropagating(
+                new(localPlayer.GameObjectId, localPlayer.EntityId)) ||
             currentCandidate.Actor != intent.Actor ||
             currentCandidate.PartySlot != intent.PartySlot)
         {
@@ -1261,9 +1262,7 @@ internal sealed class DefensiveUtilityProbe
             return ClientActionAttemptOutcome.NotInvoked;
         }
 
-        if (!ClientActionAttemptBoundary.IsExactActionReady(
-                actionManager,
-                EnemyCombatConstants.GuardActionId) ||
+        if (!IsGuardianActionSpecificallyReady(localPlayer) ||
             !ClientActionAttemptBoundary.IsExactActionReady(
                 actionManager,
                 EnemyCombatConstants.GuardianActionId) ||
@@ -1305,9 +1304,7 @@ internal sealed class DefensiveUtilityProbe
             if (!DefensiveUtilityRules.IsGuardianCandidate(revalidated))
                 return ClientActionAttemptOutcome.NotInvoked;
 
-            if (!ClientActionAttemptBoundary.IsExactActionReady(
-                    actionManager,
-                    EnemyCombatConstants.GuardActionId) ||
+            if (!IsGuardianActionSpecificallyReady(localPlayer) ||
                 !ClientActionAttemptBoundary.IsExactActionReady(
                     actionManager,
                     EnemyCombatConstants.GuardianActionId))
@@ -1318,17 +1315,21 @@ internal sealed class DefensiveUtilityProbe
             var boundaryBefore = ClientActionAttemptBoundary.Capture(
                 actionManager,
                 EnemyCombatConstants.GuardianActionId);
-            attempted = true;
             try
             {
-                var accepted = nearAssist.RunWithoutRedirect(() =>
-                    actionManager->UseAction(
-                        ActionType.Action,
-                        EnemyCombatConstants.GuardianActionId,
-                        ally.GameObjectId,
-                        0,
-                        ActionManager.UseActionMode.None,
-                        0));
+                var accepted = OwnGuardActionBoundary.Invoke(
+                    () => nearAssist.IsExactLocalGuardActiveOrPropagating(
+                        new(localPlayer.GameObjectId, localPlayer.EntityId)),
+                    () => nearAssist.RunWithoutRedirect(() =>
+                        actionManager->UseAction(
+                            ActionType.Action,
+                            EnemyCombatConstants.GuardianActionId,
+                            ally.GameObjectId,
+                            0,
+                            ActionManager.UseActionMode.None,
+                            0)),
+                    out attempted);
+                if (!attempted) return ClientActionAttemptOutcome.SoftUnavailable;
                 return ClientActionAttemptBoundaryRules.Classify(
                     accepted,
                     EnemyCombatConstants.GuardianActionId,
@@ -1372,6 +1373,27 @@ internal sealed class DefensiveUtilityProbe
                 !duplicateEntityIds.Contains(item.Player.EntityId))
             .ToArray();
     }
+
+    internal bool CanUseGuardianNow(TargetPressureActorIdentity expectedLocalPlayer)
+    {
+        var localPlayer = objectTable.LocalPlayer;
+        return expectedLocalPlayer.IsValid &&
+               HasValidLocalPlayer(localPlayer) &&
+               new TargetPressureActorIdentity(localPlayer!.GameObjectId, localPlayer.EntityId) == expectedLocalPlayer &&
+               !nearAssist.IsExactLocalGuardActiveOrPropagating(expectedLocalPlayer) &&
+               IsGuardianActionSpecificallyReady(localPlayer);
+    }
+
+    private bool IsGuardianActionSpecificallyReady(IPlayerCharacter? localPlayer) =>
+        guardMetadataVerified && guardianMetadataVerified &&
+        HasValidLocalPlayer(localPlayer) && IsPaladin(localPlayer!) &&
+        IsActionSpecificallyReady(EnemyCombatConstants.GuardianActionId) &&
+        DefensiveUtilityRules.CanUseGuardianWithGuardOrHighResources(
+            IsActionSpecificallyReady(EnemyCombatConstants.GuardActionId),
+            localPlayer!.CurrentHp, localPlayer.MaxHp,
+            localPlayer.CurrentMp, localPlayer.MaxMp,
+            configuration.GuardianNoGuardMinimumHpPercent,
+            configuration.GuardianNoGuardMinimumMpPercent);
 
     private static unsafe bool IsActionSpecificallyReady(uint actionId)
     {
@@ -1470,18 +1492,14 @@ internal sealed class DefensiveUtilityProbe
         return request.IsValid ? request : null;
     }
 
-    internal static bool HasActiveGuard(IPlayerCharacter? player) =>
-        HasActiveStatus(player, EnemyCombatConstants.GuardStatusId) ||
-        HasActiveStatus(player, EnemyCombatConstants.GuardStatusAlternateId);
-
-    private static bool HasActiveStatus(IPlayerCharacter? player, uint statusId)
+    internal static bool HasActiveGuard(IPlayerCharacter? player)
     {
-        if (player is null || statusId == 0) return false;
+        if (player is null) return false;
         foreach (var status in player.StatusList)
         {
-            if (status.StatusId == statusId &&
-                float.IsFinite(status.RemainingTime) &&
-                status.RemainingTime > 0f)
+            // A live Guard slot is authoritative until removed. A rounded zero
+            // or unreadable duration must not authorize a Guard-breaking helper.
+            if (DefensiveUtilityRules.IsOwnGuardStatusPresent(status.StatusId))
             {
                 return true;
             }

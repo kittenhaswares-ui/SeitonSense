@@ -149,6 +149,8 @@ internal sealed class MiracleInterceptProbe
     private readonly IReadOnlySet<uint> verifiedProtectionStatusIds;
     private readonly bool silentNocturneMetadataVerified;
     private readonly bool contradanceMetadataVerified;
+    private readonly IReadOnlySet<uint> paladinCoverStatusIds;
+    private readonly IReadOnlySet<uint> paladinCoveredStatusIds;
     private readonly HashSet<MiracleSignalIdentity> rememberedSignals = [];
     private readonly Queue<MiracleSignalIdentity> rememberedSignalOrder = [];
     private readonly Dictionary<int, MiracleCleanseFollowupState> cleanseFollowupStates = [];
@@ -230,9 +232,100 @@ internal sealed class MiracleInterceptProbe
         verifiedProtectionStatusIds = verifiedCcBrakeStatusIds.ToHashSet();
         silentNocturneMetadataVerified = metadata.SilentNocturneVerified;
         contradanceMetadataVerified = metadata.ContradanceVerified;
+        paladinCoverStatusIds = metadata.PaladinCoverStatusIds;
+        paladinCoveredStatusIds = metadata.PaladinCoveredStatusIds;
     }
 
     internal MiracleInterceptProbeSnapshot Snapshot => Volatile.Read(ref snapshot);
+
+    internal bool CanUsePaladinInterveneNow(
+        uint actionId,
+        TargetPressureActorIdentity expectedLocalPlayer)
+    {
+        if (actionId != MiracleInterceptConfirmationRules.InterveneActionId) return true;
+        var local = objectTable.LocalPlayer;
+        return local is not null && expectedLocalPlayer.IsValid &&
+               expectedLocalPlayer == new TargetPressureActorIdentity(local.GameObjectId, local.EntityId) &&
+               ReadPaladinInterveneBlockReason(local, actionId) == PaladinInterveneBlockReason.None;
+    }
+
+    private PaladinInterveneBlockReason ReadPaladinInterveneBlockReason(
+        IPlayerCharacter? localPlayer,
+        uint actionId)
+    {
+        if (actionId != MiracleInterceptConfirmationRules.InterveneActionId)
+            return PaladinInterveneBlockReason.None;
+        try
+        {
+            var valid = localPlayer is not null && IsLivePlayer(localPlayer) &&
+                        HasValidNativeIdentity(localPlayer) && localPlayer.ClassJob.IsValid &&
+                        localPlayer.ClassJob.RowId == ReactiveCounterCcProfileRules.PaladinJobId;
+            var initial = PaladinInterveneSafetyRules.Evaluate(
+                actionId,
+                valid,
+                paladinCoverStatusIds.Count > 0 && paladinCoveredStatusIds.Count > 0,
+                localPlayer?.CurrentMp ?? 0,
+                valid && nearAssist.IsExactLocalGuardActiveOrPropagating(
+                    new TargetPressureActorIdentity(localPlayer!.GameObjectId, localPlayer.EntityId)),
+                protectingAlly: false);
+            if (initial != PaladinInterveneBlockReason.None) return initial;
+
+            // Membership is authoritative, including the status propagation
+            // frame where remaining duration can still read zero. Covered on
+            // ourselves is somebody ELSE protecting us, not our Guardian link.
+            if (localPlayer!.StatusList.Any(status => paladinCoverStatusIds.Contains(status.StatusId)))
+                return PaladinInterveneBlockReason.ProtectingAlly;
+            foreach (var player in objectTable.OfType<IPlayerCharacter>())
+            {
+                if (player.EntityId == localPlayer.EntityId || !IsLivePlayer(player) ||
+                    !HasValidNativeIdentity(player)) continue;
+                foreach (var status in player.StatusList)
+                {
+                    if (PaladinInterveneSafetyRules.IsOwnGuardianLink(
+                            localPlayer.EntityId,
+                            player.EntityId,
+                            status.SourceId,
+                            isCover: false,
+                            isCovered: paladinCoveredStatusIds.Contains(status.StatusId)))
+                        return PaladinInterveneBlockReason.ProtectingAlly;
+                }
+            }
+
+            return PaladinInterveneBlockReason.None;
+        }
+        catch
+        {
+            // Only automated Intervene waits on uncertain Guardian telemetry.
+            // Manual actions and every other job's CC retain their own policy.
+            return PaladinInterveneBlockReason.LocalPlayerUnavailable;
+        }
+    }
+
+    private MiracleInterceptProbeSnapshot PausePaladinIntervene(
+        PaladinInterveneBlockReason reason,
+        long nowMilliseconds)
+    {
+        capture.ClearMiracleInterceptThreats();
+        activeThreat = null;
+        ClearCleanseFollowupStates();
+        guardFollowupState = MiracleGuardFollowupState.Initial;
+        guardFollowupTargetGameObjectId = 0;
+        guardFollowupTargetEntityId = 0;
+        guardFollowupTeamPressure = 0;
+        ClearProtectionEndDiagnostics();
+        inputClaimedThisFrame = false;
+        castCancellationRequestThisFrame = null;
+        DrainConfirmations(nowMilliseconds);
+        var message = reason switch
+        {
+            PaladinInterveneBlockReason.OwnGuard => "Intervene paused: your Guard is active",
+            PaladinInterveneBlockReason.LowMp => "Intervene paused: below 3000 MP",
+            PaladinInterveneBlockReason.ProtectingAlly => "Intervene paused: protecting an ally with Guardian",
+            PaladinInterveneBlockReason.GuardianMetadataUnavailable => "Intervene paused: Guardian status data unavailable",
+            _ => "Intervene paused: local player unavailable",
+        };
+        return Publish("Paused", message, nowMilliseconds);
+    }
 
     internal unsafe MiracleInterceptProbeSnapshot Observe(
         IPlayerCharacter? localPlayer,
@@ -315,6 +408,9 @@ internal sealed class MiracleInterceptProbe
                       localIdentityValid &&
                       counterActionId != 0 &&
                       protectionMetadataReady;
+        var paladinSafetyBlock = enabled && localAlive
+            ? ReadPaladinInterveneBlockReason(localPlayer, counterActionId)
+            : PaladinInterveneBlockReason.None;
         var cleanseFollowupEnabled = enabled &&
                                      enablePostPurifyCrowdControl &&
                                      purifyMetadataVerified;
@@ -351,6 +447,7 @@ internal sealed class MiracleInterceptProbe
         ObserveProtectionEndHeldConsent(
             allowHeldGameplayKey &&
             localAlive &&
+            paladinSafetyBlock == PaladinInterveneBlockReason.None &&
             (cleanseFollowupEnabled || guardFollowupEnabled),
             inputFrame,
             hardReset || protectionEndJobChanged);
@@ -421,6 +518,9 @@ internal sealed class MiracleInterceptProbe
                     : "Local player cannot dispatch",
                 nowMilliseconds);
         }
+
+        if (paladinSafetyBlock != PaladinInterveneBlockReason.None)
+            return PausePaladinIntervene(paladinSafetyBlock, nowMilliseconds);
 
         var marksmanSpiteEnabled =
             isCrystallineConflict &&
@@ -740,6 +840,12 @@ internal sealed class MiracleInterceptProbe
                 false,
                 nowMilliseconds);
         }
+
+        // Re-read before a key, animation queue, or cast-cancel request can be
+        // claimed. Guardian/Guard/MP may have changed since the event was seen.
+        paladinSafetyBlock = ReadPaladinInterveneBlockReason(localPlayer, threat.CounterActionId);
+        if (paladinSafetyBlock != PaladinInterveneBlockReason.None)
+            return PausePaladinIntervene(paladinSafetyBlock, nowMilliseconds);
 
         var blockerFamily = BlockerFamilyForAction(threat.CounterActionId);
         var anyProtection = HasBlockingProtectionForThreat(
@@ -3181,6 +3287,10 @@ internal sealed class MiracleInterceptProbe
             return ClientActionAttemptOutcome.NotInvoked;
         }
 
+        if (ReadPaladinInterveneBlockReason(localPlayer, actionId) !=
+            PaladinInterveneBlockReason.None)
+            return ClientActionAttemptOutcome.SoftUnavailable;
+
         var actionManager = ActionManager.Instance();
         if (actionManager == null ||
             !HasStructuralActionReadiness(localPlayer, actionId) ||
@@ -3199,16 +3309,24 @@ internal sealed class MiracleInterceptProbe
                 ? exactEdgeDistanceYalms
                 : float.NaN;
         attemptedAtMilliseconds = Environment.TickCount64;
-        attempted = true;
-        var accepted = nearAssist.RunWithoutRedirect(
-            () => actionManager->UseAction(
+        var accepted = PaladinInterveneSafetyBoundary.TryInvoke(
+            actionId,
+            () => ReadPaladinInterveneBlockReason(localPlayer, actionId),
+            () => nearAssist.RunWithoutRedirect(
+                () => actionManager->UseAction(
                     ActionType.Action,
                     actionId,
                     target.GameObjectId,
                     0,
                     ActionManager.UseActionMode.None,
                     0),
-            predictiveBrakeBypass);
+                predictiveBrakeBypass),
+            out attempted);
+        if (!attempted)
+        {
+            attemptedAtMilliseconds = -1;
+            return ClientActionAttemptOutcome.SoftUnavailable;
+        }
         var boundaryAfter = ClientActionAttemptBoundary.Capture(actionManager, actionId);
         if (accepted &&
             boundaryAfter.LastUsedActionSequence != 0 &&
@@ -3255,10 +3373,12 @@ internal sealed class MiracleInterceptProbe
                actionManager->IsActionOffCooldown(ActionType.Action, actionId);
     }
 
-    private static unsafe bool CanReserveAtIdealRequest(
+    private unsafe bool CanReserveAtIdealRequest(
         IPlayerCharacter localPlayer,
         uint actionId)
     {
+        if (ReadPaladinInterveneBlockReason(localPlayer, actionId) !=
+            PaladinInterveneBlockReason.None) return false;
         if (HasStructuralActionReadiness(localPlayer, actionId)) return true;
         var actionManager = ActionManager.Instance();
         return ReactiveCounterCcProfileRules.UsesMainGlobalCooldown(actionId) &&
@@ -3706,14 +3826,16 @@ internal sealed class MiracleInterceptProbe
         };
     }
 
-    private static unsafe HeldCastCancellationRequest? BuildCastCancellationRequest(
+    private unsafe HeldCastCancellationRequest? BuildCastCancellationRequest(
         IPlayerCharacter localPlayer,
         IPlayerCharacter target,
         MiracleThreatState threat,
         VirtualKey frozenKey,
         EmergencyActionInputFrame inputFrame)
     {
-        if (!HasValidNativeIdentity(localPlayer) ||
+        if (ReadPaladinInterveneBlockReason(localPlayer, threat.CounterActionId) !=
+                PaladinInterveneBlockReason.None ||
+            !HasValidNativeIdentity(localPlayer) ||
             !HasValidNativeIdentity(target) ||
             !IsLivePlayer(localPlayer) ||
             !IsLivePlayer(target) ||

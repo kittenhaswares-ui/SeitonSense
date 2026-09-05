@@ -124,7 +124,8 @@ internal sealed class ReviewedPvpCommandDispatcher
         if (exactHardcodedCommand is null || IsMarkerCommand(command.Kind))
             return ReviewedPvpCommandDispatchResult.InvalidCommand;
 
-        return TryExecuteShellCommand(exactHardcodedCommand);
+        return TryExecuteShellCommand(exactHardcodedCommand,
+            guardianQuickChat: command.Kind == ReviewedPvpCommandKind.GuardianCoveringTarget);
     }
 
     private void NormalizeMarkerClock(long nowMilliseconds)
@@ -147,7 +148,7 @@ internal sealed class ReviewedPvpCommandDispatcher
         ReviewedPvpCommandKind.GuardianClearBind1 or
         ReviewedPvpCommandKind.GuardianClearBind2;
 
-    private static string? ResolveExactHardcodedCommand(ReviewedPvpCommand command) => command switch
+    internal static string? ResolveExactHardcodedCommand(ReviewedPvpCommand command) => command switch
     {
         { Kind: ReviewedPvpCommandKind.Attack1Enemy, Slot: 1 } => "/mk attack1 <e1>",
         { Kind: ReviewedPvpCommandKind.Attack1Enemy, Slot: 2 } => "/mk attack1 <e2>",
@@ -207,16 +208,23 @@ internal sealed class ReviewedPvpCommandDispatcher
         _ => null,
     };
 
+    internal static ReviewedPvpCommandDispatchResult ClassifyUnavailableShell(
+        bool guardianQuickChat, bool invocationStarted) =>
+        guardianQuickChat && !invocationStarted
+            ? ReviewedPvpCommandDispatchResult.TextCommandUnavailableBeforeInvocation
+            : ReviewedPvpCommandDispatchResult.NativeUnavailable;
+
     private static unsafe ReviewedPvpCommandDispatchResult TryExecuteShellCommand(
-        string exactHardcodedCommand)
+        string exactHardcodedCommand, bool guardianQuickChat = false)
     {
         Utf8String* command = null;
+        var invocationStarted = false;
         try
         {
             var uiModule = UIModule.Instance();
-            if (uiModule == null) return ReviewedPvpCommandDispatchResult.NativeUnavailable;
+            if (uiModule == null) return ClassifyUnavailableShell(guardianQuickChat, invocationStarted);
             var shell = uiModule->GetRaptureShellModule();
-            if (shell == null) return ReviewedPvpCommandDispatchResult.NativeUnavailable;
+            if (shell == null) return ClassifyUnavailableShell(guardianQuickChat, invocationStarted);
 
             // ExecuteCommandInner has no result value. This native flag is the
             // only exact pre-invocation proof that the shell cannot accept a
@@ -227,13 +235,16 @@ internal sealed class ReviewedPvpCommandDispatcher
             }
 
             command = Utf8String.FromString(exactHardcodedCommand);
-            if (command == null) return ReviewedPvpCommandDispatchResult.NativeUnavailable;
+            if (command == null) return ClassifyUnavailableShell(guardianQuickChat, invocationStarted);
+            // Exceptions after this point have unknown delivery. Never retry
+            // those; only positively pre-invocation failures may be re-offered.
+            invocationStarted = true;
             shell->ExecuteCommandInner(command, uiModule);
             return ReviewedPvpCommandDispatchResult.Invoked;
         }
         catch
         {
-            return ReviewedPvpCommandDispatchResult.NativeUnavailable;
+            return ClassifyUnavailableShell(guardianQuickChat, invocationStarted);
         }
         finally
         {

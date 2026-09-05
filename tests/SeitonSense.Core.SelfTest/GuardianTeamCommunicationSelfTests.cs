@@ -35,8 +35,6 @@ internal static class GuardianTeamCommunicationSelfTests
             Observation(Episode(token: 1), configurationEnabled: false),
             Observation(Episode(token: 2), crystallineConflict: false),
             Observation(Episode(token: 3), hardReset: true),
-            Observation(Episode(token: 4), textInputKnown: false),
-            Observation(Episode(token: 5), textInputActive: true),
             Observation(Episode(token: 6), exactLocal: false),
             Observation(Episode(token: 7), exactTarget: false),
             Observation(Episode(token: 8) with { AcceptedAtMilliseconds = 1_001 }, now: 1_000),
@@ -55,6 +53,75 @@ internal static class GuardianTeamCommunicationSelfTests
                 "failed episode remains spent");
             Equal(GuardianTeamCommunicationPhase.Idle, decision.State.Phase, "failure is terminal");
         }
+    }
+
+    internal static void TransientTextInputPreservesUnsentQuickChat()
+    {
+        foreach (var unknown in new[] { false, true })
+        {
+            var episode = Episode();
+            var observation = Observation(episode, bind1GameObjectId: Other.GameObjectId,
+                textInputKnown: !unknown, textInputActive: !unknown);
+            var waiting = GuardianTeamCommunicationRules.Observe(
+                GuardianTeamCommunicationState.Initial, observation);
+            False(waiting.ShouldIssueCommand, "typing never sends a command");
+            Equal(GuardianTeamCommunicationPhase.ReadyToSendQuickChat, waiting.State.Phase,
+                "accepted rescue retains its unsent shoutout");
+            var deadline = waiting.State.PendingCommandExpiresAtMilliseconds;
+            var later = GuardianTeamCommunicationRules.Observe(waiting.State,
+                observation with { NowMilliseconds = 1_100 });
+            Equal(deadline, later.State.PendingCommandExpiresAtMilliseconds,
+                "typing does not extend the deadline");
+            var ready = GuardianTeamCommunicationRules.Observe(later.State, observation with
+            {
+                NowMilliseconds = 1_101,
+                TextInputStateKnown = true,
+                TextInputActive = false,
+            });
+            Command(GuardianTeamCommunicationCommandKind.SendQuickChat, ready,
+                "send once after the transient input state clears");
+            Equal(episode.Target, ready.Command!.Value.Actor, "frozen ally remains unchanged");
+            Equal(deadline, ready.State.PendingCommandExpiresAtMilliseconds, "original deadline survives");
+            var spent = Apply(ready, GuardianTeamCommunicationCommandOutcome.Invoked);
+            False(GuardianTeamCommunicationRules.Observe(spent, observation with
+            {
+                NowMilliseconds = 1_200, TextInputStateKnown = true, TextInputActive = false,
+            }).ShouldIssueCommand, "an invoked shoutout never repeats");
+        }
+    }
+
+    internal static void DeferredQuickChatSurvivesTypingButExpiresAndRevalidates()
+    {
+        var episode = Episode();
+        var observation = Observation(episode, bind1GameObjectId: Other.GameObjectId);
+        var offered = GuardianTeamCommunicationRules.Observe(GuardianTeamCommunicationState.Initial, observation);
+        var deferred = Apply(offered, GuardianTeamCommunicationCommandOutcome.DeferredBeforeInvocation);
+        var typing = GuardianTeamCommunicationRules.Observe(deferred, observation with
+        {
+            NowMilliseconds = 1_020, TextInputActive = true,
+        });
+        Equal(GuardianTeamCommunicationPhase.ReadyToSendQuickChat, typing.State.Phase,
+            "a native pre-invocation deferral survives one later typing frame");
+        var invalid = GuardianTeamCommunicationRules.Observe(typing.State, observation with
+        {
+            NowMilliseconds = 1_030,
+            PartyTarget = new GuardianTeamCommunicationResolvedPartyMember(true, episode.PartySlot, Other),
+        });
+        False(invalid.ShouldIssueCommand, "changed party target cannot receive the old shoutout");
+        Equal(GuardianTeamCommunicationPhase.Idle, invalid.State.Phase, "identity drift terminates");
+        var expired = GuardianTeamCommunicationRules.Observe(typing.State, observation with
+        {
+            NowMilliseconds = deferred.PendingCommandExpiresAtMilliseconds, TextInputActive = true,
+        });
+        False(expired.ShouldIssueCommand, "typing cannot create an unbounded late shoutout");
+        Equal(GuardianTeamCommunicationDecisionReason.CommandResultTimeout, expired.Reason,
+            "deadline is checked even while typing");
+        Equal(GuardianTeamCommunicationPhase.Idle, expired.State.Phase, "expired shoutout is spent");
+        var disabled = GuardianTeamCommunicationRules.Observe(typing.State, observation with
+        {
+            NowMilliseconds = 1_030, ConfigurationEnabled = false,
+        });
+        Equal(GuardianTeamCommunicationPhase.Idle, disabled.State.Phase, "disabling remains terminal");
     }
 
     internal static void OccupiedOrUnknownMarkersStayQuickChatOnly()

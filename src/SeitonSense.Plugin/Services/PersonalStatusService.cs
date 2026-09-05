@@ -50,6 +50,7 @@ internal sealed class PersonalStatusService : IDisposable
     private readonly DefensiveUtilityProbe defensiveUtility;
     private readonly SmartRecuperateProbe smartRecuperate;
     private readonly BardRepellingShotProbe bardRepellingShot;
+    private readonly PaladinShieldSmiteProbe paladinShieldSmite;
     private readonly EmergencyTeleportProbe emergencyTeleport;
     private readonly PressureEscapeSprintProbe pressureEscapeSprint;
     private readonly SmartSprintProbe smartSprint;
@@ -131,15 +132,10 @@ internal sealed class PersonalStatusService : IDisposable
         emergencyInput = new EmergencyActionInputCoordinator(
             keyState,
             criticalUtilityCoordination.ClaimCurrentFrame);
-        heldCastCancellation = new HeldCastCancellationService(
-            log,
-            nearAssist.IsExactLocalGuardActiveOrPropagating,
-            automaticRecoveryShotCastMetadata,
-            nearAssist.IsOwnedSamuraiCastProtected);
         emergencyPurify = new EmergencyPurifyProbe(
             log,
             nearAssist,
-            nearAssist.IsExactLocalGuardActive);
+            nearAssist.IsExactLocalGuardActiveOrPropagating);
         astrologianHarmonicOrbis = new AstrologianHarmonicOrbisProbe(
             clientState,
             objectTable,
@@ -159,7 +155,8 @@ internal sealed class PersonalStatusService : IDisposable
             pressureTracker,
             nearAssist,
             log,
-            metadata);
+            metadata,
+            configuration);
         smartRecuperate = new SmartRecuperateProbe(
             clientState,
             objectTable,
@@ -173,6 +170,7 @@ internal sealed class PersonalStatusService : IDisposable
             nearAssist,
             automaticRecoveryShotCastMetadata,
             log);
+        paladinShieldSmite = new PaladinShieldSmiteProbe(clientState, objectTable, nearAssist, log);
         pressureEscapeSprint = new PressureEscapeSprintProbe(
             clientState,
             dutyState,
@@ -216,6 +214,12 @@ internal sealed class PersonalStatusService : IDisposable
             log,
             metadata,
             configuration);
+        heldCastCancellation = new HeldCastCancellationService(
+            log,
+            nearAssist.IsExactLocalGuardActiveOrPropagating,
+            automaticRecoveryShotCastMetadata,
+            nearAssist.IsOwnedSamuraiCastProtected,
+            CanUsePaladinActionForCastCancellation);
         samuraiReactive = new SamuraiReactiveCounterCcProbe(
             objectTable,
             executeTracker,
@@ -323,6 +327,14 @@ internal sealed class PersonalStatusService : IDisposable
     internal SamuraiReactiveCounterCcProbeSnapshot SamuraiReactiveDiagnostics =>
         samuraiReactive.Snapshot;
     internal SamuraiCastInputStatus SamuraiCastInputStatus => nearAssist.SamuraiCastInputStatus;
+    internal PluginOwnedGuardVetoDiagnostics PluginOwnedGuardVetoDiagnostics => nearAssist.PluginOwnedGuardVetoDiagnostics;
+    internal PaladinShieldSmiteProbeSnapshot PaladinShieldSmiteDiagnostics => paladinShieldSmite.Snapshot;
+
+    private bool CanUsePaladinActionForCastCancellation(
+        uint actionId, TargetPressureActorIdentity expectedLocalPlayer) =>
+        actionId == EnemyCombatConstants.GuardianActionId
+            ? defensiveUtility.CanUseGuardianNow(expectedLocalPlayer)
+            : miracleIntercept.CanUsePaladinInterveneNow(actionId, expectedLocalPlayer);
     internal SamuraiReactiveMetadataValidation SamuraiReactiveMetadata =>
         samuraiReactiveMetadata;
     internal SamuraiReactiveCaptureDiagnostics SamuraiReactiveCaptureDiagnostics => new(
@@ -454,6 +466,7 @@ internal sealed class PersonalStatusService : IDisposable
             defensiveUtility.FailClosed(now, exception);
             smartRecuperate.FailClosed();
             bardRepellingShot.Reset();
+            paladinShieldSmite.Reset();
             emergencyTeleport.FailClosed();
             pressureEscapeSprint.FailClosed(now, exception);
             smartSprint.FailClosed(now, exception);
@@ -507,6 +520,7 @@ internal sealed class PersonalStatusService : IDisposable
             defensiveUtility.Reset();
             smartRecuperate.Reset();
             bardRepellingShot.Reset();
+            paladinShieldSmite.Reset();
             emergencyTeleport.Reset();
             pressureEscapeSprint.Reset();
             smartSprint.Reset();
@@ -668,12 +682,12 @@ internal sealed class PersonalStatusService : IDisposable
                                              configuration.ExperimentalPurifyOnNextKey &&
                                              anyPurifyAutomationEnabled &&
                                              metadata.PurifyVerified &&
-                                             !exactGuardActive;
+                                             !guardActive;
         var automaticPurifyConfigurationEnabled = configuration.Enabled &&
                                                   configuration.EnableAutomaticPurify &&
                                                   anyPurifyAutomationEnabled &&
                                                   metadata.PurifyVerified &&
-                                                  !exactGuardActive;
+                                                  !guardActive;
         var regularPurifyConfigurationEnabled =
             heldPurifyConfigurationEnabled ||
             automaticPurifyConfigurationEnabled;
@@ -681,7 +695,7 @@ internal sealed class PersonalStatusService : IDisposable
                                                       configuration.GuardOnStunPressure &&
                                                       highPressureStunObserved &&
                                                       metadata.PurifyVerified &&
-                                                      !exactGuardActive;
+                                                      !guardActive;
         var purifyStatus = SelectPurifyStatus(
             observed,
             now,
@@ -1027,7 +1041,7 @@ internal sealed class PersonalStatusService : IDisposable
             metadata.RecuperateVerified,
             configuration.AllowAutomaticRecoveryToCancelBasicShotCasts,
             automaticRecoveryBasicShotMetadataVerified,
-            exactGuardActive,
+            guardActive,
             hasPurifyRemovableCrowdControl ||
             purifyClaimedPriority ||
             guardianClaimedPriority ||
@@ -1091,6 +1105,18 @@ internal sealed class PersonalStatusService : IDisposable
             configuration.EnableAdaptiveResponseEngine,
             frameworkFrameId);
         immediateDefenseClaimedPriority |= bardRepelling.InputClaimed;
+        var shieldSmite = paladinShieldSmite.Observe(
+            localPlayer,
+            context,
+            configuration.Enabled && configuration.EnablePaladinShieldSmiteHelper && isPaladin,
+            metadata.PaladinShieldSmiteVerified,
+            metadata.WolvesDenStrikingDummyVerified,
+            guardActive,
+            immediateDefenseClaimedPriority || emergencyInputFrame.IsConsumed,
+            responseClock.Capture().LegacyMilliseconds,
+            hardReset,
+            frameworkFrameId);
+        immediateDefenseClaimedPriority |= shieldSmite.InputClaimed;
         // AST's held Near Help lane is immediately below self recovery. It freezes one
         // exact <=60% party member and may reserve only its accepted base
         // Orbis' exact same-target Double Cast form for a later framework frame.
@@ -1605,11 +1631,7 @@ internal sealed class PersonalStatusService : IDisposable
              }),
             configuration.AllowAutomaticRecoveryToCancelBasicShotCasts,
             isSupportedPvPContext,
-            castCancellationRequest is
-                { HelperKind: HeldCastCancellationHelperKind.Purify or
-                              HeldCastCancellationHelperKind.SmartRecuperate }
-                ? exactGuardActive
-                : guardActive,
+            guardActive,
             prioritizedInputClaimed: castCancellationRequest is { IsValid: true },
             intentOtherwiseReady: castCancellationRequest is { IsValid: true },
             request: castCancellationRequest,
@@ -1987,6 +2009,7 @@ internal sealed class PersonalStatusService : IDisposable
         defensiveUtility.Reset();
         smartRecuperate.Reset();
         bardRepellingShot.Reset();
+        paladinShieldSmite.Reset();
         emergencyTeleport.Reset();
         pressureEscapeSprint.Reset();
         smartSprint.Reset();

@@ -77,6 +77,12 @@ internal sealed partial class SettingsWindow
         if (DrawJobSectionHeader(19, "Paladin — Guardian rescue"))
         {
             changed |= Checkbox(
+                "Auto Shield Smite against full enemy Guard",
+                configuration.EnablePaladinShieldSmiteHelper,
+                value => configuration.EnablePaladinShieldSmiteHelper = value);
+            ImGui.TextWrapped("No key needed. Uses Smart Action targeting, keeps your own Guard intact, and skips already weakened Guard. Works in CC and enabled Wolves' Den duels.");
+            ImGui.Spacing();
+            changed |= Checkbox(
                 "Guardian for a critical or focused ally",
                 configuration.PaladinGuardianLowAlly,
                 value => configuration.PaladinGuardianLowAlly = value);
@@ -84,6 +90,16 @@ internal sealed partial class SettingsWindow
                 "A held gameplay key may supply the Guardian input (includes WASD)",
                 configuration.PaladinGuardianOnHeldKey,
                 value => configuration.PaladinGuardianOnHeldKey = value);
+            changed |= SliderInt(
+                "Without ready Guard: own HP above",
+                configuration.GuardianNoGuardMinimumHpPercent, 0, 100,
+                value => configuration.GuardianNoGuardMinimumHpPercent = value,
+                "%d%%");
+            changed |= SliderInt(
+                "Without ready Guard: own MP above",
+                configuration.GuardianNoGuardMinimumMpPercent, 0, 100,
+                value => configuration.GuardianNoGuardMinimumMpPercent = value,
+                "%d%%");
             changed |= Checkbox(
                 "After accepted Auto Guardian: Quick Chat + Bind pair (party-visible)",
                 configuration.PaladinGuardianAnnounceAndMark,
@@ -95,7 +111,8 @@ internal sealed partial class SettingsWindow
                 "Critical HP wins first, then more enemy focus and lower HP.");
             ImGui.TextDisabled(
                 "Hold a gameplay key to allow the save. Purify remains first and Guardian is next. Your own Guard " +
-                "must be ready so the jump does not leave you without protection. Seiton keeps one ally during the attempt and does not visibly change your target. " +
+                $"must be ready, or your HP must be above {configuration.GuardianNoGuardMinimumHpPercent}% and your MP above {configuration.GuardianNoGuardMinimumMpPercent}%. " +
+                "Both limits must be exceeded. Active Guard is never cancelled. Seiton keeps one ally during the attempt and does not visibly change your target. " +
                 "The activation card means FFXIV accepted the request, not " +
                 "that the ally was definitely saved.");
             ImGui.TextDisabled(

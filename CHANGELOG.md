@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.44.1.1
+
+- Automatic helpers cannot cancel your active or already accepted Guard. The
+  final check now also follows an exact helper action into the game's queue.
+- Guard stays protected until its status is removed, including a briefly missing
+  duration. Rejected Guard presses remain free to retry.
+- Helper Status shows the last action stopped by the final Guard protection.
+- Guardian shoutouts can wait through a brief typing/UI delay before their first
+  native invocation, without repeating a possibly delivered message.
+- PLD Intervene pauses while you protect an ally, use Guard, or have less than
+  3,000 MP. These checks also apply before cancelling your cast.
+- Guardian can save without ready Guard when you exceed both configured resource
+  limits. Defaults: above 80% HP and above 60% MP, adjustable under Job Tools.
+- Smart Action can damage verified weakened Guard; CC immunity, Chiten, and other
+  protection rules remain intact.
+- Added opt-in Auto Shield Smite against full enemy Guard, including enabled
+  Wolves' Den duels. It keeps your own Guard intact and does not cancel casts.
+- Offline scenarios cover late Guard, exact queue ownership, PLD resource/link
+  checks, and unsent shoutouts. Actual in-game Guard cancellation and chat receipt
+  still need confirmation; other plugins/server-side removal are not ruled out.
+
 ## 0.44.1.0
 
 - Job Tools starts with your current job; use Show all jobs to browse the rest.

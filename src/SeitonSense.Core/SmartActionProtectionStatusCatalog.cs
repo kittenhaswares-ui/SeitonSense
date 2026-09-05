@@ -21,13 +21,16 @@ public readonly record struct SmartActionProtectionStatusDefinition(
 public sealed class SmartActionProtectionStatusCatalog
 {
     private readonly IReadOnlyDictionary<uint, SmartActionProtectionKind> entries;
+    private readonly uint verifiedWeakenedGuardStatusId;
 
     private SmartActionProtectionStatusCatalog(
         IReadOnlyDictionary<uint, SmartActionProtectionKind> entries,
-        bool isVerified)
+        bool isVerified,
+        uint verifiedWeakenedGuardStatusId = 0)
     {
         this.entries = entries;
         IsVerified = isVerified;
+        this.verifiedWeakenedGuardStatusId = verifiedWeakenedGuardStatusId;
     }
 
     public static SmartActionProtectionStatusCatalog Empty { get; } =
@@ -38,9 +41,22 @@ public sealed class SmartActionProtectionStatusCatalog
     public int Count => entries.Count;
 
     public SmartActionProtectionKind Classify(uint statusId) =>
-        entries.TryGetValue(statusId, out var kind)
+        IsWeakenedGuardStatus(statusId)
+            ? SmartActionProtectionKind.None
+            : entries.TryGetValue(statusId, out var kind)
             ? kind
             : SmartActionProtectionKind.None;
+
+    public bool IsWeakenedGuardStatus(uint statusId) =>
+        statusId != 0 && statusId == verifiedWeakenedGuardStatusId;
+
+    // This modifies damage targeting only. CC immunity is independently read
+    // from the unchanged CC status catalog, including status 3673.
+    public SmartActionProtectionStatusCatalog WithVerifiedWeakenedGuard(uint statusId) =>
+        IsVerified && statusId == SmartActionProtectionRules.WeakenedGuardStatusId &&
+        entries.TryGetValue(statusId, out var kind) && kind == SmartActionProtectionKind.Guard
+            ? new SmartActionProtectionStatusCatalog(entries, true, statusId)
+            : this;
 
     public static SmartActionProtectionStatusCatalog Create(
         IEnumerable<SmartActionProtectionStatusDefinition>? definitions)

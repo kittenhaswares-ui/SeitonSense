@@ -122,6 +122,24 @@ public static class DefensiveUtilityRules
     // without turning one Guard request into an unbounded helper lockout.
     public const long GuardPropagationLatchMilliseconds = 1_500;
 
+    public static bool IsOwnGuardStatusPresent(uint statusId) =>
+        statusId is MiracleGuardFollowupRules.GuardStatusId or
+            MiracleGuardFollowupRules.GuardStatusAlternateId;
+
+    public static bool CanUseGuardianWithGuardOrHighResources(
+        bool guardReady,
+        uint currentHp,
+        uint maximumHp,
+        uint currentMp,
+        uint maximumMp,
+        int minimumHpPercent = 80,
+        int minimumMpPercent = 60) =>
+        guardReady ||
+        (maximumHp > 0 && currentHp <= maximumHp &&
+         maximumMp > 0 && currentMp <= maximumMp &&
+         (ulong)currentHp * 100UL > (ulong)maximumHp * (uint)Math.Clamp(minimumHpPercent, 0, 100) &&
+         (ulong)currentMp * 100UL > (ulong)maximumMp * (uint)Math.Clamp(minimumMpPercent, 0, 100));
+
     /// <summary>
     /// Combines the independent job-specific Guardian pass and later generic
     /// Guard pass without relying on a snapshot from the previous framework

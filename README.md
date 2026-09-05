@@ -3,6 +3,18 @@
 Seiton Sense is a local PvP awareness HUD with pressure tracking, nameplate
 cues, warnings, job helpers, Smart Action, and target highlights.
 
+Version 0.44.1.1 strengthens own-Guard protection at the final helper boundary,
+including exact deferred native-queue actions. Only accepted Guard starts the
+propagation protection; a rejected press remains immediately retryable. Helper
+Status shows the last action blocked there. Guardian shoutouts retain unsent
+messages through short UI/typing delays. PLD Intervene pauses during your own
+Guard, your Guardian link, or below 3,000 MP. Guardian can also save without ready
+Guard above configurable self-resource thresholds (default: strictly over 80%
+HP and 60% MP). Job Tools includes opt-in keyless Auto Shield Smite against full
+enemy Guard. Smart Action can damage the verified weakened Guard form without
+removing its separate CC immunity. These are source/test-verified changes;
+in-game cancellation causes and actual Quick Chat receipt still need testing.
+
 Version 0.44.1.0 makes settings easier to browse: Job Tools starts with your
 current job, and Helper Status explains waiting helpers before showing technical
 details. `/seitonsam` additionally covers the game's gameplay-movement and
@@ -2697,7 +2709,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 659-test Core registry, twenty-five plugin self-tests,
+For the current source, the exact 669-test Core registry, forty-six plugin self-tests,
 and source checks pin configuration schema 53, the shared monotonic response clock and framework
 epoch, true not-ready-to-ready wakeups, strict unchanged-queue critical recovery,
 the immutable release-independent tap-to-land buffer, active-Sprint repeat

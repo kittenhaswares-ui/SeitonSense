@@ -186,11 +186,11 @@ public static class SmartRecuperateRules
     public const long RecastMilliseconds = RecastHundredMilliseconds * 100L;
 
     /// <summary>
-    /// Higher-priority recovery yields only to exact live Guard. A provisional
-    /// hook observation is deliberately not an input to this rule.
+    /// Recovery yields to exact live Guard or accepted Guard propagation.
+    /// Rejected/ambiguous provisional requests never count as propagation.
     /// </summary>
-    public static bool ShouldSuppressForOwnGuard(bool exactGuardActive) =>
-        exactGuardActive;
+    public static bool ShouldSuppressForOwnGuard(bool exactGuardActiveOrPropagating) =>
+        exactGuardActiveOrPropagating;
 
     public static SmartRecuperateDecision Observe(
         SmartRecuperateObservation observation) =>

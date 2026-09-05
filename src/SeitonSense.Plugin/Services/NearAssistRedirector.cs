@@ -15,6 +15,18 @@ using GameAction = Lumina.Excel.Sheets.Action;
 
 namespace SeitonSense.Plugin.Services;
 
+internal enum PluginOwnedGuardVetoSource : byte
+{
+    Helper,
+    NativeQueue,
+    Turbo,
+    Buffer,
+}
+
+internal sealed record PluginOwnedGuardVetoDiagnostics(
+    long BlockedCount, uint LastActionId, long LastBlockedAtMilliseconds,
+    PluginOwnedGuardVetoSource Source, bool LocationAction, bool GuardConfirmed);
+
 internal enum ExplicitAutoGuardBreakBoundary : byte
 {
     StandardAction = 1,
@@ -291,8 +303,19 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private FarHelpFallbackSuppressionState farHelpFallbackSuppressionState =
         FarHelpFallbackSuppressionState.Initial;
     private LocalGuardActionAttempt? latestLocalGuardActionAttempt;
+    // A later provisional/ambiguous press must not erase an earlier accepted
+    // Guard's original propagation proof. This never claims live activation.
+    private LocalGuardActionAttempt? latestClientAcceptedLocalGuardActionAttempt;
     private long localGuardActionAttemptGeneration;
     private AutoGuardProtectionState autoGuardProtectionState = AutoGuardProtectionState.Initial;
+    private readonly PluginOwnedGuardBoundary pluginOwnedGuardBoundary = new();
+    private readonly QueuedHelperGuardOwnership queuedHelperGuardOwnership = new();
+    private long pluginOwnedGuardVetoCount;
+    private PluginOwnedGuardVetoDiagnostics pluginOwnedGuardVetoDiagnostics =
+        new(0, 0, 0, PluginOwnedGuardVetoSource.Helper, false, false);
+
+    internal PluginOwnedGuardVetoDiagnostics PluginOwnedGuardVetoDiagnostics =>
+        Volatile.Read(ref pluginOwnedGuardVetoDiagnostics);
     private ExplicitAutoGuardBreakScope? explicitAutoGuardBreakScope;
     private long autoGuardProtectionArmedCount;
     private long autoGuardProtectionBlockedActionCount;
@@ -520,7 +543,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
         lock (guardAttemptGate)
         {
-            if (latestLocalGuardActionAttempt is not { } attempt ||
+            if (latestClientAcceptedLocalGuardActionAttempt is not { } attempt ||
                 !attempt.ClientAccepted ||
                 attempt.TerritoryId != territoryId ||
                 attempt.LocalGameObjectId != localGameObjectId ||
@@ -674,7 +697,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
         lock (guardAttemptGate)
         {
-            if (latestLocalGuardActionAttempt is not { } attempt ||
+            if (latestClientAcceptedLocalGuardActionAttempt is not { } attempt ||
                 !attempt.ClientAccepted ||
                 attempt.TerritoryId != territoryId ||
                 attempt.LocalGameObjectId != localGameObjectId ||
@@ -764,6 +787,16 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             }
 
             latestLocalGuardActionAttempt = attempt with { ClientAccepted = true };
+            latestClientAcceptedLocalGuardActionAttempt = latestLocalGuardActionAttempt;
+        }
+    }
+
+    internal void ClearLocalGuardActionObservations()
+    {
+        lock (guardAttemptGate)
+        {
+            latestLocalGuardActionAttempt = null;
+            latestClientAcceptedLocalGuardActionAttempt = null;
         }
     }
 
@@ -779,6 +812,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         PredictiveCcBrakeBypassIntent? predictiveCcBrakeBypass = null)
     {
         ArgumentNullException.ThrowIfNull(action);
+        using var guardOwnership = pluginOwnedGuardBoundary.Enter();
         var previousPredictiveScope = predictiveCcBrakeBypassScope;
         predictiveCcBrakeBypassScope =
             previousPredictiveScope is null &&
@@ -843,6 +877,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             return default;
         }
 
+        using var guardOwnership = pluginOwnedGuardBoundary.Enter();
         var previousScope = exactAutomaticActionBoundaryScope;
         var scope = new ExactAutomaticActionBoundaryScope(this, intent);
         exactAutomaticActionBoundaryScope = scope;
@@ -874,7 +909,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         out int enemySlot,
         out TargetPressureActorIdentity target,
         out bool selectedWinnerInvalidated,
-        out string reason)
+        out string reason,
+        bool guardTargetsOnly = false)
     {
         enemySlot = 0;
         target = default;
@@ -911,13 +947,16 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
              out var rewritten,
              out var smartWinnerSelected,
              out var selectedSlot,
-             out var selectionReason);
+             out var selectionReason,
+             guardTargetsOnly);
 
         if (rewritten &&
             TryResolveExactHeldSmartActionTargetIdentity(
                 selectedSlot,
                 selectedTargetId,
-                out target))
+                out target) &&
+            (!guardTargetsOnly || IsFullGuardSmartActionTarget(
+                objectTable.SearchByEntityId(target.EntityId) as IBattleChara)))
         {
             enemySlot = selectedSlot;
             reason = selectionReason;
@@ -943,7 +982,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 expectedSlot: 0,
                 expectedTarget: default,
                 out enemySlot,
-                out target))
+                out target) &&
+            (!guardTargetsOnly || IsFullGuardSmartActionTarget(
+                objectTable.SearchByEntityId(target.EntityId) as IBattleChara)))
         {
             reason = $"{selectionReason}; exact safe hard-target fallback";
             return true;
@@ -957,6 +998,10 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     /// Revalidates only a previously frozen held Smart Action tuple. Ranking is
     /// never rerun here, so drift cancels instead of selecting another enemy.
     /// </summary>
+    internal bool IsFullGuardSmartActionTarget(IBattleChara? target) =>
+        target is not null && target.StatusList.Any(status =>
+            (ClassifySmartActionProtectionStatus(status.StatusId) & SmartActionProtectionKind.Guard) != 0);
+
     internal bool CanUseExactHeldSmartActionTarget(
         uint resolvedActionId,
         int enemySlot,
@@ -1669,11 +1714,13 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
     internal void Reset()
     {
+        queuedHelperGuardOwnership.Clear();
         RevokeOwnedSamuraiCastProtection();
         RevokeExplicitAutoGuardBreak();
         ClearToken("Reset");
         ClearSmartKardiaTrigger();
         ClearAutoGuardProtection("Reset");
+        ClearLocalGuardActionObservations();
     }
 
     public void Dispose()
@@ -1683,13 +1730,14 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         if (started) framework.Update -= OnFrameworkUpdate;
         started = false;
         integratedInputRuntime = null;
+        queuedHelperGuardOwnership.Clear();
         RevokeOwnedSamuraiCastProtection();
         RevokeExplicitAutoGuardBreak();
         ClearToken("Disposed");
         ClearSmartKardiaTrigger();
+        ClearLocalGuardActionObservations();
         lock (guardAttemptGate)
         {
-            latestLocalGuardActionAttempt = null;
             autoGuardProtectionState = AutoGuardProtectionState.Initial;
             autoGuardProtectionLastEvent = "Disposed";
         }
@@ -1817,8 +1865,49 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         var syntheticHeldRepeat =
             !bypassRedirect &&
             integratedRuntime?.IsSyntheticHotbarRepeatExecution == true;
+        var synchronousHelperOwned = pluginOwnedGuardBoundary.IsCurrentOwner ||
+                                     syntheticHeldRepeat || integratedBufferReplayDepth > 0;
+        var queuedHelperReplayToken = 0L;
+        var queuedHelperReplay = false;
+        var queuedHelperGuardConfirmed = false;
+        if (synchronousHelperOwned || queuedHelperGuardOwnership.HasOwnership)
+        {
+            try
+            {
+                var queueContext = ReadQueuedHelperGuardContext();
+                var queueNow = Environment.TickCount64;
+                var queued = CaptureQueuedHelperBoundary(thisPtr, 0);
+                if (queuedHelperGuardOwnership.HasOwnership)
+                    queuedHelperGuardConfirmed = TryReadExactLocalGuardActiveOrPropagating(
+                        queueContext.LocalPlayer, out var guardProtectsQueue,
+                        requireClientAcceptedPropagation: true) && guardProtectsQueue;
+                var invocation = new QueuedHelperQueueInvocation(
+                    actionType, actionId, targetId, extraParam, mode, comboRouteId);
+                if (!synchronousHelperOwned && mode != ActionManager.UseActionMode.Queue)
+                {
+                    var isManualGuard = actionType is (ActionType.Action or ActionType.PvPAction) &&
+                        ResolveActionId(thisPtr, actionType, actionId) == EnemyCombatConstants.GuardActionId;
+                    queuedHelperGuardOwnership.ObserveFreshUserAction(invocation, isManualGuard);
+                }
+
+                if (mode == ActionManager.UseActionMode.Queue)
+                    queuedHelperReplay = queuedHelperGuardOwnership.TryMatchExactQueueReplay(
+                        invocation, queued, queueContext, queueNow, out queuedHelperReplayToken,
+                        queuedHelperGuardConfirmed);
+                else
+                    queuedHelperGuardOwnership.ObservePostCall(queued, queueContext, queueNow,
+                        ownGuardActiveOrAcceptedPropagation: queuedHelperGuardConfirmed);
+            }
+            catch
+            {
+                // Missing ownership telemetry must never claim a manual press.
+                queuedHelperGuardOwnership.Clear();
+            }
+        }
         var pluginOwnedHeldRetry =
-            syntheticHeldRepeat || integratedBufferReplayDepth > 0;
+            syntheticHeldRepeat || integratedBufferReplayDepth > 0 || queuedHelperReplay;
+        var exactOwnedQueuedGuardContinuation = queuedHelperReplay &&
+            actionId == EnemyCombatConstants.GuardActionId;
         if (ShouldBlockActionDuringOwnedSamuraiCast(thisPtr, actionType, actionId))
             return false;
         // A ranked Smart Action target may be invisible to <t>. When its first
@@ -1941,7 +2030,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         // first Guard request land, but it is never fresh player intent to
         // toggle an active or still-propagating Guard off. A released and
         // freshly pressed physical Guard key remains the deliberate cancel.
-        if (ShouldBlockSyntheticOwnGuardRepeat(thisPtr, actionType, actionId))
+        if (!exactOwnedQueuedGuardContinuation &&
+            ShouldBlockSyntheticOwnGuardRepeat(thisPtr, actionType, actionId))
             return false;
 
         // A successful local Guard press is recorded only at its exact native
@@ -1951,6 +2041,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         if (ShouldBlockRecentOwnGuardRepeatPress(thisPtr, actionType, actionId))
             return false;
 
+        var exactExplicitGuardBreak = false;
         // This runs before redirect/token work. A random action cannot both
         // cancel an automatically owned Guard and consume a macro one-shot.
         if (TryConsumeExplicitAutoGuardBreak(
@@ -1958,6 +2049,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 actionId,
                 ExplicitAutoGuardBreakBoundary.StandardAction))
         {
+            exactExplicitGuardBreak = true;
             ClearAutoGuardProtection("Released: explicit camera-back dash command override");
         }
         else if (ShouldBlockPluginOwnedGuardCancellingRepeat(
@@ -2854,6 +2946,19 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             }
         }
 
+        // Re-read own Guard at the last plugin boundary, including accepted
+        // propagation. This covers all helper scopes, not just Turbo/Chase,
+        // and is independent of the optional one-second manual repeat lock.
+        // Only an exact owned native Guard continuation ignores its own
+        // submission marker so the first queued activation can actually run.
+        if (ShouldBlockPluginOwnedGuardAtFinalBoundary(
+                actionType, pluginOwnedHeldRetry, exactExplicitGuardBreak, actionId,
+                queuedHelperReplay ? PluginOwnedGuardVetoSource.NativeQueue :
+                integratedBufferReplayDepth > 0 ? PluginOwnedGuardVetoSource.Buffer :
+                syntheticHeldRepeat ? PluginOwnedGuardVetoSource.Turbo : PluginOwnedGuardVetoSource.Helper,
+                locationAction: false, exactOwnedQueuedGuardContinuation))
+            return false;
+
         // Observe Guard only after every redirect, brake, replay, and final
         // helper veto has passed. Capture the exact native boundary so a clean
         // client rejection can retract only the just-created generation.
@@ -2885,6 +2990,23 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 forwardedTargetId,
                 ownedSamuraiCastTapGeneration)
             : null;
+        var observeNativeHelperQueue = synchronousHelperOwned ||
+                                       queuedHelperReplay || queuedHelperGuardOwnership.HasOwnership;
+        var helperQueueBefore = default(ClientActionAttemptFingerprint);
+        var helperQueueContext = default(QueuedHelperGuardContext);
+        if (observeNativeHelperQueue)
+        {
+            try
+            {
+                helperQueueContext = ReadQueuedHelperGuardContext();
+                helperQueueBefore = CaptureQueuedHelperBoundary(
+                    thisPtr, ResolveActionId(thisPtr, actionType, actionId));
+            }
+            catch
+            {
+                queuedHelperGuardOwnership.Clear();
+            }
+        }
         var clientAccepted = false;
         try
         {
@@ -2902,11 +3024,27 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             }
             catch
             {
+                if (observeNativeHelperQueue)
+                    ObserveQueuedHelperNativeCompletion(thisPtr, actionType, actionId,
+                        forwardedTargetId, extraParam, comboRouteId, helperQueueBefore,
+                        helperQueueContext, queuedHelperReplayToken,
+                        captureNewOwnership: synchronousHelperOwned && !exactExplicitGuardBreak &&
+                                             mode != ActionManager.UseActionMode.Queue,
+                        clientAccepted: false,
+                        ownGuardActiveOrAcceptedPropagation: queuedHelperGuardConfirmed);
                 integratedRuntime?.ActionBuffer.AbandonExactStandardHotbarRoot(
                     integratedAttempt,
                     "Native action boundary threw; buffer observation retired");
                 throw;
             }
+
+            if (observeNativeHelperQueue)
+                ObserveQueuedHelperNativeCompletion(thisPtr, actionType, actionId,
+                    forwardedTargetId, extraParam, comboRouteId, helperQueueBefore,
+                    helperQueueContext, queuedHelperReplayToken,
+                    captureNewOwnership: synchronousHelperOwned && !exactExplicitGuardBreak &&
+                                         mode != ActionManager.UseActionMode.Queue,
+                    clientAccepted, queuedHelperGuardConfirmed);
 
             // Arm the accepted-cast lease before releasing the synchronous
             // in-flight owner. Movement therefore sees an overlap, never the
@@ -2983,6 +3121,65 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         if (clientAccepted && hasSmartKardiaPreflight)
             ArmAcceptedSmartKardiaTrigger(smartKardiaPreflight);
         return clientAccepted;
+    }
+
+    private QueuedHelperGuardContext ReadQueuedHelperGuardContext()
+    {
+        if (!started || disposed || !configuration.Enabled || !clientState.IsLoggedIn)
+            return default;
+        var local = objectTable.LocalPlayer;
+        return local is null ? default : new QueuedHelperGuardContext(
+            clientState.TerritoryType,
+            new TargetPressureActorIdentity(local.GameObjectId, local.EntityId));
+    }
+
+    private static ClientActionAttemptFingerprint CaptureQueuedHelperBoundary(
+        ActionManager* actionManager, uint resolvedActionId) => actionManager == null
+        ? default
+        : new ClientActionAttemptFingerprint(
+            Captured: true, actionManager->ActionQueued,
+            (uint)actionManager->QueuedActionType, actionManager->QueuedActionId,
+            (ulong)actionManager->QueuedTargetId, actionManager->QueuedExtraParam,
+            (uint)actionManager->QueueType, actionManager->QueuedComboRouteId,
+            0, 0, 0, resolvedActionId, false, 0);
+
+    private void ObserveQueuedHelperNativeCompletion(
+        ActionManager* actionManager, ActionType actionType, uint actionId,
+        ulong forwardedTargetId, uint extraParam, uint comboRouteId,
+        ClientActionAttemptFingerprint before, QueuedHelperGuardContext beforeContext,
+        long matchedReplayToken, bool captureNewOwnership, bool clientAccepted,
+        bool ownGuardActiveOrAcceptedPropagation)
+    {
+        try
+        {
+            var context = ReadQueuedHelperGuardContext();
+            if (!beforeContext.IsValid || context != beforeContext)
+            {
+                queuedHelperGuardOwnership.Clear();
+                return;
+            }
+            var resolvedActionId = ResolveActionId(actionManager, actionType, actionId);
+            var after = CaptureQueuedHelperBoundary(actionManager, resolvedActionId);
+            var now = Environment.TickCount64;
+            if (captureNewOwnership)
+            {
+                // This method runs only after Original was entered. Queue
+                // provenance is independent of the native acceptance result.
+                queuedHelperGuardOwnership.Capture(nativeBoundaryInvoked: true, before, after,
+                    new QueuedHelperGuardRequest(actionType, actionId, before.AdjustedActionId,
+                        forwardedTargetId, extraParam, comboRouteId), context, now);
+            }
+            else
+            {
+                queuedHelperGuardOwnership.ObservePostCall(after, context, now,
+                    matchedReplayToken, replayAccepted: clientAccepted,
+                    ownGuardActiveOrAcceptedPropagation);
+            }
+        }
+        catch
+        {
+            queuedHelperGuardOwnership.Clear();
+        }
     }
 
     private CastedMacroRedirectDecision TryConsumeCastedMacroRedirect(
@@ -3949,11 +4146,13 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         if (ShouldBlockRecentOwnGuardRepeatPress(thisPtr, actionType, actionId))
             return false;
 
+        var exactExplicitGuardBreak = false;
         if (TryConsumeExplicitAutoGuardBreak(
                 actionType,
                 actionId,
                 ExplicitAutoGuardBreakBoundary.LocationAction))
         {
+            exactExplicitGuardBreak = true;
             // Spending the explicit command gives up ownership before the native
             // call, even if Shukuchi is then rejected. The scope is consumed and
             // removed before Original, so no reentrant location action can inherit
@@ -3969,6 +4168,14 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         {
             return false;
         }
+
+        if (ShouldBlockPluginOwnedGuardAtFinalBoundary(
+                actionType, pluginOwnedRepeat, exactExplicitGuardBreak, actionId,
+                integratedBufferReplayDepth > 0 ? PluginOwnedGuardVetoSource.Buffer :
+                integratedInputRuntime?.IsSyntheticHotbarRepeatExecution == true
+                    ? PluginOwnedGuardVetoSource.Turbo : PluginOwnedGuardVetoSource.Helper,
+                locationAction: true))
+            return false;
 
         return useActionLocationHook!.Original(
             thisPtr,
@@ -4306,6 +4513,43 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 exception,
                 "Seiton Sense Guard repeat protection failed open for one action.");
             return false;
+        }
+    }
+
+    private bool ShouldBlockPluginOwnedGuardAtFinalBoundary(
+        ActionType actionType,
+        bool pluginOwnedRepeat,
+        bool exactExplicitGuardBreak,
+        uint actionId,
+        PluginOwnedGuardVetoSource source,
+        bool locationAction,
+        bool exactOwnedQueuedGuardContinuation = false)
+    {
+        if (!IsSupportedActionType(actionType)) return false;
+        var guardConfirmed = false;
+        var blocked = pluginOwnedGuardBoundary.ShouldBlock(
+            pluginOwnedRepeat,
+            exactExplicitGuardBreak,
+            () => ReadGuard(includePropagation: true),
+            exactOwnedQueuedGuardContinuation,
+            () => ReadGuard(includePropagation: false));
+        if (blocked)
+        {
+            Volatile.Write(ref pluginOwnedGuardVetoDiagnostics, new PluginOwnedGuardVetoDiagnostics(
+                Interlocked.Increment(ref pluginOwnedGuardVetoCount), actionId,
+                Environment.TickCount64, source, locationAction, guardConfirmed));
+        }
+        return blocked;
+
+        bool ReadGuard(bool includePropagation)
+        {
+            var local = objectTable.LocalPlayer;
+            if (!IsLivePlayer(local)) return true;
+            var guardReadSucceeded = TryReadExactLocalGuardActiveOrPropagating(
+                new TargetPressureActorIdentity(local!.GameObjectId, local.EntityId), out var active,
+                includePropagation: includePropagation);
+            guardConfirmed = guardReadSucceeded && active;
+            return !guardReadSucceeded || active;
         }
     }
 
@@ -5030,7 +5274,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         out bool rewritten,
         out bool smartWinnerSelected,
         out int selectedSlot,
-        out string reason)
+        out string reason,
+        bool guardTargetsOnly = false)
     {
         rewritten = false;
         smartWinnerSelected = false;
@@ -5166,6 +5411,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         {
             var slot = canonicalEnemy.Slot;
             var enemy = canonicalEnemy.Player;
+            if (guardTargetsOnly && !IsFullGuardSmartActionTarget(enemy)) continue;
             var reachTier = SmartTargetReachTier.RangedOrOther;
             var normalReachEligible = true;
             if (!farthestReachable &&
@@ -5380,6 +5626,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             ? ActionManager.GetActionInRangeOrLoS(resolvedActionId, sourceObject, currentTargetObject)
             : uint.MaxValue;
         var finalProtectionSafe = currentEnemy is not null &&
+                                  (!guardTargetsOnly || IsFullGuardSmartActionTarget(currentEnemy)) &&
                                   TryBuildSmartActionProtectionSnapshot(
                                       local,
                                       partyEntityIds,
@@ -6122,43 +6369,55 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     }
 
     internal bool IsExactLocalGuardActiveOrPropagating(
-        TargetPressureActorIdentity expectedLocalPlayer)
+        TargetPressureActorIdentity expectedLocalPlayer) =>
+        !TryReadExactLocalGuardActiveOrPropagating(expectedLocalPlayer, out var active) || active;
+
+    private bool TryReadExactLocalGuardActiveOrPropagating(
+        TargetPressureActorIdentity expectedLocalPlayer, out bool active,
+        bool requireClientAcceptedPropagation = false,
+        bool includePropagation = true)
     {
+        active = false;
         try
         {
             var local = objectTable.LocalPlayer;
             if (!expectedLocalPlayer.IsValid ||
                 !IsLivePlayer(local) ||
                 GetNativeObject(local!) == null)
+                return false;
+            var currentLocalPlayer = new TargetPressureActorIdentity(
+                local!.GameObjectId, local.EntityId);
+            if (currentLocalPlayer != expectedLocalPlayer) return false;
+            if (DefensiveUtilityProbe.HasActiveGuard(local))
             {
+                active = true;
                 return true;
             }
-            var currentLocalPlayer = new TargetPressureActorIdentity(
-                local!.GameObjectId,
-                local.EntityId);
-            if (currentLocalPlayer != expectedLocalPlayer) return true;
-            if (DefensiveUtilityProbe.HasActiveGuard(local)) return true;
 
-            return TryGetRecentExactLocalGuardAttempt(
-                clientState.TerritoryType,
-                local.GameObjectId,
-                local.EntityId,
-                Environment.TickCount64,
-                DefensiveUtilityRules.GuardPropagationLatchMilliseconds,
-                out _);
+            if (!includePropagation) return true;
+
+            active = requireClientAcceptedPropagation
+                ? TryGetRecentExactClientAcceptedLocalGuardAttempt(
+                    clientState.TerritoryType, local.GameObjectId, local.EntityId,
+                    Environment.TickCount64, DefensiveUtilityRules.GuardPropagationLatchMilliseconds, out _)
+                : TryGetRecentExactLocalGuardAttempt(
+                    clientState.TerritoryType, local.GameObjectId, local.EntityId,
+                    Environment.TickCount64, DefensiveUtilityRules.GuardPropagationLatchMilliseconds, out _);
+            return true;
         }
         catch
         {
-            // This dependency owns a native safety boundary. Uncertain current
-            // local identity or Guard telemetry must veto the helper action.
-            return true;
+            // The caller can still veto on uncertainty without falsely
+            // reporting that Guard was positively observed.
+            active = false;
+            return false;
         }
     }
 
     /// <summary>
-    /// Exact-status-only Guard gate for Purify/Recuperate, which outrank a
-    /// merely provisional Guard request. Identity uncertainty still fails
-    /// closed; a hook observation alone is intentionally not enough.
+    /// Live-status-only reader for boundaries requiring confirmed activation.
+    /// Identity uncertainty still fails closed; an accepted request alone is
+    /// not proof that the live Guard status has appeared.
     /// </summary>
     internal bool IsExactLocalGuardActive(
         TargetPressureActorIdentity expectedLocalPlayer)
@@ -6878,18 +7137,21 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         var context = ResolveContext();
         if (context == SupportedPvPContext.CrystallineConflict)
         {
-            return !TryValidateExactHeldSmartActionTarget(
+            if (!TryValidateExactHeldSmartActionTarget(
                 actionId,
                 targetId,
                 expectedSlot: 0,
                 expectedTarget: default,
                 out _,
-                out _);
+                out var exactTarget)) return true;
+            return actionId == PaladinShieldSmiteRules.ActionId &&
+                   !IsFullGuardSmartActionTarget(objectTable.SearchByEntityId(exactTarget.EntityId) as IBattleChara);
         }
 
+        var denPolicy = AutomaticSmartActionWolvesDenRules.Get(actionId);
         if (context != SupportedPvPContext.WolvesDen ||
             !configuration.EnableWolvesDenTesting ||
-            actionId != BardRepellingShotRules.RepellingShotActionId)
+            denPolicy == AutomaticWolvesDenProtectionPolicy.None)
         {
             return true;
         }
@@ -6910,7 +7172,19 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
         // A verified dummy has no player protection semantics. A duel player
         // receives the same latest-frame Chiten/Guard/CC-immunity proof as CC.
-        if (currentTarget is not IPlayerCharacter player) return false;
+        if (currentTarget is not IPlayerCharacter player)
+            return denPolicy == AutomaticWolvesDenProtectionPolicy.GuardBreakDamage;
+        if (denPolicy == AutomaticWolvesDenProtectionPolicy.GuardBreakDamage)
+        {
+            // Shield Smite wants Guard but is damage, not a CC utility. Reuse
+            // the full Den SmartAction area/Chiten/Cover/invulnerability proof;
+            // do not run BRD's Guard/CC-immunity veto against this action.
+            return local is null || !IsFullGuardSmartActionTarget(player) ||
+                   !smartActionGuardBypassActions.Contains(actionId) ||
+                   !TryGetExactResolvedPvpActionMetadata(actionId, out var action) ||
+                   !TryEvaluateExactSmartActionTargetProtection(actionId, local, action, targetId,
+                       out var canonicalTargetId, out _) || canonicalTargetId != targetId;
+        }
         if (!smartActionProtectionStatuses.IsVerified ||
             !IsExactCrowdControlUtilityTargetStatusSafe(actionId, player))
         {
@@ -7719,22 +7993,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             out tier);
     }
 
-    private static bool HasActiveGuardStatus(IPlayerCharacter player)
-    {
-        foreach (var status in player.StatusList)
-        {
-            if (status.StatusId is not (EnemyCombatConstants.GuardStatusId or
-                EnemyCombatConstants.GuardStatusAlternateId))
-            {
-                continue;
-            }
-
-            if (float.IsFinite(status.RemainingTime) && status.RemainingTime > 0f)
-                return true;
-        }
-
-        return false;
-    }
+    private static bool HasActiveGuardStatus(IPlayerCharacter player) =>
+        DefensiveUtilityProbe.HasActiveGuard(player);
 
     private static int CountExactCurrentStatus(
         IPlayerCharacter player,

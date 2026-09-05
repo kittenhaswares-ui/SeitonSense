@@ -131,9 +131,14 @@ internal sealed partial class SettingsWindow
         }
         if (job == 19)
         {
+            var smite = personalStatus.PaladinShieldSmiteDiagnostics;
+            Row("Shield Smite", "Auto", configuration.EnablePaladinShieldSmiteHelper,
+                smite.MetadataVerified ? string.Empty : "MetadataUnverified",
+                smite.LastEvent, smite.UseActionAttempted, smite.UseActionAccepted,
+                smite.AttemptCount, smite.AcceptedCount);
             var guardianRequest = defense.Action == DefensiveUtilityActionKind.Guardian;
             Row("Guardian", "Input", configuration.PaladinGuardianLowAlly,
-                string.Empty, "Watching for a critical or focused ally; your own Guard must also be ready.",
+                string.Empty, $"Watching for a critical or focused ally. Guard must be ready, or your HP must be above {configuration.GuardianNoGuardMinimumHpPercent}% and MP above {configuration.GuardianNoGuardMinimumMpPercent}%.",
                 guardianRequest && defense.UseActionAttempted, guardianRequest && defense.UseActionAccepted, ccOnly: true);
         }
         if (job == 32)
@@ -239,6 +244,31 @@ internal sealed partial class SettingsWindow
         }
         ImGui.EndTable();
         ImGui.Spacing();
+        var guardVeto = personalStatus.PluginOwnedGuardVetoDiagnostics;
+        if (guardVeto.BlockedCount > 0)
+        {
+            var source = guardVeto.Source switch
+            {
+                PluginOwnedGuardVetoSource.NativeQueue => "game queue",
+                PluginOwnedGuardVetoSource.Buffer => "action buffer",
+                PluginOwnedGuardVetoSource.Turbo => "Turbo repeat",
+                _ => "automatic helper",
+            };
+            var actionName = guardVeto.LastActionId switch
+            {
+                EnemyCombatConstants.RecuperateActionId => "Recuperate",
+                EnemyCombatConstants.PurifyActionId => "Purify",
+                EnemyCombatConstants.GuardActionId => "Guard repeat",
+                EnemyCombatConstants.GuardianActionId => "Guardian",
+                MiracleInterceptConfirmationRules.InterveneActionId => "Intervene",
+                PaladinShieldSmiteRules.ActionId => "Shield Smite",
+                _ => $"action #{guardVeto.LastActionId}",
+            };
+            var ageSeconds = Math.Max(0, Environment.TickCount64 - guardVeto.LastBlockedAtMilliseconds) / 1000;
+            ImGui.TextWrapped($"Last Guard protection: stopped {actionName} from {source}, {ageSeconds}s ago.");
+            if (!guardVeto.GuardConfirmed)
+                ImGui.TextWrapped("That helper was paused because Guard could not be checked safely; an active Guard was not confirmed.");
+        }
         ImGui.TextWrapped("This is the latest helper snapshot, not a combat log. Request counters do not prove a heal, hit, or save landed. Detailed reasons remain below.");
         if (job == 34) DrawSamuraiInputStatus();
     }

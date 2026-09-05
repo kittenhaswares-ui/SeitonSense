@@ -211,6 +211,8 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool PreGuardOnLowHpPressure { get; set; }
     public bool PaladinGuardianLowAlly { get; set; }
     public bool PaladinGuardianOnHeldKey { get; set; } = true;
+    public int GuardianNoGuardMinimumHpPercent { get; set; } = 80;
+    public int GuardianNoGuardMinimumMpPercent { get; set; } = 60;
     public bool PaladinGuardianAnnounceAndMark { get; set; }
     public bool EnableReactiveCcUtilities { get; set; }
     public bool ReactiveCcOnHeldKey { get; set; } = true;
@@ -218,6 +220,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool ReactiveCcAfterEnemyPurify { get; set; } = true;
     public bool ReactiveCcAfterEnemyGuard { get; set; } = true;
     public bool ReactiveCcPaladinIntervene { get; set; }
+    public bool EnablePaladinShieldSmiteHelper { get; set; }
     public float ReactiveCcPaladinInterveneMaximumRangeYalms { get; set; } = 20f;
     public bool ReactiveCcRedMageResolution { get; set; }
     public bool ReactiveCcRedMageViceOfThorns { get; set; }
@@ -712,6 +715,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
             DarkKnightShadowbringerMinimumHpPercent = 85;
             DarkKnightShadowbringerPressureLimitExclusive = 2;
             ReactiveCcPaladinIntervene = false;
+            EnablePaladinShieldSmiteHelper = false;
             ReactiveCcPaladinInterveneMaximumRangeYalms = 20f;
             ReactiveCcRedMageResolution = false;
             ReactiveCcSamuraiSotenMineuchi = false;
@@ -1066,6 +1070,8 @@ public sealed class PluginConfiguration : IPluginConfiguration
         PreGuardOnLowHpPressure = false;
         PaladinGuardianLowAlly = false;
         PaladinGuardianOnHeldKey = true;
+        GuardianNoGuardMinimumHpPercent = 80;
+        GuardianNoGuardMinimumMpPercent = 60;
         PaladinGuardianAnnounceAndMark = false;
         EnableReactiveCcUtilities = false;
         ReactiveCcOnHeldKey = true;
@@ -1073,6 +1079,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         ReactiveCcAfterEnemyPurify = true;
         ReactiveCcAfterEnemyGuard = true;
         ReactiveCcPaladinIntervene = false;
+        EnablePaladinShieldSmiteHelper = false;
         ReactiveCcPaladinInterveneMaximumRangeYalms = 20f;
         ReactiveCcRedMageResolution = false;
         ReactiveCcRedMageViceOfThorns = false;
@@ -1238,6 +1245,14 @@ public sealed class PluginConfiguration : IPluginConfiguration
     private bool ClampSettings()
     {
         var changed = false;
+        var guardianHp = Math.Clamp(GuardianNoGuardMinimumHpPercent, 0, 100);
+        var guardianMp = Math.Clamp(GuardianNoGuardMinimumMpPercent, 0, 100);
+        if (GuardianNoGuardMinimumHpPercent != guardianHp || GuardianNoGuardMinimumMpPercent != guardianMp)
+        {
+            GuardianNoGuardMinimumHpPercent = guardianHp;
+            GuardianNoGuardMinimumMpPercent = guardianMp;
+            changed = true;
+        }
         changed |= NormalizeCcBrakeSelections();
         changed |= NormalizeReactiveCcImpactCalibrations();
         var clamped = float.IsFinite(NearAssistMaxAllyDistance)

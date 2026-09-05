@@ -400,11 +400,17 @@ internal sealed class GuardianCommunicationService
             state.Episode is not { } episode ||
             episode.Token != command.EpisodeToken ||
             context != SupportedPvPContext.CrystallineConflict ||
-            ResolveSupportedPvPContext() != SupportedPvPContext.CrystallineConflict ||
-            !TryGetTextInputState(out var textInputActive) ||
-            textInputActive)
+            ResolveSupportedPvPContext() != SupportedPvPContext.CrystallineConflict)
         {
             return GuardianTeamCommunicationCommandOutcome.TerminalFailure;
+        }
+
+        if (!TryGetTextInputState(out var textInputActive) || textInputActive)
+        {
+            dispatchEvent = "Text input changed before invocation";
+            return command.Kind == GuardianTeamCommunicationCommandKind.SendQuickChat
+                ? GuardianTeamCommunicationCommandOutcome.DeferredBeforeInvocation
+                : GuardianTeamCommunicationCommandOutcome.TerminalFailure;
         }
 
         var exactLocal = ResolveExactLocal(localPlayer);
