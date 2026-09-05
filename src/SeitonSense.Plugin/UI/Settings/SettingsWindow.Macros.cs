@@ -8,6 +8,11 @@ internal sealed partial class SettingsWindow
     private bool DrawMacroHelpersPage()
     {
         var changed = false;
+        ImGui.TextUnformatted("PLD Guardian macro: /seitonpld");
+        ImGui.TextWrapped("Press once to cover an endangered ally in Guardian range, otherwise the closest ally within 6y. No target required and no target switch. Your own active Guard is protected. Automatic Guardian does not need to be enabled.");
+        ImGui.TextWrapped("Danger means 20% HP or less, 40% with two attackers, or 50% with three. Uses the normal Guardian announce/mark option in CC; Wolves' Den testing needs a friendly party member.");
+        ImGui.TextDisabled("This command uses Guardian itself. Do not add a second /pvpaction Guardian line.");
+        ImGui.Separator();
         ImGui.Spacing();
         ImGui.TextColored(new Vector4(0.3f, 0.8f, 1f, 1f), "MACRO TARGET HELPERS (OPT-IN)");
         changed |= Checkbox(

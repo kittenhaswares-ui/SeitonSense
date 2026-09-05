@@ -19,6 +19,12 @@ older than seven days are not shown as a tier; unlisted players remain Unknown.
 
 ## Local gameplay history
 
+The explicit `/seitonpld` command reads only current local party identity,
+health, distance and existing pressure observations. It may submit one Guardian
+action on the selected exact ally, without changing your visible target.
+An accepted action may use the existing CC Quick Chat and owned marker sequence
+when that preference is enabled. No macro history is saved or uploaded.
+
 Seiton Sense has no account, independent server, telemetry, or external gameplay
 upload. When local CC player history is enabled, the dedicated Player Stats
 feature intentionally stores bounded player names, Home Worlds, separate opponent/teammate W/L,
@@ -1354,8 +1360,10 @@ reset, configuration/context loss, or expiry and is not stored or transmitted.
 It does not claim server-confirmed protection or damage interception.
 
 The separate Guardian communication setting is persisted but disabled by
-default. Only a new client-accepted automatic Guardian episode in exact
-Crystalline Conflict can make it consume a bounded communication opportunity.
+default. Only a new client-accepted automatic Guardian or explicit `/seitonpld`
+episode in exact Crystalline Conflict can consume a bounded communication
+opportunity. The explicit macro carries consent only for its own accepted target;
+ordinary hotbar Guardian and other macros cannot inherit that consent.
 The helper revalidates the same frozen exact party slot before it may issue the
 client-localized CC Quick Chat row 35 (`Ziel decken`, displayed as `Ich decke
 ...` on a German client) for that party placeholder. This standardized message

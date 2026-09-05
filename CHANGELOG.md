@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.44.4.0
+
+- New PLD macro: `/seitonpld` uses Guardian without selecting a target.
+- Endangered allies take priority across Guardian's native range. Otherwise it
+  chooses the closest reachable party member within 6y; no candidate means no action.
+- Danger uses the existing rescue rules: up to 20% HP, up to 40% with two
+  attackers, or up to 50% with three. Stale pressure cannot unlock distant rescue.
+- This explicit command does not require automatic Guardian, ready Guard, or
+  automatic HP/MP thresholds. It never cancels your active Guard or creates a retry.
+- Accepted uses share your Guardian announce/mark setting in CC. The target and
+  party slot stay frozen; your selected target does not change. With Wolves' Den
+  testing enabled, the action can be tested on a friendly party member.
+- Offline tests cover range boundaries, danger priority, stale pressure,
+  invalid actors and exact communication ownership. Live game testing is pending.
+- Guardian Quick Chat was rebuilt around one canonical `/quickchat` command:
+  the quoted localized action name first, then the frozen party slot. This removes
+  the German-only target-first route. It sends once and never changes your target;
+  actual chat delivery still needs a live CC check.
+- Fixed CC hit confirmation: an older queued event could erase a newer accepted
+  attempt. Packet capture time and processing time are now kept separate, while
+  exact action, target, status, sequence and expiry checks remain intact. This is
+  a confirmation fix, not proof that every previously unconfirmed action landed.
+- Smart Action diagnostics now distinguish missing target proof, action metadata,
+  native range/visibility and protection blocks. The reported manual Shield Smite
+  failure is not yet reproduced; this update does not claim to fix that symptom.
+
 ## 0.44.3.0
 
 - Bigger incoming arrows, with an overall size slider and a repeating MCH/SCH

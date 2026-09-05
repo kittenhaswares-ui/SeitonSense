@@ -2324,7 +2324,8 @@ internal sealed class MiracleInterceptProbe
                     effect.EffectValue,
                     effect.GlobalSequence,
                     effect.SourceSequence,
-                    effect.ObservedAtMilliseconds));
+                    effect.ObservedAtMilliseconds),
+                processedAtMilliseconds: eventNow);
             confirmationState = decision.NextState;
             ObserveImpactTiming(timingPending, effect);
             if (decision.Confirmed)

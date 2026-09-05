@@ -304,6 +304,62 @@ internal static class MiracleInterceptConfirmationSelfTests
         var pending = Register(MiracleInterceptThreatKind.MarksmanSpite, accepted: true, now: 3_000).NextState;
         pending = MiracleInterceptConfirmationRules.ObserveTime(pending, 4_501);
         True(pending.Pending is null, "unconfirmed attempt expires and is never replayed");
+
+        QueuedCaptureTimeCannotReverseTheProcessingClock();
+    }
+
+    private static void QueuedCaptureTimeCannotReverseTheProcessingClock()
+    {
+        var registered = Register(MiracleInterceptThreatKind.PostGuardCrowdControl,
+            accepted: true, now: 1_000).NextState;
+        var observed = MiracleInterceptConfirmationRules.ObserveTime(registered, 1_100);
+
+        var staleUnrelated = MiracleInterceptConfirmationRules.ObserveActionEffect(
+            observed,
+            Effect(now: 990) with { TargetEntityId = Target + 1 },
+            processedAtMilliseconds: 1_110);
+        False(staleUnrelated.Confirmed, "a queued packet older than the accepted attempt cannot confirm");
+        Equal(registered.Pending!.Value, staleUnrelated.NextState.Pending!.Value,
+            "a stale unrelated packet must not erase the newer exact accepted attempt");
+        Equal(1_110L, staleUnrelated.NextState.LastObservedAtMilliseconds,
+            "queued capture time never rolls back the processing watermark");
+
+        var wrongSequence = MiracleInterceptConfirmationRules.ObserveActionEffect(
+            staleUnrelated.NextState,
+            Effect(now: 1_050, sourceSequence: 10),
+            processedAtMilliseconds: 1_120);
+        False(wrongSequence.Confirmed, "delayed processing cannot bypass exact source-sequence matching");
+        True(wrongSequence.NextState.Pending is not null, "wrong sequence leaves the accepted attempt intact");
+
+        var delayedExact = MiracleInterceptConfirmationRules.ObserveActionEffect(
+            wrongSequence.NextState,
+            Effect(now: 1_060),
+            processedAtMilliseconds: 1_130);
+        True(delayedExact.Confirmed, "an exact packet captured before the last frame watermark still confirms");
+        Equal(1L, delayedExact.NextState.TotalConfirmed, "the queued exact match confirms only once");
+        Equal(1_130L, delayedExact.TriggeredPopup!.Value.StartedAtMilliseconds,
+            "the local popup starts at processing, not an old packet timestamp");
+
+        var futurePacket = MiracleInterceptConfirmationRules.ObserveActionEffect(
+            observed,
+            Effect(now: 1_201),
+            processedAtMilliseconds: 1_200);
+        False(futurePacket.Confirmed, "a future capture timestamp cannot confirm");
+        True(futurePacket.NextState.Pending is not null, "an invalid packet does not erase the valid pending attempt");
+
+        var expired = MiracleInterceptConfirmationRules.ObserveActionEffect(
+            observed,
+            Effect(now: 1_200),
+            processedAtMilliseconds: 2_501);
+        False(expired.Confirmed, "late processing cannot resurrect an expired accepted attempt");
+        True(expired.NextState.Pending is null, "the original correlation deadline remains authoritative");
+
+        var reversedProcessingClock = MiracleInterceptConfirmationRules.ObserveActionEffect(
+            observed,
+            Effect(now: 1_050),
+            processedAtMilliseconds: 1_099);
+        False(reversedProcessingClock.Confirmed, "a genuine processing-clock reversal remains closed");
+        True(reversedProcessingClock.NextState.Pending is null, "clock reversal retires current pending state");
     }
 
     private static MiracleInterceptConfirmationDecision Register(

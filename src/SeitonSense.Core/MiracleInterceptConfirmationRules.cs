@@ -178,21 +178,29 @@ public static class MiracleInterceptConfirmationRules
     public static MiracleInterceptConfirmationDecision ObserveActionEffect(
         MiracleInterceptConfirmationState previous,
         MiracleInterceptLandedObservation observation,
-        bool hardReset = false)
+        bool hardReset = false,
+        long? processedAtMilliseconds = null)
     {
         previous = Normalize(previous);
+        // Captured packets may wait in a queue while a framework observation
+        // or a newer accepted attempt advances the processing clock. That is
+        // not a clock reversal. Keep capture time for exact attempt correlation
+        // and processing time for monotonic state, expiry, and popup lifetime.
+        var now = processedAtMilliseconds ?? observation.ObservedAtMilliseconds;
         if (hardReset)
-            return None(Reset(previous, observation.ObservedAtMilliseconds));
-        if (!IsMonotonic(previous, observation.ObservedAtMilliseconds))
-            return None(ClearPending(previous, observation.ObservedAtMilliseconds));
+            return None(Reset(previous, now));
+        if (!IsMonotonic(previous, now))
+            return None(ClearPending(previous, now));
 
-        var now = observation.ObservedAtMilliseconds;
         var popup = ActivePopup(previous.Popup, now);
-        if (previous.Pending is not { } pending || !Matches(pending, observation))
+        var currentPending = PendingInsideWindow(previous.Pending, now);
+        if (observation.ObservedAtMilliseconds < 0 ||
+            observation.ObservedAtMilliseconds > now ||
+            currentPending is not { } pending || !Matches(pending, observation))
         {
             return None(previous with
             {
-                Pending = PendingInsideWindow(previous.Pending, now),
+                Pending = currentPending,
                 Popup = popup,
                 LastObservedAtMilliseconds = now,
             });

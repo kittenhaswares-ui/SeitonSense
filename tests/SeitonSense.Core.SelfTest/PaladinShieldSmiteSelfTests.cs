@@ -12,6 +12,58 @@ internal static class PaladinShieldSmiteSelfTests
         foreach (var unreviewed in new uint[] { 0, 16, 29065, 29716, uint.MaxValue })
             Check(AutomaticSmartActionWolvesDenRules.Get(unreviewed) == AutomaticWolvesDenProtectionPolicy.None,
                 "unreviewed automatic actions cannot inherit Den permission");
+
+        ManualDenShieldSmiteKeepsExactTargetAndProtectionPolicy();
+    }
+
+    private static void ManualDenShieldSmiteKeepsExactTargetAndProtectionPolicy()
+    {
+        // This is the existing manual Smart Action policy, not the automatic
+        // full-Guard selector. Native action metadata still needs live proof.
+        var shape = SmartActionProtectionRules.ClassifyAttackShape(8, 1);
+        Check(shape == SmartActionAttackShape.UnsupportedAreaOfEffect,
+            "Shield Smite's pinned sheet shape keeps conservative area protection");
+        Check(SmartActionContextRules.CanInspectExactVisibleTargetTestFallback(
+                SupportedPvPContext.WolvesDen, true, true, shape),
+            "manual 41430 area shape is not categorically rejected in Den");
+        Check(SmartActionContextRules.HasExactWolvesDenDuelHostilityProof(false, true) &&
+              SmartActionContextRules.HasExactWolvesDenDuelHostilityProof(true, false),
+            "either exact duel identity or exact hostile flag proves the selected opponent");
+        Check(!SmartActionContextRules.HasExactWolvesDenDuelHostilityProof(false, false),
+            "an unrelated friendly player never becomes a manual Smite target");
+        Check(!SmartActionContextRules.IsExactCurrentTargetCarrier(
+                SupportedPvPContext.WolvesDen, true, true, false, true, false),
+            "an authored actor different from the visible target cannot enter the Den fallback");
+
+        var target = new SmartActionActorGeometry(1, new(100, 200), true, Vector3.Zero, 0.5f);
+        var incidental = new SmartActionActorGeometry(2, new(101, 201), true, new(100, 0, 0), 0.5f);
+        Check(SmartActionProtectionRules.IsActionProtectionSafe(shape, target, 8, []),
+            "manual Smite does not require the automatic helper's full-Guard condition");
+        Check(!SmartActionProtectionRules.IsActionProtectionSafe(
+                shape, target, 8, [new(target, SmartActionProtectionKind.Guard)]),
+            "unverified Guard-bypass metadata remains closed");
+        Check(SmartActionProtectionRules.IsActionProtectionSafe(
+                shape, target, 8, [new(target, SmartActionProtectionKind.Guard)], actionIgnoresGuard: true),
+            "verified 41430 Guard reduction allows the exact guarded duel opponent");
+        foreach (var blocker in new[]
+        {
+            SmartActionProtectionKind.Chiten,
+            SmartActionProtectionKind.Covered,
+            SmartActionProtectionKind.Invulnerability,
+        })
+        {
+            Check(!SmartActionProtectionRules.IsActionProtectionSafe(shape, target, 8,
+                    [new(target, SmartActionProtectionKind.Guard | blocker)], actionIgnoresGuard: true),
+                $"Guard reduction must not bypass the selected opponent's {blocker}");
+        }
+        Check(!SmartActionProtectionRules.IsActionProtectionSafe(shape, target, 8,
+                [new(target, SmartActionProtectionKind.Guard), new(incidental, SmartActionProtectionKind.Chiten)],
+                actionIgnoresGuard: true),
+            "unsupported area geometry retains the conservative incidental-Chiten veto even at distance");
+        Check(SmartActionProtectionRules.IsActionProtectionSafe(shape, target, 8,
+                [new(target, SmartActionProtectionKind.Guard), new(incidental, SmartActionProtectionKind.Covered)],
+                actionIgnoresGuard: true),
+            "an unrelated non-retaliatory protection does not block the exact manual target");
     }
 
     internal static void WeakenedGuardAllowsDamageButRetainsCrowdControlImmunity()

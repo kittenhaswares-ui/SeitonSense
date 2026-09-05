@@ -322,6 +322,33 @@ internal sealed class PersonalStatusService : IDisposable
     internal SmartSprintProbeSnapshot SmartSprintDiagnostics => smartSprint.Snapshot;
     internal GuardianCommunicationDiagnostics GuardianCommunicationDiagnostics =>
         guardianCommunication.Diagnostics;
+    internal string PaladinGuardianMacroLastEvent => defensiveUtility.PaladinMacroLastEvent;
+
+    internal bool TryUsePaladinGuardianMacro(out string message)
+    {
+        var context = ResolveSupportedPvPContext();
+        var local = objectTable.LocalPlayer;
+        if (disposed || !started || !configuration.Enabled || local is null ||
+            context is not (SupportedPvPContext.CrystallineConflict or SupportedPvPContext.WolvesDen) ||
+            activeTerritory != clientState.TerritoryType || activeLocalPlayerId != local.GameObjectId ||
+            activeContext != context)
+        {
+            message = "Guardian macro requires a stable PvP context (or enabled Wolves' Den testing).";
+            return false;
+        }
+        try
+        {
+            var accepted = defensiveUtility.TryUsePaladinGuardianMacro(local, Environment.TickCount64);
+            message = defensiveUtility.PaladinMacroLastEvent;
+            return accepted;
+        }
+        catch (Exception exception)
+        {
+            log.Warning(exception, "Explicit Guardian macro failed; no delayed action was created.");
+            message = "Guardian macro could not complete; no automatic retry.";
+            return false;
+        }
+    }
     internal AllyRescueProbeSnapshot AllyRescueDiagnostics => allyRescue.Snapshot;
     internal MiracleInterceptProbeSnapshot MiracleInterceptDiagnostics => miracleIntercept.Snapshot;
     internal SamuraiReactiveCounterCcProbeSnapshot SamuraiReactiveDiagnostics =>

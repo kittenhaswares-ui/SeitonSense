@@ -75,6 +75,7 @@ internal sealed record GuardianCommunicationDiagnostics(
 
     internal string ToChatLine() =>
         $"configured={Configured},meta={MetadataVerified},active={ActiveInCurrentContext}," +
+        $"format={GuardianQuickChatCommand.FormatLabel}," +
         $"text={TextInputStateKnown}/{TextInputActive},phase={Phase},decision={Decision}/{Reason}," +
         $"token={LastConsumedEpisodeToken}/{ActiveEpisodeToken},P={PartySlot}," +
         $"local={LocalGameObjectId:X}/{LocalEntityId:X},target={TargetGameObjectId:X}/{TargetEntityId:X}," +
@@ -87,7 +88,7 @@ internal sealed record GuardianCommunicationDiagnostics(
 }
 
 /// <summary>
-/// Turns a proven, client-accepted automatic Guardian episode into one bounded
+/// Turns a proven, client-accepted Guardian episode into one bounded
 /// Quick Chat / Bind-pair sequence. The pure Core state machine owns ordering,
 /// dedupe, confirmation and cleanup; this class only supplies exact live state
 /// and dispatches one closed command decision per framework tick.
@@ -181,7 +182,7 @@ internal sealed class GuardianCommunicationService
         var isCrystallineConflict =
             context == SupportedPvPContext.CrystallineConflict &&
             ResolveSupportedPvPContext() == SupportedPvPContext.CrystallineConflict;
-        var configured = IsCommunicationConfigured() &&
+        var configured = IsCommunicationConfigured(episodeForResolution, acceptedEpisode) &&
                          localPlayer is not null &&
                          localPlayer.ClassJob.IsValid &&
                          localPlayer.ClassJob.RowId == EnemyCombatConstants.PaladinJobId;
@@ -209,6 +210,7 @@ internal sealed class GuardianCommunicationService
                 localPlayer,
                 context,
                 nowMilliseconds,
+                acceptedEpisode,
                 out var dispatchEvent);
             state = GuardianTeamCommunicationRules.ApplyCommandResult(state, command, outcome);
             CountOutcome(command.Kind, outcome);
@@ -324,6 +326,7 @@ internal sealed class GuardianCommunicationService
                 localPlayer,
                 context,
                 Math.Max(0, nowMilliseconds),
+                null,
                 out _);
             CountOutcome(exactCommand.Kind, outcome);
         }
@@ -393,6 +396,7 @@ internal sealed class GuardianCommunicationService
         IPlayerCharacter? localPlayer,
         SupportedPvPContext context,
         long nowMilliseconds,
+        AcceptedAutoGuardianEpisode? acceptedEpisode,
         out string dispatchEvent)
     {
         dispatchEvent = "Terminal preflight failure";
@@ -424,7 +428,7 @@ internal sealed class GuardianCommunicationService
             GuardianTeamCommunicationCommandKind.ClearBind2 or
             GuardianTeamCommunicationCommandKind.ClearBind1;
         if (!isClear &&
-            (!IsCommunicationConfigured() ||
+            (!IsCommunicationConfigured(episode, acceptedEpisode) ||
              localPlayer is null ||
              !localPlayer.ClassJob.IsValid ||
              localPlayer.ClassJob.RowId != EnemyCombatConstants.PaladinJobId))
@@ -582,12 +586,33 @@ internal sealed class GuardianCommunicationService
                target.Actor == episode.Target;
     }
 
-    private bool IsCommunicationConfigured() =>
+    private bool IsCommunicationConfigured(
+        GuardianTeamCommunicationEpisode? episode,
+        AcceptedAutoGuardianEpisode? acceptedEpisode) =>
+        IsCommunicationConfiguredForEpisode(
+            configuration,
+            metadata.Verified && clientState.ClientLanguage == metadata.Language,
+            episode,
+            acceptedEpisode);
+
+    // Explicit consent belongs to one accepted action, not to the service or
+    // its next episode. Keep the full frozen identity at both runtime gates.
+    internal static bool IsCommunicationConfiguredForEpisode(
+        PluginConfiguration configuration,
+        bool metadataMatchesLanguage,
+        GuardianTeamCommunicationEpisode? episode,
+        AcceptedAutoGuardianEpisode? acceptedEpisode) =>
         configuration.Enabled &&
-        configuration.PaladinGuardianLowAlly &&
         configuration.PaladinGuardianAnnounceAndMark &&
-        metadata.Verified &&
-        clientState.ClientLanguage == metadata.Language;
+        metadataMatchesLanguage &&
+        (configuration.PaladinGuardianLowAlly ||
+         episode is { IsValid: true } current &&
+         acceptedEpisode is { IsValid: true, IsExplicitMacro: true } accepted &&
+         accepted.Token == current.Token &&
+         accepted.AcceptedAtMilliseconds == current.AcceptedAtMilliseconds &&
+         accepted.LocalPlayer == current.LocalPlayer &&
+         accepted.Target == current.Target &&
+         accepted.PartySlot == current.PartySlot);
 
     private SupportedPvPContext ResolveSupportedPvPContext()
     {

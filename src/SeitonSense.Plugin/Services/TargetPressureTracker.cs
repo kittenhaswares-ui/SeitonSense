@@ -379,7 +379,10 @@ internal sealed class TargetPressureTracker : IDisposable
              metadata.AllyRescueStatusesVerified) ||
              oneShotAllyPressureRequested ||
              (isBard && configuration.EnableBardWardensPaeanPressureRedirect) ||
-             (isPaladin && configuration.PaladinGuardianLowAlly) ||
+             // Explicit /seitonpld must already have fresh ally pressure even
+             // when automatic Guardian is off. Reuse this bounded CC pass;
+             // the command never starts a scan or schedules a delayed action.
+             isPaladin ||
              (isAstrologian &&
               configuration.EnableAstrologianHarmonicOrbisOnHeldKey &&
               configuration.NearHelpPreferIncomingPressure) ||

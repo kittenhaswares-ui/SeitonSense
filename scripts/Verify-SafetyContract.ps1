@@ -999,11 +999,11 @@ Assert-Literals $smartActionBufferCompatibilitySelfTests @(
     'reActionOwnsExactAction: false)',
     'reActionOwnsExactAction: true)'
 ) 'Generic-buffer compatibility self-tests'
-if ($staticIntegratedTestCount -ne 645 -or
+if ($staticIntegratedTestCount -ne 651 -or
     $logicalRepeatTestCount -ne 31 -or
     $physicalLatchTestCount -ne 6 -or
     $repeatPolicyTestCount -ne 4 -or
-    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 686 -or
+    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 692 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches($smartActionBufferSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferCompatibilitySelfTests\.\w+').Count -ne 6 -or
@@ -1013,7 +1013,7 @@ if ($staticIntegratedTestCount -ne 645 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatPolicySelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartSprintSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches((Read-RequiredSource $smartSprintSelfTestsPath 'Smart Sprint self-tests'), '\bpublic static void\s+\w+\s*\(').Count -ne 7) {
-    throw 'Schema 53 must retain seven smart-buffer tests, six compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, seven Smart Sprint tests, four Player Stats tests, and the exact 686-test combined Core registry.'
+    throw 'Schema 53 must retain seven smart-buffer tests, six compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, seven Smart Sprint tests, four Player Stats tests, and the exact 692-test combined Core registry.'
 }
 
 # Pin the two schema-42 visual overlays and the fail-closed local map-result
@@ -2612,7 +2612,7 @@ if ([regex]::Matches($normalizedSmartActionRuntime, 'SmartActionProtectionRules\
     $normalizedSmartActionRuntime -notmatch 'var finalProtectionSafe = currentEnemy is not null && \(!guardTargetsOnly \|\| IsFullGuardSmartActionTarget\(currentEnemy\)\) && TryBuildSmartActionProtectionSnapshot\(.*?CallerProvenProtectionSafe = finalProtectionSafe' -or
     $normalizedSmartActionRuntime -notmatch 'SmartActionProtectionRules\.ClassifyAttackShape\( action\.EffectRange, action\.CastType\)' -or
     [regex]::Matches($normalizedSmartActionRuntime, 'CanSmartActionTargetGuard\(resolvedActionId, action\)').Count -ne 4 -or
-    [regex]::Matches($normalizedSmartActionRuntime, 'smartActionGuardBypassActions\.Contains\(resolvedActionId\)').Count -ne 1 -or
+    [regex]::Matches($normalizedSmartActionRuntime, 'smartActionGuardBypassActions\.Contains\(resolvedActionId\)').Count -ne 3 -or
     $normalizedSmartActionRuntime -notmatch 'var actionIgnoresGuard = CanSmartActionTargetGuard\(resolvedActionId, action\); var isDirectCrowdControlUtility = heldActionSelection && resolvedActionId == BardRepellingShotRules\.RepellingShotActionId;.*?var protectionSafe = IsSmartActionProtectionSafe\( resolvedActionId, local, attackShape, canonicalEnemy, action\.EffectRange, protectedActors, actionIgnoresGuard, allowDamageOnlyInvulnerabilityForCcUtility: isDirectCrowdControlUtility\) && \(!isDirectCrowdControlUtility \|\| IsExactCrowdControlUtilityTargetStatusSafe\( resolvedActionId, enemy\)\);.*?var finalProtectionSafe = currentEnemy is not null && \(!guardTargetsOnly \|\| IsFullGuardSmartActionTarget\(currentEnemy\)\) && TryBuildSmartActionProtectionSnapshot\(.*?IsSmartActionProtectionSafe\( resolvedActionId, local, attackShape, new CanonicalEnemy\(intent\.EnemySlot, currentEnemy\), action\.EffectRange, finalProtectedActors, actionIgnoresGuard, allowDamageOnlyInvulnerabilityForCcUtility: isDirectCrowdControlUtility\) && \(!isDirectCrowdControlUtility \|\| IsExactCrowdControlUtilityTargetStatusSafe\( resolvedActionId, currentEnemy\)\)' -or
     $normalizedSmartActionRuntime -notmatch 'private bool CanSmartActionTargetGuard\( uint resolvedActionId, GameAction action\) => !SmartActionMovementGuardBypassRules\.IsGuardBlockedCcMovement\(resolvedActionId\) && \(smartActionGuardBypassActions\.Contains\(resolvedActionId\) \|\| \(action\.RowId == resolvedActionId.*?SmartActionMovementGuardBypassRules\.AllowsGuardTarget\( action\.ClassJob\.RowId, resolvedActionId\).*?action\.ActionCategory\.RowId is 3 or 4.*?action\.AffectsPosition\)\);' -or
     $normalizedSmartActionRuntime -notmatch 'private bool IsSmartActionProtectionSafe\( uint resolvedActionId, IPlayerCharacter localPlayer, SmartActionAttackShape attackShape, SmartActionActorGeometry targetGeometry, float effectRange, IReadOnlyList<SmartActionProtectedActor> protectedActors, bool actionIgnoresGuard, bool allowDamageOnlyInvulnerabilityForCcUtility = false\).*?if \(allowDamageOnlyInvulnerabilityForCcUtility\).*?IsDirectCrowdControlUtilityTargetSafe\( targetGeometry, protectedActors\);.*?SamuraiSmartActionCastRules\.IsOgiNamikiriConeAction\(resolvedActionId\) && samuraiSmartActionCastsMetadataVerified.*?SamuraiSmartActionCastRules\.IsOgiNamikiriProtectionSafe\( localPlayer\.Position, targetGeometry, effectRange, protectedActors, actionIgnoresGuard\).*?return SmartActionProtectionRules\.IsActionProtectionSafe\( attackShape, targetGeometry, effectRange, protectedActors, actionIgnoresGuard\);' -or
@@ -2631,12 +2631,28 @@ if ([regex]::Matches($normalizedSmartActionRuntime, 'SmartActionProtectionRules\
     $normalizedSmartActionRuntime -notmatch '\$"\{displayName\} arm failed closed: protection metadata unverified"') {
     throw 'Smart Action must replace its target only after candidate-local protection proof, retain conservative Chiten completeness for area/unknown shapes, permit only reviewed movement actions through Guard, exclude unverified SAM conservatively, and revalidate the one frozen actor without reranking.'
 }
+if ($normalizedSmartActionRuntime -notmatch 'SetSmartActionSafetyEvent\( \$"Blocked generic buffer replay: resolved=\{resolvedActionId\}; \{targetLabel\}; " \+ \$"guardBypassMeta=\{smartActionGuardBypassActions\.Contains\(resolvedActionId\)\}"\); return false;' -or
+    $normalizedSmartActionRuntime -notmatch 'SetSmartActionSafetyEvent\( \$"Blocked exact Smart Action fallback: raw=\{rawActionId\},resolved=\{resolvedActionId\}; " \+ \$"\{targetLabel\}; guardBypassMeta=\{smartActionGuardBypassActions\.Contains\(resolvedActionId\)\}"\); return SmartActionSafetyInspectionOutcome\.Unsafe;' -or
+    $normalizedSmartActionRuntime -notmatch 'if \(!ActorIdMatches\(effectiveTargetId, wolvesTarget\)\) \{ targetLabel = \$"Den authored/current target mismatch: authored=\{effectiveTargetId:X\}," \+ \$"current=\{wolvesIdentity\.GameObjectId:X\}/\{wolvesIdentity\.EntityId:X\}"; return false; \} if \(!TryClassifyExactWolvesDenTargetProtection\( wolvesTarget, out var protectionKind\)\) \{ targetLabel = "Den exact target protection-status proof ambiguous"; return false; \}' -or
+    $normalizedSmartActionRuntime -notmatch 'if \(!wolvesSafe\) \{ var incidentalChiten = wolvesProtectedActors\.Any\(actor => actor\.Geometry\.Actor != wolvesIdentity && \(actor\.Kind & SmartActionProtectionKind\.Chiten\) != 0\); targetLabel = \$"Den protection blocked: target=\{protectionKind\},shape=\{attackShape\}," \+ \$"incidentalChiten=\{incidentalChiten\},chitenMeta=\{chitenMetadataVerified\}"; return false; \}') {
+    throw 'The two additional Guard-bypass metadata reads must remain diagnostic-only after a failed proof; detailed Den mismatch, status-proof and incidental-Chiten reasons must not relax target identity or protection vetoes.'
+}
+$ccSmartActionMissDiagnostic = [regex]::Match($normalizedSmartActionRuntime,
+    'if \(!heldActionSelection && !farthestReachable && !samuraiMelee && context == SupportedPvPContext\.CrystallineConflict\) \{(?<Body>.*?)\} return originalTargetId; \} smartWinnerSelected = true;')
+$ccSmartActionMissDiagnosticBody = $ccSmartActionMissDiagnostic.Groups['Body'].Value
+if (-not $ccSmartActionMissDiagnostic.Success -or
+    $normalizedSmartActionRuntime -notmatch 'if \(!selectedIntent\) \{ reason = farthestReachable.*?if \(!heldActionSelection && !farthestReachable && !samuraiMelee && context == SupportedPvPContext\.CrystallineConflict\)' -or
+    $ccSmartActionMissDiagnosticBody -notmatch 'foreach \(var candidate in candidates\) \{ var observation = candidate\.Selection; if \(!observation\.HasValidActionTarget\) missingNativeTargetCount\+\+; else if \(!observation\.HasNativeRangeAndLineOfSight\) rangeOrLineOfSightRejectedCount\+\+; if \(!observation\.CallerProvenProtectionSafe\) protectionRejectedCount\+\+; \}' -or
+    $ccSmartActionMissDiagnosticBody -notmatch 'reason \+= \$"; resolvedAction=\{resolvedActionId\}"' -or
+    $ccSmartActionMissDiagnosticBody -match '\b(?:UseAction|UseActionLocation|GetActionInRangeOrLoS|GetNativeObject|TryBuild\w*|TryResolve\w*|Select\w*|Task\.Run|SetTarget)\s*\(|objectTable\.|candidates\.(?:Add|Remove|Clear)\(') {
+    throw 'CC Smart Action miss diagnostics must run only after a failed incoming ordinary manual CC selection, count already captured overlapping native/range/protection reasons, and preserve fallback without rescan, rerank, target writes, or added native calls.'
+}
 if ($normalizedSmartActionRuntime -notmatch 'var inspectedSmartActionTargetId = targetId; var smartActionSafetyInspection = !bypassRedirect \? InspectSmartActionSafetyLease\( thisPtr, actionType, actionId, targetId, mode, out inspectedSmartActionTargetId\).*?if \(smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Unsafe\) return false;.*?var forwardedTargetId = smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe \? inspectedSmartActionTargetId : targetId;.*?TryConsumeEligibleSmartTargetToken' -or
     $normalizedSmartActionRuntime -notmatch 'ArmedSmartTarget\? potentialSmartTargetToken = null;.*?potentialSmartTargetToken = armedSmartTarget;.*?var smartTargetCallEligible = IsEligibleSmartActionRedirectAction\( thisPtr, actionType, actionId, mode\); if \(!smartTargetCallEligible\).*?potentialSmartTargetToken = null;.*?smartTargetTokenConsumed = TryConsumeEligibleSmartTargetToken\( potentialSmartTargetToken\.Value, actionType, mode, out smartToken, out smartTargetOwnershipChanged\); potentialSmartTargetToken = smartTargetTokenConsumed \? smartToken : null;.*?if \(smartTargetOwnershipChanged\).*?suppressingSmartTargetCall = true;.*?newer token preserved.*?else if \(!bypassRedirect && smartTargetTokenConsumed\)' -or
     $normalizedSmartActionRuntime -notmatch 'private bool TryConsumeEligibleSmartTargetToken\( ArmedSmartTarget expectedToken,.*?if \(!candidate\.Equals\(expectedToken\)\).*?ownershipChanged = true; return false;.*?armedSmartTarget = null;' -or
     $normalizedSmartActionRuntime -notmatch 'private bool IsEligibleSmartActionRedirectAction\(.*?if \(!IsPotentialMacroAction\(actionType, mode\) \|\| actionId == 0\) return false;.*?if \(resolvedActionId == 0\) return true;.*?if \(!TryGetExactResolvedPvpActionMetadata\(resolvedActionId, out var action\)\).*?return true;.*?if \(!action\.CanTargetHostile \|\| action\.TargetArea \|\| action\.Range <= 0\) return false;.*?SmartActionContextRules\.IsSupported\( context, configuration\.EnableWolvesDenTesting\).*?return context != SupportedPvPContext\.WolvesDen \|\| SmartActionContextRules\.CanInspectExactVisibleTargetTestFallback\( context, configuration\.EnableWolvesDenTesting, combatPriorityMode: true, ClassifySmartActionAttackShape\(action\)\);' -or
     $normalizedSmartActionRuntime -notmatch 'if \(!heldActionSelection\) \{ ArmSmartActionSafetyLease\( token, localActor, actionType, actionId, resolvedActionId, now\); \}.*?TryBuildSmartActionProtectionSnapshot' -or
-    $normalizedSmartActionRuntime -notmatch 'if \(!rewritten\) \{ forwardedTargetId = InvalidCarrierTargetId; targetSuppressedByRedirect = true; suppressingSmartTargetCall = true; \}.*?if \(suppressingSmartTargetCall\) return false;.*?InspectSmartActionSafetyLease' -or
+    $normalizedSmartActionRuntime -notmatch 'if \(!rewritten\) \{ forwardedTargetId = InvalidCarrierTargetId; targetSuppressedByRedirect = true; suppressingSmartTargetCall = true; if \(ResolveContext\(\) == SupportedPvPContext\.WolvesDen\) \{ var resolvedFallbackActionId = ResolveActionId\(thisPtr, actionType, actionId\); reason \+= \$"; no exact same-call visible-target fallback; " \+ \$"raw=\{actionId\},resolved=\{resolvedFallbackActionId\}," \+ \$"guardBypassMeta=\{smartActionGuardBypassActions\.Contains\(resolvedFallbackActionId\)\}," \+ \$"authored=\{targetId:X\}"; \} \}.*?if \(suppressingSmartTargetCall\) return false;.*?InspectSmartActionSafetyLease' -or
     $normalizedSmartActionRuntime -notmatch 'if \(!recognizedMode \|\| !IsSupportedActionType\(actionType\)\).*?if \(!potentiallyExactAction\).*?SmartActionSafetyInspectionOutcome\.NotApplicable;.*?Blocked exact Smart Action fallback: invocation mode drifted.*?SmartActionSafetyInspectionOutcome\.Unsafe;' -or
     $normalizedSmartActionRuntime -notmatch 'if \(clientAccepted && \(handlingSmartTarget \|\| smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe\)\).*?ClearSmartActionSafetyLease\(\);' -or
     $normalizedSmartActionRuntime -notmatch 'if \(!bypassRedirect && \(handlingSmartTarget \|\| smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe\)\).*?smartActionSafetyInspection = InspectSmartActionSafetyLease\( thisPtr, actionType, actionId, forwardedTargetId, mode, out var finalSmartActionTargetId\);.*?if \(smartActionSafetyInspection != SmartActionSafetyInspectionOutcome\.Safe\) return false;.*?forwardedTargetId = finalSmartActionTargetId; \}.*?var localGuardBoundary = ObserveExactLocalGuardActivationAttempt\( thisPtr, actionType, actionId\);.*?clientAccepted = useActionHook!\.Original\(' -or
@@ -3840,10 +3856,6 @@ foreach ($slot in 1..5) {
     $expectedReviewedCommands += "/mk off <e$slot>"
 }
 foreach ($slot in 1..8) {
-    $expectedReviewedCommands += ('/quickchat "Covering Target" <{0}>' -f $slot)
-    $expectedReviewedCommands += ('/schnellchat <{0}> "Ziel decken"' -f $slot)
-    $expectedReviewedCommands += ('/quickchat "Soutien : cible" <{0}>' -f $slot)
-    $expectedReviewedCommands += ('/quickchat "{0}" <{1}>' -f $japaneseCoveringTarget, $slot)
     $expectedReviewedCommands += "/mk bind2 <$slot>"
 }
 $expectedReviewedCommands += @(
@@ -3858,12 +3870,32 @@ $reviewedCommandLiterals = @([regex]::Matches(
 $actualReviewedCommandSet = ($reviewedCommandLiterals | Sort-Object) -join '|'
 $expectedReviewedCommandSet = ($expectedReviewedCommands | Sort-Object) -join '|'
 $allReviewedCommandLiteralLines = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '=>\s*"/(?:mk|quickchat|schnellchat)')
-if ($reviewedCommandLiterals.Count -ne 53 -or
+if ($reviewedCommandLiterals.Count -ne 21 -or
     $actualReviewedCommandSet -ne $expectedReviewedCommandSet -or
-    $allReviewedCommandLiteralLines.Count -ne 53 -or
+    $allReviewedCommandLiteralLines.Count -ne 21 -or
     @($allReviewedCommandLiteralLines | Where-Object { $_.Path -ne $reviewedPvpCommandDispatcherPath }).Count -gt 0 -or
     $reviewedPvpCommandDispatcher -match '"/p\s|<t>|<e[1-5]>.*Guardian|Guardian.*<e[1-5]>') {
-    throw 'The dispatcher allowlist must contain exactly 53 reviewed commands: Attack1 set/clear e1-e5, localized row-35 Quick Chat P1-P8, Bind2 P1-P8, Bind1 self, and exact Bind clears.'
+    throw 'The marker dispatcher allowlist must contain exactly 21 reviewed commands: Attack1 set/clear e1-e5, Bind2 P1-P8, Bind1 self, and exact Bind clears. Guardian Quick Chat must use its separately checked closed builder.'
+}
+$guardianQuickChatCommandPath = Join-Path $pluginServicesRoot 'GuardianQuickChatCommand.cs'
+$guardianQuickChatCommand = Read-RequiredSource $guardianQuickChatCommandPath 'Closed canonical Guardian Quick Chat builder'
+$normalizedGuardianQuickChatCommand = $guardianQuickChatCommand -replace '\s+', ' '
+$guardianQuickChatNames = @([regex]::Matches($guardianQuickChatCommand,
+    'ClientLanguage\.(?<Language>\w+)\s*=>\s*"(?<Name>[^"\r\n]+)"') | ForEach-Object {
+        $_.Groups['Language'].Value + '=' + $_.Groups['Name'].Value
+    })
+$expectedGuardianQuickChatNames = @('English=Covering Target', 'German=Ziel decken', 'French=Soutien : cible', "Japanese=$japaneseCoveringTarget")
+$quickChatConstructionSites = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '(?:=>|return)\s*\$?"/(?:quickchat|schnellchat)\s')
+if ((($guardianQuickChatNames | Sort-Object) -join '|') -ne (($expectedGuardianQuickChatNames | Sort-Object) -join '|') -or
+    $normalizedGuardianQuickChatCommand -notmatch 'internal const string FormatLabel = "action-first-v2";' -or
+    $normalizedGuardianQuickChatCommand -notmatch 'internal static string\? Build\(ClientLanguage language, int partySlot\) \{ if \(partySlot is < 1 or > 8\) return null; var localizedActionName = language switch \{.*?_ => null, \}; if \(localizedActionName is null\) return null;.*?return \$"/quickchat \\"\{localizedActionName\}\\" <\{partySlot\.ToString\(CultureInfo\.InvariantCulture\)\}>";' -or
+    $normalizedReviewedPvpCommandDispatcher -notmatch '\{ Kind: ReviewedPvpCommandKind\.GuardianCoveringTarget \} => GuardianQuickChatCommand\.Build\(command\.Language, command\.Slot\),' -or
+    [regex]::Matches($reviewedPvpCommandDispatcher, '\bGuardianQuickChatCommand\.Build\s*\(').Count -ne 1 -or
+    $quickChatConstructionSites.Count -ne 1 -or
+    $quickChatConstructionSites[0].Path -ne $guardianQuickChatCommandPath -or
+    $guardianQuickChatCommand -match '\b(?:UseAction|UseActionLocation|ExecuteCommandInner|ProcessChatBoxEntry|TargetManager|SetTarget|HttpClient|Task|Thread|File|Directory)\b|<t>|<e[1-5]>|/schnellchat' -or
+    $guardianQuickChatCommand -match '(?m)^\s*(?:public|internal)\s+[^\r\n(]+\([^\r\n)]*\bstring\b') {
+    throw 'Guardian Quick Chat must have one action-first canonical /quickchat builder accepting only a closed four-language whitelist and P1-P8, invariant slot formatting, no caller text or native effects, and exactly one dispatcher route; construction is not live delivery proof.'
 }
 
 $autoEnemyFocusMark = Read-RequiredSource $autoEnemyFocusMarkPath 'Auto enemy focus mark service'
@@ -3998,6 +4030,20 @@ foreach ($method in @('GuardianQuickChatKeepsReviewedLocalizedCommands', 'Guardi
     Assert-Literals $guardianCommunicationScenarios @("internal static void $method()") "Guardian communication scenario $method"
     Assert-Literals $pluginPersistenceSelfTests @("GuardianCommunicationSelfTests.$method") "Guardian communication scenario registration $method"
 }
+Assert-Literals $guardianCommunicationScenarios @(
+    'command-construction tests, not live parser or delivery',
+    'foreach (var (language, name) in localizedNames)',
+    'for (var slot = 1; slot <= 8; slot++)',
+    'GuardianQuickChatCommand.Build(language, slot)',
+    'uniqueCommands.Count == 32',
+    'GuardianQuickChatCommand.FormatLabel == "action-first-v2"',
+    'int.MinValue, -1, 0, 9, int.MaxValue',
+    'unchecked((ClientLanguage)(-1)), (ClientLanguage)4, (ClientLanguage)99',
+    'GuardianQuickChatCommand.Build(invalidLanguage, slot) is null',
+    'new ReviewedPvpCommand((ReviewedPvpCommandKind)99, 2, ClientLanguage.German)',
+    'Exactly one slash command, quoted action and bounded target may cross the chat-entry boundary.',
+    'Unknown delivery after entering native code never permits a duplicate shoutout.'
+) 'All 32 closed language/party constructions and unknown-delivery no-repeat contract'
 $normalizedDefensiveUtilityGuardianSource = $defensiveUtilityGuardianSource -replace '\s+', ' '
 Assert-Literals $defensiveUtilityGuardianSource @(
     'internal readonly record struct AcceptedAutoGuardianEpisode(',
@@ -4019,19 +4065,23 @@ Assert-Literals $defensiveUtilityGuardianSource @(
     'var next = current + 1;',
     'Interlocked.CompareExchange(ref guardianEpisodeToken, next, current) == current'
 ) 'Client-accepted automatic Guardian episode source'
+$paladinGuardianMacroPath = Join-Path $pluginServicesRoot 'DefensiveUtilityProbe.PaladinMacro.cs'
+$paladinGuardianMacro = Read-RequiredSource $paladinGuardianMacroPath 'Explicit one-shot Guardian macro'
+$normalizedPaladinGuardianMacro = $paladinGuardianMacro -replace '\s+', ' '
 $acceptedGuardianConstructors = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\bnew\s+AcceptedAutoGuardianEpisode\s*\(')
 $resetRuntimeMethod = [regex]::Match(
     $normalizedDefensiveUtilityGuardianSource,
     'private void ResetRuntime\(\) \{(?<Body>.*?)\} private void ResetOpportunityRuntime').Groups['Body'].Value
-if ($acceptedGuardianConstructors.Count -ne 2 -or
-    @($acceptedGuardianConstructors | Where-Object { $_.Path -ne $defensiveUtilityProbePath }).Count -ne 0 -or
+if ($acceptedGuardianConstructors.Count -ne 3 -or
+    @($acceptedGuardianConstructors | Where-Object { $_.Path -eq $defensiveUtilityProbePath }).Count -ne 2 -or
+    @($acceptedGuardianConstructors | Where-Object { $_.Path -eq $paladinGuardianMacroPath }).Count -ne 1 -or
     $normalizedDefensiveUtilityGuardianSource -notmatch 'inputClaimed = true; inputFrame\.Consume\(\); var frozen = new FrozenGuardianRetry\(.*?var outcome = TryUseGuardianOnce\( localPlayer!, selected, selected, out attempted\); accepted = outcome == ClientActionAttemptOutcome\.ClientAccepted; CompleteGuardianAttempt\(frozen, outcome, nowMilliseconds\);.*?if \(attempted && accepted\) \{ lastAcceptedGuardianEpisode = new AcceptedAutoGuardianEpisode\( NextGuardianEpisodeToken\(\), Math\.Max\(nowMilliseconds, Environment\.TickCount64\), new TargetPressureActorIdentity\( localPlayer!\.GameObjectId, localPlayer\.EntityId\), selected\.Actor, selected\.PartySlot\); \}' -or
     $normalizedDefensiveUtilityGuardianSource -notmatch 'if \(frozenGuardianRetry is \{ \} frozenGuardian\).*?var exactCandidate = guardianCandidates\.FirstOrDefault\(candidate => candidate\.PartySlot == frozenGuardian\.Intent\.PartySlot && candidate\.Actor == frozenGuardian\.Intent\.Actor\);.*?var outcome = TryUseGuardianOnce\( localPlayer!, frozenGuardian\.Intent, exactCandidate, out attempted\); accepted = outcome == ClientActionAttemptOutcome\.ClientAccepted; CompleteGuardianAttempt\(frozenGuardian, outcome, nowMilliseconds\);.*?if \(accepted\) \{ lastAcceptedGuardianEpisode = new AcceptedAutoGuardianEpisode\( NextGuardianEpisodeToken\(\), Math\.Max\(nowMilliseconds, Environment\.TickCount64\), frozenGuardian\.LocalPlayer, frozenGuardian\.Intent\.Actor, frozenGuardian\.Intent\.PartySlot\); \}' -or
     $normalizedDefensiveUtilityGuardianSource -notmatch 'private long NextGuardianEpisodeToken\(\) \{ while \(true\) \{ var current = Volatile\.Read\(ref guardianEpisodeToken\); if \(current == long\.MaxValue\) return long\.MaxValue; var next = current \+ 1; if \(Interlocked\.CompareExchange\(ref guardianEpisodeToken, next, current\) == current\) return next; \} \}' -or
     [string]::IsNullOrWhiteSpace($resetRuntimeMethod) -or
     $resetRuntimeMethod -notmatch 'lastAcceptedGuardianEpisode = null;' -or
     $resetRuntimeMethod -match 'guardianEpisodeToken') {
-    throw 'Only client-accepted initial or frozen-retry Guardian boundaries may publish a monotonically tokened confirmation event; reset clears the event but never rewinds the token.'
+    throw 'Only the two client-accepted automatic Guardian boundaries and the separately checked explicit macro may publish a monotonically tokened confirmation event; reset clears the event but never rewinds the token.'
 }
 
 $guardianCommunicationMetadataGuard = Read-RequiredSource $guardianCommunicationMetadataGuardPath 'Guardian communication metadata guard'
@@ -4070,7 +4120,7 @@ Assert-Literals $guardianCommunication @(
     'state.LastConsumedEpisodeToken,',
     'lastObservedEpisodeToken)',
     'configuration.Enabled &&',
-    'configuration.PaladinGuardianLowAlly &&',
+    '(configuration.PaladinGuardianLowAlly ||',
     'configuration.PaladinGuardianAnnounceAndMark &&',
     'metadata.Verified &&',
     'clientState.ClientLanguage == metadata.Language',
@@ -4092,10 +4142,18 @@ Assert-Literals $guardianCommunication @(
     'GuardianTeamCommunicationCommandOutcome.DeferredBeforeInvocation',
     'GuardianTeamCommunicationCommandOutcome.TerminalFailure',
     'invoked=',
+    'GuardianQuickChatCommand.FormatLabel',
     'TryClearOneExactOwnershipOnDispose('
 ) 'Exact CC-only Guardian communication runtime mapping'
 if ($guardianCommunication -match '\bconfiguration\.EnableDefensiveUtilities\b') {
     throw 'PLD Guardian communication must follow the independent Job Tools Guardian master, never the broad reactive-Guard master.'
+}
+if ($normalizedGuardianCommunication -notmatch 'private bool IsCommunicationConfigured\( GuardianTeamCommunicationEpisode\? episode, AcceptedAutoGuardianEpisode\? acceptedEpisode\) => IsCommunicationConfiguredForEpisode\( configuration, metadata\.Verified && clientState\.ClientLanguage == metadata\.Language, episode, acceptedEpisode\);' -or
+    $normalizedGuardianCommunication -notmatch 'internal static bool IsCommunicationConfiguredForEpisode\(.*?\) => configuration\.Enabled && configuration\.PaladinGuardianAnnounceAndMark && metadataMatchesLanguage && \(configuration\.PaladinGuardianLowAlly \|\| episode is \{ IsValid: true \} current && acceptedEpisode is \{ IsValid: true, IsExplicitMacro: true \} accepted && accepted\.Token == current\.Token && accepted\.AcceptedAtMilliseconds == current\.AcceptedAtMilliseconds && accepted\.LocalPlayer == current\.LocalPlayer && accepted\.Target == current\.Target && accepted\.PartySlot == current\.PartySlot\);' -or
+    $normalizedGuardianCommunication -notmatch 'var configured = IsCommunicationConfigured\(episodeForResolution, acceptedEpisode\) &&' -or
+    $normalizedGuardianCommunication -notmatch '!IsCommunicationConfigured\(episode, acceptedEpisode\) \|\|' -or
+    $normalizedDefensiveUtilityGuardianSource -notmatch 'internal bool IsExplicitMacro \{ get; init; \}') {
+    throw 'Explicit Guardian communication consent must belong only to the same accepted token/time/local actor/target/party slot at both observation and dispatch; normal Guardian still needs its own master and all communication needs the user announce option and exact language metadata.'
 }
 $guardianObserveMethod = [regex]::Match(
     $normalizedGuardianCommunication,
@@ -4118,7 +4176,7 @@ if (-not $guardianObserveMethod.Success -or
     $guardianDispatchBody -notmatch 'ReviewedPvpCommandDispatchResult\.Invoked => GuardianTeamCommunicationCommandOutcome\.Invoked, ReviewedPvpCommandDispatchResult\.TextCommandUnavailableBeforeInvocation when command\.Kind == GuardianTeamCommunicationCommandKind\.SendQuickChat => GuardianTeamCommunicationCommandOutcome\.DeferredBeforeInvocation, ReviewedPvpCommandDispatchResult\.MarkerRateLimited when command\.Kind != GuardianTeamCommunicationCommandKind\.SendQuickChat => GuardianTeamCommunicationCommandOutcome\.DeferredBeforeInvocation, _ => GuardianTeamCommunicationCommandOutcome\.TerminalFailure' -or
     [regex]::Matches($guardianCommunication, '\bunsafe\b').Count -ne 3 -or
     [regex]::Matches($guardianCommunication, '\bMarkingController\.Instance\s*\(').Count -ne 1 -or
-    $guardianCommunication -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|Hook<|HookFromAddress|ITargetManager|TargetManager|SetTarget|RaptureShellModule|GetRaptureShellModule|ExecuteCommandInner|Utf8String\.FromString)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=|Markers\s*\[[^\]]+\]\s*=|MarkerTimes\s*\[[^\]]+\]\s*=') {
+    $guardianCommunication -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|Hook<|HookFromAddress|ITargetManager|TargetManager|SetTarget|RaptureShellModule|GetRaptureShellModule|ExecuteCommandInner|Utf8String\.FromString)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=(?!=)|Markers\s*\[[^\]]+\]\s*=|MarkerTimes\s*\[[^\]]+\]\s*=') {
     throw 'Guardian runtime must revalidate exact CC/local/P-slot/text/config/metadata/marker ownership, issue at most one typed command per Observe tick, map only exact pre-invocation shell/marker outcomes to bounded deferral, and never initiate combat, retarget, write marker memory, or own a raw shell boundary.'
 }
 
@@ -5610,7 +5668,7 @@ if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
     [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 11 -or
     [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 11 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 645) {
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 651) {
     throw 'All four shared protection-end tests, all eleven SAM reactive tests, four Player Stats tests, and the exact 633-test static Core registry before the appended repeat-policy suites must remain pinned.'
 }
 Assert-Literals $samuraiReactiveRuntimeRules @(
@@ -7484,10 +7542,52 @@ if (-not $guardianObserveRuntimeMethod.Success -or
     $guardianObserveRuntimeBody -notmatch 'var guardianActionSpecificallyReady = IsGuardianActionSpecificallyReady\(localPlayer\);' -or
     $tryUseGuardianRuntimeBody -notmatch 'if \(!guardMetadataVerified \|\| !guardianMetadataVerified \|\| !HasValidLocalPlayer\(localPlayer\) \|\| !IsPaladin\(localPlayer\) \|\| nearAssist\.IsExactLocalGuardActiveOrPropagating\( new\(localPlayer\.GameObjectId, localPlayer\.EntityId\)\) \|\| currentCandidate\.Actor != intent\.Actor \|\| currentCandidate\.PartySlot != intent\.PartySlot\)' -or
     $tryUseGuardianRuntimeBody -notmatch 'GetAdjustedActionId\(EnemyCombatConstants\.GuardActionId\) != EnemyCombatConstants\.GuardActionId \|\| actionManager->GetAdjustedActionId\(EnemyCombatConstants\.GuardianActionId\) != EnemyCombatConstants\.GuardianActionId' -or
-    $tryUseGuardianRuntimeBody -notmatch '!IsGuardianActionSpecificallyReady\(localPlayer\) \|\| !ClientActionAttemptBoundary\.IsExactActionReady\( actionManager, EnemyCombatConstants\.GuardianActionId\) \|\| !IsNativeBoundaryNearQueueable\(localPlayer, actionManager\)' -or
-    $tryUseGuardianRuntimeBody -notmatch 'ActionManager\.GetActionInRangeOrLoS\( EnemyCombatConstants\.GuardianActionId, sourceObject, targetObject\).*?HasNativeRangeAndLineOfSight = SeitonRangeRules\.HasNativeRangeAndLineOfSight\(rangeResult\).*?if \(!DefensiveUtilityRules\.IsGuardianCandidate\(revalidated\)\) return ClientActionAttemptOutcome\.NotInvoked;.*?if \(!IsGuardianActionSpecificallyReady\(localPlayer\) \|\| !ClientActionAttemptBoundary\.IsExactActionReady\( actionManager, EnemyCombatConstants\.GuardianActionId\)\).*?actionManager->UseAction\( ActionType\.Action, EnemyCombatConstants\.GuardianActionId, ally\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\)' -or
+    $tryUseGuardianRuntimeBody -notmatch '!IsGuardianReadyForRequest\(localPlayer, explicitMacro\) \|\| !ClientActionAttemptBoundary\.IsExactActionReady\( actionManager, EnemyCombatConstants\.GuardianActionId\) \|\| !IsNativeBoundaryNearQueueable\(localPlayer, actionManager\)' -or
+    $tryUseGuardianRuntimeBody -notmatch 'ActionManager\.GetActionInRangeOrLoS\( EnemyCombatConstants\.GuardianActionId, sourceObject, targetObject\).*?HasNativeRangeAndLineOfSight = SeitonRangeRules\.HasNativeRangeAndLineOfSight\(rangeResult\).*?if \(!\(explicitMacro \? PaladinGuardianMacroRules\.IsEligibleCandidate\(revalidated, Environment\.TickCount64, macroPressurePublishedAtMilliseconds\) : DefensiveUtilityRules\.IsGuardianCandidate\(revalidated\)\)\) return ClientActionAttemptOutcome\.NotInvoked;.*?if \(!IsGuardianReadyForRequest\(localPlayer, explicitMacro\) \|\| !ClientActionAttemptBoundary\.IsExactActionReady\( actionManager, EnemyCombatConstants\.GuardianActionId\)\).*?actionManager->UseAction\( ActionType\.Action, EnemyCombatConstants\.GuardianActionId, ally\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\)' -or
     [regex]::Matches($tryUseGuardianRuntimeBody, 'actionManager->UseAction\s*\(').Count -ne 1) {
     throw 'Held PLD Guardian must require exact Guard/Guardian metadata and ready Guardian plus ready Guard or strict configurable own HP/MP thresholds (defaults >80% HP and >60% MP), block active/propagating own Guard, revalidate frozen party identity and native range/LoS, and recheck readiness before its sole request.'
+}
+$paladinGuardianMacroRules = Read-RequiredSource (Join-Path $coreRoot 'PaladinGuardianMacroRules.cs') 'Pure explicit Guardian target selection'
+$normalizedPaladinGuardianMacroRules = $paladinGuardianMacroRules -replace '\s+', ' '
+$paladinGuardianMacroTests = Read-RequiredSource (Join-Path $coreSelfTestRoot 'PaladinGuardianMacroSelfTests.cs') 'Explicit Guardian selection regressions'
+if ($normalizedDefensiveUtility -notmatch 'private unsafe ClientActionAttemptOutcome TryUseGuardianOnce\( IPlayerCharacter localPlayer, PaladinGuardianCandidate intent, PaladinGuardianCandidate currentCandidate, out bool attempted, bool explicitMacro = false, long macroPressurePublishedAtMilliseconds = -1\)' -or
+    $normalizedDefensiveUtility -notmatch 'private bool IsGuardianReadyForRequest\(IPlayerCharacter localPlayer, bool explicitMacro\) => explicitMacro \? guardMetadataVerified && guardianMetadataVerified && HasValidLocalPlayer\(localPlayer\) && IsPaladin\(localPlayer\) && IsActionSpecificallyReady\(EnemyCombatConstants\.GuardianActionId\) : IsGuardianActionSpecificallyReady\(localPlayer\);' -or
+    [regex]::Matches($normalizedPaladinGuardianMacro, '\bTryUseGuardianOnce\s*\(').Count -ne 1 -or
+    $normalizedPaladinGuardianMacro -notmatch 'if \(!configuration\.Enabled \|\| !IsPaladin\(localPlayer\) \|\| !HasValidLocalPlayer\(localPlayer\)\).*?if \(HasActiveGuard\(localPlayer\) \|\| nearAssist\.IsExactLocalGuardActiveOrPropagating\( new\(localPlayer\.GameObjectId, localPlayer\.EntityId\)\)\).*?!IsGuardianReadyForRequest\(localPlayer, explicitMacro: true\)' -or
+    $normalizedPaladinGuardianMacro -notmatch 'var candidates = BuildGuardianCandidates\(localPlayer, nowMilliseconds, out _, out var pressureAge\); var publishedAt = pressureAge >= 0 \? nowMilliseconds - pressureAge : -1; var selected = PaladinGuardianMacroRules\.SelectCandidateIndex\(candidates, nowMilliseconds, publishedAt\);' -or
+    $normalizedPaladinGuardianMacro -notmatch 'var intent = candidates\[selected\];.*?var current = BuildGuardianCandidates\(localPlayer, finalNow, out _, out var finalPressureAge\); var exact = current\.FindIndex\(candidate => candidate\.Actor == intent\.Actor && candidate\.PartySlot == intent\.PartySlot\);.*?if \(exact < 0\) return RefusePaladinMacro\(.*?var outcome = TryUseGuardianOnce\(localPlayer, intent, current\[exact\], out var attempted, explicitMacro: true, macroPressurePublishedAtMilliseconds: finalPressureAge >= 0 \? finalNow - finalPressureAge : -1\);' -or
+    $normalizedPaladinGuardianMacro -notmatch 'if \(outcome != ClientActionAttemptOutcome\.ClientAccepted\) return RefusePaladinMacro\(.*?acceptedCount\+\+; ResetGuardianOpportunityRuntime\(\); lastAcceptedGuardianEpisode = new AcceptedAutoGuardianEpisode\( NextGuardianEpisodeToken\(\), Environment\.TickCount64, new\(localPlayer\.GameObjectId, localPlayer\.EntityId\), intent\.Actor, intent\.PartySlot\) \{ IsExplicitMacro = true \};' -or
+    $paladinGuardianMacro -match '\b(?:UseAction|UseActionLocation|ExecuteAction|ExecuteCommandInner|ProcessChatBoxEntry|SetTarget|Arm|BeginRetry|Task\.Run|Thread\.Sleep)\s*\(' -or
+    $paladinGuardianMacro -match '\b(?:new FrozenGuardianRetry|frozenGuardianRetry\s*=|inputFrame\.Consume|HeldActionRetryRules|HeldHelperReservation|IFramework|Update\s*\+=|HookFromAddress)\b' -or
+    $paladinGuardianMacro -match '\.(?:Target|FocusTarget|SoftTarget|MouseOverTarget)\s*=') {
+    throw 'The explicit Guardian macro must be one synchronous frozen-party request through the existing final native Guard boundary, with no target swap, held retry, delayed job, extra native dispatch, or automatic-resource bypass outside its default-false explicit branch.'
+}
+if ($normalizedPersonalStatus -notmatch 'internal bool TryUsePaladinGuardianMacro\(out string message\).*?if \(disposed \|\| !started \|\| !configuration\.Enabled \|\| local is null \|\| context is not \(SupportedPvPContext\.CrystallineConflict or SupportedPvPContext\.WolvesDen\) \|\| activeTerritory != clientState\.TerritoryType \|\| activeLocalPlayerId != local\.GameObjectId \|\| activeContext != context\).*?var accepted = defensiveUtility\.TryUsePaladinGuardianMacro\(local, Environment\.TickCount64\);' -or
+    $normalizedPluginForIntegratedInput -notmatch 'private void OnSeitonPaladinCommand\(string _, string arguments\) \{ if \(!string\.IsNullOrWhiteSpace\(arguments\)\).*?return; \} if \(!personalStatus\.TryUsePaladinGuardianMacro\(out var message\)\)' -or
+    [regex]::Matches($pluginSource, 'commandManager\.AddHandler\(\s*SeitonPaladinCommand,').Count -ne 1 -or
+    [regex]::Matches($pluginSource, 'if \(seitonPaladinCommandRegistered\) Safe\(\(\) => commandManager\.RemoveHandler\(SeitonPaladinCommand\)\);').Count -ne 2) {
+    throw 'The Guardian command must accept no target argument, require the same stable supported local PvP context, register once, and remove only its own handler on rollback and disposal.'
+}
+Assert-Literals $pluginSource @(
+    'private const string SeitonPaladinCommand = "/seitonpld";',
+    'private readonly bool seitonPaladinCommandRegistered;',
+    'seitonPaladinCommandRegistered = commandManager.AddHandler(',
+    'new CommandInfo(OnSeitonPaladinCommand)'
+) 'Explicit Guardian command identity and owned registration'
+if ($normalizedPaladinGuardianMacroRules -notmatch 'public const float NearbyFallbackRangeYalms = 6f;' -or
+    $normalizedPaladinGuardianMacroRules -notmatch 'var pressureFresh = DefensiveUtilityRules\.IsFreshGuardianPressurePublication\( nowMilliseconds, pressurePublishedAtMilliseconds\);' -or
+    $normalizedPaladinGuardianMacroRules -notmatch 'var candidate = WithFreshPressure\(candidates\[index\], pressureFresh\); if \(!IsValidReachablePartyMember\(candidate\)\) continue;' -or
+    $normalizedPaladinGuardianMacroRules -notmatch 'var endangered = DefensiveUtilityRules\.SelectGuardianCandidateIndex\(eligible\); return endangered >= 0 \? endangered : nearest;' -or
+    $normalizedPaladinGuardianMacroRules -notmatch 'return IsValidReachablePartyMember\(candidate\) && \(DefensiveUtilityRules\.ClassifyGuardianRisk\(candidate\) != PaladinGuardianRiskTier\.None \|\| IsNearby\(candidate\)\);' -or
+    $normalizedPaladinGuardianMacroRules -notmatch 'pressureFresh \? candidate : candidate with \{ IncomingEnemyCount = null \};' -or
+    $normalizedPaladinGuardianMacroRules -notmatch 'candidate\.Actor\.IsValid && candidate\.PartySlot is >= 1 and <= 8 && candidate\.IsExactPartyMember && !candidate\.IsSelf && candidate\.IsAlive && candidate\.IsTargetable && candidate\.HasValidNativeTarget && candidate\.HasNativeRangeAndLineOfSight && DefensiveUtilityRules\.IsAtOrBelowHpPercent\(candidate\.CurrentHp, candidate\.MaximumHp, 100\) && float\.IsFinite\(candidate\.DistanceSquared\) && candidate\.DistanceSquared >= 0f;' -or
+    $normalizedPaladinGuardianMacroRules -notmatch 'candidate\.DistanceSquared <= NearbyFallbackRangeYalms \* NearbyFallbackRangeYalms;' -or
+    $paladinGuardianMacroRules -match '\b(?:UseAction|UseActionLocation|ExecuteAction|SetTarget|Task|Thread|HttpClient|File|Directory|CanUseGuardianWithGuardOrHighResources)\b') {
+    throw 'Pure manual Guardian selection must reuse existing fresh danger ranking before the six-yalm nearest fallback, require exact living reachable non-self party identity, and keep final eligibility identical without automatic own-resource gates.'
+}
+foreach ($method in @('DangerThresholdsUseExistingRiskAndFreshPressure', 'DangerSelectionPreservesExistingRanking', 'DangerUsesFullNativeRangeBeforeNearbyFallback', 'FallbackSelectsClosestWithinSixYalms', 'InvalidTargetsNeverBecomeDangerOrFallback', 'FallbackTiesRemainExactAndDeterministic')) {
+    Assert-Literals $paladinGuardianMacroTests @("public static void $method()") "Explicit Guardian scenario $method"
+    Assert-Literals $integratedCoreTestProgram @("PaladinGuardianMacroSelfTests.$method") "Explicit Guardian registration $method"
 }
 if ($normalizedDefensiveUtility -notmatch 'var prior = beginsFrame \? CreateFrameSnapshotBase\(guardActive\) : Snapshot;' -or
     $normalizedDefensiveUtility -notmatch 'private DefensiveUtilityProbeSnapshot CreateFrameSnapshotBase\(bool guardActive\) => DefensiveUtilityProbeSnapshot\.Initial with \{ Active = false, GuardActive = guardActive,.*?LastEvent = "Frame initialized", \};' -or
@@ -8240,6 +8340,12 @@ if ($normalizedMiracleConfirmationRules -notmatch 'observation\.ObservedAtMillis
 if ($miracleConfirmationRules -match '\b(UseAction|UseActionLocation|ITargetManager|TargetManager|SetTarget|SendInput|keybd_event|mouse_event)\b') {
     throw 'Reactive-CC landing confirmation rules must remain observational and never initiate actions, input, or target changes.'
 }
+if ($normalizedMiracleConfirmationRules -notmatch 'ObserveActionEffect\( MiracleInterceptConfirmationState previous, MiracleInterceptLandedObservation observation, bool hardReset = false, long\? processedAtMilliseconds = null\)' -or
+    $normalizedMiracleConfirmationRules -notmatch 'var now = processedAtMilliseconds \?\? observation\.ObservedAtMilliseconds; if \(hardReset\) return None\(Reset\(previous, now\)\); if \(!IsMonotonic\(previous, now\)\) return None\(ClearPending\(previous, now\)\); var popup = ActivePopup\(previous\.Popup, now\); var currentPending = PendingInsideWindow\(previous\.Pending, now\); if \(observation\.ObservedAtMilliseconds < 0 \|\| observation\.ObservedAtMilliseconds > now \|\| currentPending is not \{ \} pending \|\| !Matches\(pending, observation\)\) \{ return None\(previous with \{ Pending = currentPending, Popup = popup, LastObservedAtMilliseconds = now, \}\); \}' -or
+    $normalizedMiracleConfirmationRules -notmatch 'var triggeredPopup = new MiracleInterceptConfirmationPopup\( pending\.ActionId, pending\.TargetGameObjectId, pending\.TargetEntityId, pending\.Threat, pending\.RemovedStatusId, now, SaturatingAdd\(now, PopupDurationMilliseconds\)\);' -or
+    $normalizedMiracleIntercept -notmatch 'private void DrainConfirmations\(long nowMilliseconds\).*?var eventNow = Math\.Max\(nowMilliseconds, Environment\.TickCount64\); if \(effect\.FeatureGeneration != capture\.CurrentMiracleInterceptGeneration \|\| effect\.ObservedAtMilliseconds > eventNow \|\| eventNow - effect\.ObservedAtMilliseconds > MiracleInterceptConfirmationRules\.CorrelationMilliseconds\).*?continue;.*?MiracleInterceptConfirmationRules\.ObserveActionEffect\( confirmationState, new MiracleInterceptLandedObservation\( effect\.CasterEntityId, effect\.ActionId, effect\.TargetEntityId, effect\.EffectType, effect\.EffectValue, effect\.GlobalSequence, effect\.SourceSequence, effect\.ObservedAtMilliseconds\), processedAtMilliseconds: eventNow\);') {
+    throw 'Queued reactive-CC captures must retain their original timestamp and exact packet correlation while monotonic processing time controls expiry and popup lifetime; unrelated old packets cannot erase a current accepted attempt, and future/expired captures cannot confirm it.'
+}
 if ($normalizedMiracleConfirmationRules -notmatch 'ExpectedStatusForAction\(uint actionId\) => actionId switch \{ MiracleOfNatureActionId => MiracleOfNatureStatusId, SilentNocturneActionId => SilenceStatusId, ForkedRaijuActionId or FleetingRaijuActionId => StunStatusId, InterveneActionId => StunStatusId, MineuchiActionId => StunStatusId, ResolutionActionId => SilenceStatusId, ViceOfThornsActionId => StunStatusId, FrostStarActionId => DeepFreezeStatusId, _ => 0, \}' -or
     $normalizedMiracleConfirmationRules -notmatch 'observation\.ActionId == pending\.ActionId.*?observation\.EffectType == AddStatusEffectType.*?observation\.EffectValue == ExpectedStatusForAction\(pending\.ActionId\)') {
     throw 'AddStatus 0x0E confirmation must correlate WHM, BRD, NIN Raiju, PLD Intervene, SAM Mineuchi, RDM Resolution/Vice of Thorns, and BLM Frost Star to their exact reviewed Stun, Silence, Miracle, or Deep Freeze status.'
@@ -8339,6 +8445,19 @@ Assert-Literals $miracleConfirmationSelfTests @(
     'confirms only exact Stun',
     'popup keeps exact Raiju variant'
 ) 'Both exact Raiju/Stun confirmation variants'
+Assert-Literals $miracleConfirmationSelfTests @(
+    'public static void PopupAndPendingExpireWithoutReplay()',
+    'QueuedCaptureTimeCannotReverseTheProcessingClock();',
+    'private static void QueuedCaptureTimeCannotReverseTheProcessingClock()',
+    'a stale unrelated packet must not erase the newer exact accepted attempt',
+    'delayed processing cannot bypass exact source-sequence matching',
+    'an exact packet captured before the last frame watermark still confirms',
+    'the local popup starts at processing, not an old packet timestamp',
+    'a future capture timestamp cannot confirm',
+    'late processing cannot resurrect an expired accepted attempt',
+    'a genuine processing-clock reversal remains closed'
+) 'Queued-capture processing-clock regression scenarios'
+Assert-Literals $miracleGuardProgram @('MiracleInterceptConfirmationSelfTests.PopupAndPendingExpireWithoutReplay') 'Queued-capture scenario registration through existing expiry test'
 Assert-Literals $miracleGuardProgram @(
     'MiracleInterceptConfirmationSelfTests.NinjaRaijuVariantsRequireExactStunStatus'
 ) 'Raiju confirmation test registration'
@@ -9333,9 +9452,11 @@ if ([regex]::Matches($integratedCoreTestProgram, '\bAggressorArrowSelfTests\.\w+
 if ($normalizedTargetPressureTracker -notmatch 'var pressureFeaturesEnabled = configuration\.ShowPressureCounter \|\| \(supportedContext == SupportedPvPContext\.CrystallineConflict && configuration\.ShowCcAggressorArrows\) \|\| configuration\.ShowIncomingPressureOnNameplates \|\| configuration\.ShowTeamPressureOnNameplates \|\| configuration\.EnableSmartTabTargeting \|\| configuration\.EnableSmartActionMacro \|\| configuration\.EnableNearAssistMacro \|\| configuration\.NearAssistPreferTeamPressure') {
     throw 'Smart Tab, Smart Action, and Near Assist must each keep team-pressure production active independently of visible pressure surfaces and one another.'
 }
-if ($normalizedTargetPressureTracker -notmatch 'var isAstrologian = localJobId == AstrologianHarmonicOrbisRules\.AstrologianJobId;' -or
-    $normalizedTargetPressureTracker -notmatch 'supportedContext == SupportedPvPContext\.CrystallineConflict && \(\(isAllyRescueJob && configuration\.ExperimentalAllyRescueOnNextKey && metadata\.AllyRescueStatusesVerified\) \|\| oneShotAllyPressureRequested \|\| \(isBard && configuration\.EnableBardWardensPaeanPressureRedirect\) \|\| \(isPaladin && configuration\.PaladinGuardianLowAlly\) \|\| \(isAstrologian && configuration\.EnableAstrologianHarmonicOrbisOnHeldKey && configuration\.NearHelpPreferIncomingPressure\) \|\| \(configuration\.EnableNearAssistMacro && configuration\.NearHelpPreferIncomingPressure\)\)') {
-    throw 'Incoming ally pressure must remain CC-only with exact job gates for Ally Rescue, Smart Paean, PLD Guardian, and the default-off AST held Near Help helper, plus accepted-Eukrasia one-shot or explicit Near Help pressure.'
+$normalizedTargetPressureForGuardianMacro = ($targetPressureTracker -replace '(?m)//[^\r\n]*', '') -replace '\s+', ' '
+if ($normalizedTargetPressureForGuardianMacro -notmatch 'var isAstrologian = localJobId == AstrologianHarmonicOrbisRules\.AstrologianJobId;' -or
+    $normalizedTargetPressureForGuardianMacro -notmatch 'var isPaladin = localJobId == EnemyCombatConstants\.PaladinJobId;' -or
+    $normalizedTargetPressureForGuardianMacro -notmatch 'supportedContext == SupportedPvPContext\.CrystallineConflict && \(\(isAllyRescueJob && configuration\.ExperimentalAllyRescueOnNextKey && metadata\.AllyRescueStatusesVerified\) \|\| oneShotAllyPressureRequested \|\| \(isBard && configuration\.EnableBardWardensPaeanPressureRedirect\) \|\| isPaladin \|\| \(isAstrologian && configuration\.EnableAstrologianHarmonicOrbisOnHeldKey && configuration\.NearHelpPreferIncomingPressure\) \|\| \(configuration\.EnableNearAssistMacro && configuration\.NearHelpPreferIncomingPressure\)\)') {
+    throw 'Incoming ally pressure must remain CC-only and job-scoped, with PLD publication independent of automatic Guardian so an explicit macro can reuse the existing fresh bounded sample without scanning on demand.'
 }
 if ($normalizedTargetPressureTracker -notmatch 'var isAllyRescueJob = localJobId is EnemyCombatConstants\.WhiteMageJobId or EnemyCombatConstants\.BardJobId; var isReactiveCounterCcJob = isAllyRescueJob \|\| localJobId == EnemyCombatConstants\.NinjaJobId;' -or
     $normalizedTargetPressureTracker -notmatch 'var isScholar = localJobId == EnemyCombatConstants\.ScholarJobId; var isDarkKnight = localJobId == DarkKnightShadowbringerRules\.DarkKnightJobId;' -or
@@ -13201,18 +13322,18 @@ $whatsNewWindow = Read-RequiredSource $whatsNewWindowPath 'What''s New window'
 $releaseNotesContentRules = Read-RequiredSource $releaseNotesContentRulesPath 'Release-note content rules'
 $releaseNotesContentSelfTests = Read-RequiredSource $releaseNotesContentSelfTestsPath 'Release-note content self-tests'
 Assert-Literals $projectFile @(
-    '<Version>0.44.3.0</Version>',
-    '<AssemblyVersion>0.44.3.0</AssemblyVersion>',
-    '<FileVersion>0.44.3.0</FileVersion>'
-) 'v0.44.3.0 project version'
+    '<Version>0.44.4.0</Version>',
+    '<AssemblyVersion>0.44.4.0</AssemblyVersion>',
+    '<FileVersion>0.44.4.0</FileVersion>'
+) 'v0.44.4.0 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.44.3.0";',
-    'Bigger incoming arrows: preview MCH/SCH arrows and resize them under HUD & Nameplates, even in Wolves'' Den.',
-    'Prediction can show published official tiers. Saved daily outside matches; unlisted players stay Unknown.',
-    'Player Stats now separates Opponents and Teammates, with clear English win/loss lists.',
-    'LB bars have their own labeled preview and no longer depend on showing the Pressure counter.',
-    'Healing-pot beam clipping and German Guardian chat syntax corrected. Live detection and chat delivery still need confirmation.'
-) 'v0.44.3.0 version-acknowledged player-facing What''s New content'
+    'private const string CurrentReleaseVersion = "0.44.4.0";',
+    'New PLD macro: /seitonpld uses Guardian without selecting a target.',
+    'Endangered allies come first in Guardian range; otherwise it picks the closest ally within 6y.',
+    'Your active Guard stays protected. This explicit macro does not require automatic Guardian or its HP/MP limits.',
+    'Guardian chat rebuilt: one action-first Quick Chat command on every client language, with your exact party target.',
+    'Fixed delayed CC hit confirmations and added clearer Smart Action failure reasons. Live chat testing is still needed.'
+) 'v0.44.4.0 version-acknowledged player-facing What''s New content'
 Assert-Literals $releaseNotesContentRules @(
     'public const int MaximumBulletCount = 5;',
     'if (bullets is null) return [];',
@@ -13271,17 +13392,17 @@ if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.44.3.0"',
-    'Bigger incoming arrows with a Den-friendly preview.',
-    'Optional official tiers from daily saved Lodestone standings; unlisted players stay Unknown.',
-    'Separate English Opponents/Teammates win-loss lists.',
-    'German Guardian chat syntax corrected; live detection and chat delivery still need confirmation.',
+    '"AssemblyVersion": "0.44.4.0"',
+    'New /seitonpld macro: Guardian without a target.',
+    'Endangered reachable allies first, otherwise closest ally within 6y.',
+    'Preserves your active Guard and visible target.',
+    'Accepted uses share existing CC chat/marker settings.',
     '"IsHide": false',
     '"IsTestingExclusive": false',
-    '"DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.3.0/dist/SeitonSense-0.44.3.0.zip"',
-    '"DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.3.0/dist/SeitonSense-0.44.3.0.zip"',
-    '"DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.3.0/dist/SeitonSense-0.44.3.0.zip"'
-) 'v0.44.3.0 custom-repository metadata'
+    '"DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.4.0/dist/SeitonSense-0.44.4.0.zip"',
+    '"DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.4.0/dist/SeitonSense-0.44.4.0.zip"',
+    '"DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/v0.44.4.0/dist/SeitonSense-0.44.4.0.zip"'
+) 'v0.44.4.0 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -13752,7 +13873,7 @@ Assert-Literals $normalizedReadme @(
     'BRD **Mannstopper** keeps Smart Action ranking but avoids Chiten, Guard, Purify protection, Meikyo, Paean, and other real CC immunity.',
     'PLD and DRK damage-only invulnerability remains a valid Mannstopper target',
     'The CC prediction panel now stays visible during preparation while the exact 5v5 roster is still loading.',
-    'For the current source, the exact 686-test Core registry, forty-six plugin self-tests, and source checks pin configuration schema 53',
+    'For the current source, the exact 692-test Core registry, forty-six plugin self-tests, and source checks pin configuration schema 53',
     'the independent default-off automatic basic-shot cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
@@ -15642,4 +15763,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 53, local CC statistics schema 5, the exact 686-test Core registry, and 46 plugin self-tests. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, PLD Guardian, Recuperate, then Auto-Guard own priority in that order. Guardian requires exact Guard and Guardian metadata, ready Guardian, and either ready Guard or fresh self HP/MP strictly above configurable thresholds (defaults 80%/60%) through the final boundary; active or accepted-propagating own Guard always blocks it: <=20% is unconditional, <=40% needs fresh exact 2+ focus, and <=50% needs fresh exact 3+ focus. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-actor reservation from either a certified direct standard hotbar press, an exact lease/generation-backed /smartaction visible-<t> fallback, or a target-independent CC Smart Action S1-S5 winner; only the first two bind the visible hard target. Queue stays rejected. Release cannot cancel it; new action, context, Guard, CC, identity, protection, or exact-action/actor drift does, only a post-revalidated clean native range/LoS false may retry, accepted or ambiguous outcomes are terminal, and it never reranks or writes target/facing. The optional quiet-held-errors setting avoids global sound hooks and suppresses only a plugin-owned synthetic repeat whose exact hostile target returns native line-of-sight code 562; the first press, out-of-range, and every unknown error remain native. /seitonfar remains reachable-only. Enabled Wolves Den Smart Action resolves the exact stable visible hard target or reviewed dummy; a matching native duel identity may replace a stale Hostile flag, conflicting actor views still fail closed, and only the first non-exact carrier per tap may preserve the one-shot for the following exact <t>. Every current damaging non-ground-target shape shares the same closed admission and final-protection path. Exact /seitonsam Ogi/Tendo request-in-flight ownership suppresses movement through native acceptance and then hands off to the bounded accepted-cast lease; merely arming /seitonsam does not suppress movement, and ordinary /smartaction never gains this behavior. Exact repeat-Guard protection is identity- and territory-bound: a client-accepted request or exact live Guard blocks plugin-owned repeats during propagation, while a rejected or ambiguous provisional request remains immediately retryable; the first visible Guard frame then owns the full 1000-ms exact-repeat window. Current-name semantic protection metadata tolerates removed historical duplicate rows while still requiring Guard, Covered, Hallowed Ground, and Undead Redemption. Metadata-verified Shield Smite and Chain Stratagem may select Guard; other primary protections remain candidate-local blockers and only incidental/global Chiten vetoes AoE. Every exact Smart Action-owned harmful non-ground-target PvP cast uses reachable S1-S5 ranking only in CC; in enabled Wolves Den it preserves the exact visible hostile/dummy target through the same closed protection path. Exact Near Help-owned friendly PvP casts use one-shot current ally ranking after atomic exact-generation consumption, while Near Assist retains cast-time hidden-carrier suppression with visible-target pass-through. A Smart Action fallback transfers only a live exact owner into the same bounded reservation. Auto-Zantetsuken uses an identity/context-bound 500-ms no-target collection from the first exact own-source Kuzushi, ranks the fresh live cluster only after maturity, and rechecks collection, frozen identity, current Kuzushi, protection, Bind, readiness, range, and line of sight at the final boundary. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not reset it, Guard refreshes the idle baseline through its exact status/propagation episode, and a complete idle interval must pass after Guard ends. Player Stats separates local Opponents and Teammates views with neutral total-based labels, role-specific W/L and games, and an explanation that high-volume players may lead both totals. Both roles may retain bounded local Name + World; optional schema-5 Together counters record only proven allied history and never infer unknown older aggregates. Last-seen tracks either role, and schema-4 PvpStats backfill remains cutoff-bounded, contained-row-only, one-shot, and never double-adds participant W/L. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."
+Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 53, local CC statistics schema 5, the exact 692-test Core registry, and 46 plugin self-tests. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, PLD Guardian, Recuperate, then Auto-Guard own priority in that order. Guardian requires exact Guard and Guardian metadata, ready Guardian, and either ready Guard or fresh self HP/MP strictly above configurable thresholds (defaults 80%/60%) through the final boundary; active or accepted-propagating own Guard always blocks it: <=20% is unconditional, <=40% needs fresh exact 2+ focus, and <=50% needs fresh exact 3+ focus. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-actor reservation from either a certified direct standard hotbar press, an exact lease/generation-backed /smartaction visible-<t> fallback, or a target-independent CC Smart Action S1-S5 winner; only the first two bind the visible hard target. Queue stays rejected. Release cannot cancel it; new action, context, Guard, CC, identity, protection, or exact-action/actor drift does, only a post-revalidated clean native range/LoS false may retry, accepted or ambiguous outcomes are terminal, and it never reranks or writes target/facing. The optional quiet-held-errors setting avoids global sound hooks and suppresses only a plugin-owned synthetic repeat whose exact hostile target returns native line-of-sight code 562; the first press, out-of-range, and every unknown error remain native. /seitonfar remains reachable-only. Enabled Wolves Den Smart Action resolves the exact stable visible hard target or reviewed dummy; a matching native duel identity may replace a stale Hostile flag, conflicting actor views still fail closed, and only the first non-exact carrier per tap may preserve the one-shot for the following exact <t>. Every current damaging non-ground-target shape shares the same closed admission and final-protection path. Exact /seitonsam Ogi/Tendo request-in-flight ownership suppresses movement through native acceptance and then hands off to the bounded accepted-cast lease; merely arming /seitonsam does not suppress movement, and ordinary /smartaction never gains this behavior. Exact repeat-Guard protection is identity- and territory-bound: a client-accepted request or exact live Guard blocks plugin-owned repeats during propagation, while a rejected or ambiguous provisional request remains immediately retryable; the first visible Guard frame then owns the full 1000-ms exact-repeat window. Current-name semantic protection metadata tolerates removed historical duplicate rows while still requiring Guard, Covered, Hallowed Ground, and Undead Redemption. Metadata-verified Shield Smite and Chain Stratagem may select Guard; other primary protections remain candidate-local blockers and only incidental/global Chiten vetoes AoE. Every exact Smart Action-owned harmful non-ground-target PvP cast uses reachable S1-S5 ranking only in CC; in enabled Wolves Den it preserves the exact visible hostile/dummy target through the same closed protection path. Exact Near Help-owned friendly PvP casts use one-shot current ally ranking after atomic exact-generation consumption, while Near Assist retains cast-time hidden-carrier suppression with visible-target pass-through. A Smart Action fallback transfers only a live exact owner into the same bounded reservation. Auto-Zantetsuken uses an identity/context-bound 500-ms no-target collection from the first exact own-source Kuzushi, ranks the fresh live cluster only after maturity, and rechecks collection, frozen identity, current Kuzushi, protection, Bind, readiness, range, and line of sight at the final boundary. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not reset it, Guard refreshes the idle baseline through its exact status/propagation episode, and a complete idle interval must pass after Guard ends. Player Stats separates local Opponents and Teammates views with neutral total-based labels, role-specific W/L and games, and an explanation that high-volume players may lead both totals. Both roles may retain bounded local Name + World; optional schema-5 Together counters record only proven allied history and never infer unknown older aggregates. Last-seen tracks either role, and schema-4 PvpStats backfill remains cutoff-bounded, contained-row-only, one-shot, and never double-adds participant W/L. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."

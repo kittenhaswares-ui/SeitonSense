@@ -20,6 +20,7 @@ internal readonly record struct AcceptedAutoGuardianEpisode(
     TargetPressureActorIdentity Target,
     int PartySlot)
 {
+    internal bool IsExplicitMacro { get; init; }
     internal bool IsValid =>
         Token > 0 &&
         AcceptedAtMilliseconds >= 0 &&
@@ -112,7 +113,7 @@ internal sealed record DefensiveUtilityProbeSnapshot(
 /// Stun is handled by the existing Purify probe first; this probe can only use
 /// Guard on a later physical generation after exact Resilience observation.
 /// </summary>
-internal sealed class DefensiveUtilityProbe
+internal sealed partial class DefensiveUtilityProbe
 {
     private readonly IObjectTable objectTable;
     private readonly TargetPressureTracker pressureTracker;
@@ -1237,7 +1238,9 @@ internal sealed class DefensiveUtilityProbe
         IPlayerCharacter localPlayer,
         PaladinGuardianCandidate intent,
         PaladinGuardianCandidate currentCandidate,
-        out bool attempted)
+        out bool attempted,
+        bool explicitMacro = false,
+        long macroPressurePublishedAtMilliseconds = -1)
     {
         attempted = false;
         if (!guardMetadataVerified ||
@@ -1262,7 +1265,7 @@ internal sealed class DefensiveUtilityProbe
             return ClientActionAttemptOutcome.NotInvoked;
         }
 
-        if (!IsGuardianActionSpecificallyReady(localPlayer) ||
+        if (!IsGuardianReadyForRequest(localPlayer, explicitMacro) ||
             !ClientActionAttemptBoundary.IsExactActionReady(
                 actionManager,
                 EnemyCombatConstants.GuardianActionId) ||
@@ -1301,10 +1304,13 @@ internal sealed class DefensiveUtilityProbe
                 HasNativeRangeAndLineOfSight =
                     SeitonRangeRules.HasNativeRangeAndLineOfSight(rangeResult),
             };
-            if (!DefensiveUtilityRules.IsGuardianCandidate(revalidated))
+            if (!(explicitMacro
+                    ? PaladinGuardianMacroRules.IsEligibleCandidate(revalidated,
+                        Environment.TickCount64, macroPressurePublishedAtMilliseconds)
+                    : DefensiveUtilityRules.IsGuardianCandidate(revalidated)))
                 return ClientActionAttemptOutcome.NotInvoked;
 
-            if (!IsGuardianActionSpecificallyReady(localPlayer) ||
+            if (!IsGuardianReadyForRequest(localPlayer, explicitMacro) ||
                 !ClientActionAttemptBoundary.IsExactActionReady(
                     actionManager,
                     EnemyCombatConstants.GuardianActionId))
@@ -1394,6 +1400,12 @@ internal sealed class DefensiveUtilityProbe
             localPlayer.CurrentMp, localPlayer.MaxMp,
             configuration.GuardianNoGuardMinimumHpPercent,
             configuration.GuardianNoGuardMinimumMpPercent);
+
+    private bool IsGuardianReadyForRequest(IPlayerCharacter localPlayer, bool explicitMacro) =>
+        explicitMacro
+            ? guardMetadataVerified && guardianMetadataVerified && HasValidLocalPlayer(localPlayer) &&
+              IsPaladin(localPlayer) && IsActionSpecificallyReady(EnemyCombatConstants.GuardianActionId)
+            : IsGuardianActionSpecificallyReady(localPlayer);
 
     private static unsafe bool IsActionSpecificallyReady(uint actionId)
     {

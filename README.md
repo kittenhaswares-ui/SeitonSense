@@ -3,6 +3,31 @@
 Seiton Sense is a local PvP awareness HUD with pressure tracking, nameplate
 cues, warnings, job helpers, Smart Action, and target highlights.
 
+Version 0.44.4.0 adds `/seitonpld`, an explicit no-target Guardian macro. It picks
+an endangered reachable ally first, otherwise the closest ally within 6y. It
+uses Guardian itself; do not add a second `/pvpaction` line. Automatic Guardian
+may be off. Your active Guard remains protected, and existing CC shoutout/marker
+settings still apply. See Macro Helpers for the short explanation.
+
+Guardian Quick Chat now uses the canonical `/quickchat` command in every language,
+with the full localized action name first and the frozen party slot last. The old
+German target-first construction is removed. There is one chat-entry invocation,
+no fallback resend and no target switch; live chat delivery remains unverified.
+Delayed CC confirmation packets can no longer erase a newer accepted attempt.
+
+Manual Smart Action failures in Wolves' Den now include a more precise reason
+in `/seiton debug`. This is diagnostic coverage, not a confirmed fix for the
+reported Shield Smite failure. Copy the `smart-action` and `assist trace` lines
+immediately after a failed attempt.
+
+German-client macro:
+
+```text
+/merror off
+/micon "Wächter" pvpaction
+/seitonpld
+```
+
 Version 0.44.3.0 adds bigger, previewable incoming arrows, a separate LB preview,
 and clearer Opponents/Teammates statistics. The Prediction panel can show an
 **official published tier** from a small daily Lodestone cache. The official
@@ -1452,9 +1477,10 @@ ACCEPTED**. This is dispatch feedback, not proof that the server applied Guardia
 or intercepted damage.
 
 The separate **Tell the team who you cover + paired Bind markers** option is
-also disabled by default. It can run only after this automatic Guardian request
-returns client-accepted in exact Crystalline Conflict; manually used Guardian,
-Far Help, and rejected requests do not arm it. It freezes the same exact party
+also disabled by default. It can run after an automatic Guardian request or an
+explicit `/seitonpld` request returns client-accepted in exact Crystalline
+Conflict. Ordinary hotbar Guardian, Far Help, and rejected requests do not arm it.
+The explicit macro does not need automatic Guardian enabled. It freezes the same exact party
 slot and uses the client-localized Crystalline Conflict Quick Chat row 35
 (`Ziel decken`, displayed as `Ich decke ...` on a German client) for that `P#`.
 It can then place Bind2 on that exact party slot followed by Bind1 on the local
@@ -1473,8 +1499,9 @@ and timestamp telemetry are otherwise exact; this prevents an empty slot from
 silently skipping the Bind sequence without weakening foreign-marker safety.
 
 Quick Chat now enters through FFXIV's normal chat-entry handler instead of the
-inner marker-command handler. It still uses the reviewed localized command and
-the exact protected party slot; it does not type into your chat box or add chat
+inner marker-command handler. Its isolated builder uses `/quickchat`, the quoted
+localized action name, then the exact protected party slot in every language.
+It does not type into your chat box or add chat
 history. Marker commands retain their existing separate route.
 
 This communication path never changes a hard, soft, focus, or mouseover target,
@@ -2739,7 +2766,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 686-test Core registry, forty-six plugin self-tests,
+For the current source, the exact 692-test Core registry, forty-six plugin self-tests,
 and source checks pin configuration schema 53, the shared monotonic response clock and framework
 epoch, true not-ready-to-ready wakeups, strict unchanged-queue critical recovery,
 the immutable release-independent tap-to-land buffer, active-Sprint repeat

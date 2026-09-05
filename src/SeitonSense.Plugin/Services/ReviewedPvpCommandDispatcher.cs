@@ -6,9 +6,9 @@ using FFXIVClientStructs.FFXIV.Client.UI.Shell;
 namespace SeitonSense.Plugin.Services;
 
 /// <summary>
-/// Closed set of reviewed, party-visible PvP shell commands. Callers can only
+/// Closed set of reviewed, party-visible PvP commands. Callers can only
 /// select a reviewed command kind plus a bounded native party/enemy slot; no
-/// arbitrary command text crosses the native shell boundary.
+/// arbitrary command text crosses either native command boundary.
 /// </summary>
 internal enum ReviewedPvpCommandKind
 {
@@ -161,40 +161,8 @@ internal sealed class ReviewedPvpCommandDispatcher
         { Kind: ReviewedPvpCommandKind.ClearAttack1Enemy, Slot: 4 } => "/mk off <e4>",
         { Kind: ReviewedPvpCommandKind.ClearAttack1Enemy, Slot: 5 } => "/mk off <e5>",
 
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.English, Slot: 1 } => "/quickchat \"Covering Target\" <1>",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.English, Slot: 2 } => "/quickchat \"Covering Target\" <2>",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.English, Slot: 3 } => "/quickchat \"Covering Target\" <3>",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.English, Slot: 4 } => "/quickchat \"Covering Target\" <4>",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.English, Slot: 5 } => "/quickchat \"Covering Target\" <5>",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.English, Slot: 6 } => "/quickchat \"Covering Target\" <6>",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.English, Slot: 7 } => "/quickchat \"Covering Target\" <7>",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.English, Slot: 8 } => "/quickchat \"Covering Target\" <8>",
-        // Keep the documented German target-first order, but group the full
-        // localized message name into one argument just like the other locales.
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.German, Slot: 1 } => "/schnellchat <1> \"Ziel decken\"",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.German, Slot: 2 } => "/schnellchat <2> \"Ziel decken\"",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.German, Slot: 3 } => "/schnellchat <3> \"Ziel decken\"",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.German, Slot: 4 } => "/schnellchat <4> \"Ziel decken\"",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.German, Slot: 5 } => "/schnellchat <5> \"Ziel decken\"",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.German, Slot: 6 } => "/schnellchat <6> \"Ziel decken\"",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.German, Slot: 7 } => "/schnellchat <7> \"Ziel decken\"",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.German, Slot: 8 } => "/schnellchat <8> \"Ziel decken\"",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.French, Slot: 1 } => "/quickchat \"Soutien : cible\" <1>",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.French, Slot: 2 } => "/quickchat \"Soutien : cible\" <2>",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.French, Slot: 3 } => "/quickchat \"Soutien : cible\" <3>",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.French, Slot: 4 } => "/quickchat \"Soutien : cible\" <4>",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.French, Slot: 5 } => "/quickchat \"Soutien : cible\" <5>",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.French, Slot: 6 } => "/quickchat \"Soutien : cible\" <6>",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.French, Slot: 7 } => "/quickchat \"Soutien : cible\" <7>",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.French, Slot: 8 } => "/quickchat \"Soutien : cible\" <8>",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.Japanese, Slot: 1 } => "/quickchat \"援護：ターゲット\" <1>",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.Japanese, Slot: 2 } => "/quickchat \"援護：ターゲット\" <2>",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.Japanese, Slot: 3 } => "/quickchat \"援護：ターゲット\" <3>",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.Japanese, Slot: 4 } => "/quickchat \"援護：ターゲット\" <4>",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.Japanese, Slot: 5 } => "/quickchat \"援護：ターゲット\" <5>",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.Japanese, Slot: 6 } => "/quickchat \"援護：ターゲット\" <6>",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.Japanese, Slot: 7 } => "/quickchat \"援護：ターゲット\" <7>",
-        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget, Language: ClientLanguage.Japanese, Slot: 8 } => "/quickchat \"援護：ターゲット\" <8>",
+        { Kind: ReviewedPvpCommandKind.GuardianCoveringTarget } =>
+            GuardianQuickChatCommand.Build(command.Language, command.Slot),
 
         { Kind: ReviewedPvpCommandKind.GuardianBind1Self } => "/mk bind1 <me>",
         { Kind: ReviewedPvpCommandKind.GuardianBind2Party, Slot: 1 } => "/mk bind2 <1>",

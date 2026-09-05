@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.44.3.0";
+    private const string CurrentReleaseVersion = "0.44.4.0";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -30,6 +30,7 @@ public sealed class Plugin : IDalamudPlugin
     private const string FarHelpCommand = "/farhelp";
     private const string FarHelpAliasCommand = "/ssfar";
     private const string PressureCommand = "/howmany";
+    private const string SeitonPaladinCommand = "/seitonpld";
 
     private readonly IDalamudPluginInterface pluginInterface;
     private readonly ICommandManager commandManager;
@@ -86,6 +87,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly bool nearHelpAliasRegistered;
     private readonly bool farHelpCommandRegistered;
     private readonly bool farHelpAliasRegistered;
+    private readonly bool seitonPaladinCommandRegistered;
     private readonly bool panicShukuchiCommandRegistered;
     private readonly bool backwardPanicShukuchiCommandRegistered;
     private readonly bool movementEnAvantCommandRegistered;
@@ -477,11 +479,11 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Bigger incoming arrows: preview MCH/SCH arrows and resize them under HUD & Nameplates, even in Wolves' Den.",
-                "Prediction can show published official tiers. Saved daily outside matches; unlisted players stay Unknown.",
-                "Player Stats now separates Opponents and Teammates, with clear English win/loss lists.",
-                "LB bars have their own labeled preview and no longer depend on showing the Pressure counter.",
-                "Healing-pot beam clipping and German Guardian chat syntax corrected. Live detection and chat delivery still need confirmation.",
+                "New PLD macro: /seitonpld uses Guardian without selecting a target.",
+                "Endangered allies come first in Guardian range; otherwise it picks the closest ally within 6y.",
+                "Your active Guard stays protected. This explicit macro does not require automatic Guardian or its HP/MP limits.",
+                "Guardian chat rebuilt: one action-first Quick Chat command on every client language, with your exact party target.",
+                "Fixed delayed CC hit confirmations and added clearer Smart Action failure reasons. Live chat testing is still needed.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
@@ -760,6 +762,16 @@ public sealed class Plugin : IDalamudPlugin
                 "[Seiton Sense] /seitonenavant is owned by another plugin. Disable the conflict and reload before using movement-directed En Avant.");
         }
 
+        seitonPaladinCommandRegistered = commandManager.AddHandler(
+            SeitonPaladinCommand,
+            new CommandInfo(OnSeitonPaladinCommand)
+            {
+                AllowedInMacros = true,
+                HelpMessage = "PLD: use Guardian once on an endangered reachable ally, otherwise the closest ally within 6y. No target required.",
+            });
+        if (!seitonPaladinCommandRegistered)
+            chatGui.PrintError("[Seiton Sense] /seitonpld is owned by another plugin; Guardian macro unavailable.");
+
         pressureCommandRegistered = commandManager.AddHandler(
             PressureCommand,
             new CommandInfo(OnPressureCommand)
@@ -852,6 +864,7 @@ public sealed class Plugin : IDalamudPlugin
         if (farHelpCommandRegistered) Safe(() => commandManager.RemoveHandler(FarHelpCommand));
         if (farHelpAliasRegistered) Safe(() => commandManager.RemoveHandler(FarHelpAliasCommand));
         if (panicShukuchiCommandRegistered) Safe(() => commandManager.RemoveHandler(PanicShukuchiService.Command));
+        if (seitonPaladinCommandRegistered) Safe(() => commandManager.RemoveHandler(SeitonPaladinCommand));
         if (backwardPanicShukuchiCommandRegistered) Safe(() => commandManager.RemoveHandler(PanicShukuchiService.BackwardCameraCommand));
         if (movementEnAvantCommandRegistered) Safe(() => commandManager.RemoveHandler(PanicShukuchiService.MovementEnAvantCommand));
         if (pressureCommandRegistered) Safe(() => commandManager.RemoveHandler(PressureCommand));
@@ -920,6 +933,7 @@ public sealed class Plugin : IDalamudPlugin
         if (farHelpAliasRegistered) Safe(() => commandManager.RemoveHandler(FarHelpAliasCommand));
         if (panicShukuchiCommandRegistered)
             Safe(() => commandManager.RemoveHandler(PanicShukuchiService.Command));
+        if (seitonPaladinCommandRegistered) Safe(() => commandManager.RemoveHandler(SeitonPaladinCommand));
         if (backwardPanicShukuchiCommandRegistered)
             Safe(() => commandManager.RemoveHandler(PanicShukuchiService.BackwardCameraCommand));
         if (movementEnAvantCommandRegistered)
@@ -1774,6 +1788,17 @@ public sealed class Plugin : IDalamudPlugin
         chatGui.PrintError(
             $"[Seiton Sense] {displayName} did not arm: {detail}. " +
             "Check Action Helpers and Wolves' Den testing in Seiton settings.");
+    }
+
+    private void OnSeitonPaladinCommand(string _, string arguments)
+    {
+        if (!string.IsNullOrWhiteSpace(arguments))
+        {
+            chatGui.Print("[Seiton Sense] Use /seitonpld without a target or arguments.");
+            return;
+        }
+        if (!personalStatus.TryUsePaladinGuardianMacro(out var message))
+            chatGui.PrintError($"[Seiton Sense] {message}");
     }
 
     private void OnFarHelpCommand(string _, string arguments)

@@ -2327,6 +2327,14 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                     forwardedTargetId = InvalidCarrierTargetId;
                     targetSuppressedByRedirect = true;
                     suppressingSmartTargetCall = true;
+                    if (ResolveContext() == SupportedPvPContext.WolvesDen)
+                    {
+                        var resolvedFallbackActionId = ResolveActionId(thisPtr, actionType, actionId);
+                        reason += $"; no exact same-call visible-target fallback; " +
+                                  $"raw={actionId},resolved={resolvedFallbackActionId}," +
+                                  $"guardBypassMeta={smartActionGuardBypassActions.Contains(resolvedFallbackActionId)}," +
+                                  $"authored={targetId:X}";
+                    }
                 }
 
                 lock (tokenGate)
@@ -3859,7 +3867,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             canonicalTargetId != frozenTargetId)
         {
             SetSmartActionSafetyEvent(
-                "Blocked generic buffer replay: exact target was unsafe or ambiguous");
+                $"Blocked generic buffer replay: resolved={resolvedActionId}; {targetLabel}; " +
+                $"guardBypassMeta={smartActionGuardBypassActions.Contains(resolvedActionId)}");
             return false;
         }
 
@@ -3921,8 +3930,12 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 context,
                 configuration.EnableWolvesDenTesting,
                 combatPriorityMode: true,
-                attackShape) ||
-            !DarkKnightWolvesDenCurrentTargetResolver.TryResolveExactCurrentHardTargetDirect(
+                attackShape))
+        {
+            targetLabel = $"Den context/shape not admitted: context={context},shape={attackShape}";
+            return false;
+        }
+        if (!DarkKnightWolvesDenCurrentTargetResolver.TryResolveExactCurrentHardTargetDirect(
                 objectTable,
                 wolvesDenStrikingDummyMetadataVerified,
                 localPlayer,
@@ -3932,6 +3945,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 out var nativeHardTargetId) ||
             wolvesTarget is null)
         {
+            targetLabel = "Den exact visible duel/dummy target proof unavailable";
             return false;
         }
 
@@ -3939,11 +3953,17 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             .IsNativeSelectedTargetCarrier(requestedTargetId)
             ? nativeHardTargetId
             : requestedTargetId;
-        if (!ActorIdMatches(effectiveTargetId, wolvesTarget) ||
-            !TryClassifyExactWolvesDenTargetProtection(
+        if (!ActorIdMatches(effectiveTargetId, wolvesTarget))
+        {
+            targetLabel = $"Den authored/current target mismatch: authored={effectiveTargetId:X}," +
+                          $"current={wolvesIdentity.GameObjectId:X}/{wolvesIdentity.EntityId:X}";
+            return false;
+        }
+        if (!TryClassifyExactWolvesDenTargetProtection(
                 wolvesTarget,
                 out var protectionKind))
         {
+            targetLabel = "Den exact target protection-status proof ambiguous";
             return false;
         }
 
@@ -3961,6 +3981,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 protectionKind,
                 out var wolvesProtectedActors))
         {
+            targetLabel = $"Den area protection snapshot ambiguous: shape={attackShape}";
             return false;
         }
         var wolvesSafe = IsSmartActionProtectionSafe(
@@ -3972,7 +3993,15 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             wolvesProtectedActors,
             actionIgnoresGuard:
                 CanSmartActionTargetGuard(resolvedActionId, action));
-        if (!wolvesSafe) return false;
+        if (!wolvesSafe)
+        {
+            var incidentalChiten = wolvesProtectedActors.Any(actor =>
+                actor.Geometry.Actor != wolvesIdentity &&
+                (actor.Kind & SmartActionProtectionKind.Chiten) != 0);
+            targetLabel = $"Den protection blocked: target={protectionKind},shape={attackShape}," +
+                          $"incidentalChiten={incidentalChiten},chitenMeta={chitenMetadataVerified}";
+            return false;
+        }
 
         canonicalTargetId = wolvesTarget.GameObjectId;
         targetLabel = wolvesKind == DarkKnightWolvesDenTargetKind.StrikingDummy
@@ -5599,6 +5628,36 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 : samuraiMelee
                     ? "Seiton SAM fallback: no exact safe target inside 5y"
                     : "Smart Action fallback: no exact reachable candidate";
+            if (!heldActionSelection && !farthestReachable && !samuraiMelee &&
+                context == SupportedPvPContext.CrystallineConflict)
+            {
+                // Explain only this already incoming CC macro miss from the
+                // observations above. Do not rescan, rerank, or inspect native
+                // state again; successful calls and automatic polls pay no
+                // additional diagnostic work or string allocations.
+                var missingNativeTargetCount = 0;
+                var rangeOrLineOfSightRejectedCount = 0;
+                var protectionRejectedCount = 0;
+                foreach (var candidate in candidates)
+                {
+                    var observation = candidate.Selection;
+                    if (!observation.HasValidActionTarget)
+                        missingNativeTargetCount++;
+                    else if (!observation.HasNativeRangeAndLineOfSight)
+                        rangeOrLineOfSightRejectedCount++;
+                    if (!observation.CallerProvenProtectionSafe)
+                        protectionRejectedCount++;
+                }
+
+                reason += $"; resolvedAction={resolvedActionId}" +
+                          $" observed={canonicalEnemies.Length} considered={candidates.Count}" +
+                          $" normalList={selectionCandidates.Length}" +
+                          $" spatialList={spatialSelectionCandidates.Length}" +
+                          $" chase={(spatialChaseEnabled ? "on" : "off")}" +
+                          $" rejects(overlapping): nativeTarget={missingNativeTargetCount}" +
+                          $" rangeLoS={rangeOrLineOfSightRejectedCount}" +
+                          $" protection={protectionRejectedCount}";
+            }
             return originalTargetId;
         }
 
@@ -6802,7 +6861,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 local is null)
             {
                 SetSmartActionSafetyEvent(
-                    "Blocked exact Smart Action fallback: action metadata changed");
+                    $"Blocked exact Smart Action fallback: action metadata changed; " +
+                    $"raw={rawActionId},resolved={resolvedActionId}");
                 return SmartActionSafetyInspectionOutcome.Unsafe;
             }
 
@@ -6819,7 +6879,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                     out var targetLabel))
             {
                 SetSmartActionSafetyEvent(
-                    "Blocked exact Smart Action fallback: target was unsafe or ambiguous");
+                    $"Blocked exact Smart Action fallback: raw={rawActionId},resolved={resolvedActionId}; " +
+                    $"{targetLabel}; guardBypassMeta={smartActionGuardBypassActions.Contains(resolvedActionId)}");
                 return SmartActionSafetyInspectionOutcome.Unsafe;
             }
 
